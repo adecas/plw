@@ -1,0 +1,3858 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<html>
+<head>
+<title>BProto</title>
+</head>
+<body>
+<script>
+
+/******************************************************************************************************************************************
+
+	TokenReader
+	
+	Split a string in a sequence of token
+
+******************************************************************************************************************************************/
+
+class Token {
+	constructor(text, line, col) {
+		this.text = text;
+		this.line = line;
+		this.col = col;
+	}
+}
+
+
+class TokenReader {
+
+	constructor(exprStr, line, col) {
+		this.exprStr = exprStr;
+		this.pos = 0;
+		this.line = line;
+		this.col = col;
+		this.allowSignedInteger = true;
+	}
+	
+	static isAlphaChar(c) {
+		return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+	}
+	
+	static isDigitChar(c) {
+		return c >= "0" && c <= "9";
+	}
+	
+	static isIdentifierChar(c) {
+		return TokenReader.isAlphaChar(c) || TokenReader.isDigitChar(c) || c === "_";
+	}
+	
+	static isInteger(token) {
+		if (token.length === 0) {
+			return false;
+		}
+		for (let i = 0; i < token.length; i++) {
+			if (i == 0) {
+				if (!TokenReader.isDigitChar(token.charAt(i)) && token.charAt(i) != "-") {
+					return false;
+				}
+			} else {
+				if (!TokenReader.isDigitChar(token.charAt(i))) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	
+	static isIdentifier(token) {
+		if (token.length === 0) {
+			return false;
+		}
+		for (let i = 0; i < token.length; i++) {
+			if (!TokenReader.isIdentifierChar(token.charAt(i))) {
+				return false;
+			}
+			if (i == 0 && TokenReader.isDigitChar(token.charAt(i))) {
+				return false
+			}
+		}
+		return true;
+	}
+	
+	static isString(token) {
+		if (token.length < 2) {
+			return false;
+		}
+		if (token.charAt(0) !== "'" || token.charAt(token.length - 1) !== "'") {
+			return false;
+		}
+		for (let i = 1; i < token.length - 1; i++) {
+			if (token.charAt(i) === "'") {
+				i++;
+				if (i === token.length - 1 || token.charAt(i) !== "'") {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	
+	static unescapeString(str) {
+		return str.substr(1, str.length - 2).replace("''", "'");
+	}
+	
+	skipBlank() {
+		while (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (c != ' ' && c != '\r' && c != '\n' && c != '\t') {
+				break;
+			}
+			this.col++;
+			if (c === "\n") {
+				this.line++;
+				this.col = 1;
+			}
+			this.pos++;
+		}
+	}
+	
+	readString() {
+		let line = this.line;
+		let col = this.col;
+		let beginPos = this.pos;
+		let state = 0;
+		while (this.pos < this.exprStr.length ) {
+			let c = this.exprStr.charAt(this.pos);
+			if (state === 0) {
+				if (c !== "'") break;
+				state = 1;
+			} else if (state === 1) {
+				if (c === "'") state = 2;
+			} else {
+				if (c !== "'") break;
+				state = 1;
+			}
+			this.col++;
+			if (c === "\n") {
+				this.line++;
+				this.col = 1;
+			}
+			this.pos++;
+		}
+		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+	}
+	
+	readIdentifier() {
+		let line = this.line;
+		let col = this.col;
+		let beginPos = this.pos;
+		while (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (!TokenReader.isIdentifierChar(c)) {
+				break;
+			}
+			this.pos++;
+			this.col++;
+		}
+		this.allowSignedInteger = false;
+		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+	}
+	
+	readInteger() {
+		let line = this.line;
+		let col = this.col;
+		let beginPos = this.pos;
+		if (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (TokenReader.isDigitChar(c) || c == "-") {
+				this.pos++;
+				this.col++;
+				while (this.pos < this.exprStr.length) {
+					c = this.exprStr.charAt(this.pos);
+					if (!TokenReader.isDigitChar(c)) {
+						break;
+					}
+					this.pos++;
+					this.col++;
+				}
+			}
+		}
+		this.allowSignedInteger = false;
+		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+	}
+		
+	readToken() {
+		this.skipBlank();
+		
+		if (this.pos === this.exprStr.length) {
+			return new Token("", this.line, this.col);
+		}
+		let c = this.exprStr.charAt(this.pos);
+		
+		if (TokenReader.isDigitChar(c)) {
+			return this.readInteger();
+		}
+
+		if (TokenReader.isIdentifierChar(c)) {
+			return this.readIdentifier();
+		}
+		
+		if (c === "'") {
+			return this.readString();
+		}
+		
+		let line = this.line;
+		let col = this.col;
+		
+		let nc = this.pos + 1 < this.exprStr.length ? this.exprStr.charAt(this.pos + 1) : null; 
+
+		
+		if (this.allowSignedInteger && c === "-" && nc !== null && TokenReader.isDigitChar(nc)) {
+			return this.readInteger();
+		}
+		
+		this.allowSignedInteger = true;
+		
+		if (c === ":" && nc !== null && nc === "=") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token(":=", line, col);
+		}
+		
+		if (c === "<" && nc !== null && nc === "=") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token("<=", line, col);
+		}
+		
+		if (c === ">" && nc !== null && nc === "=") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token(">=", line, col);
+		}
+
+		if (c === "<" && nc !== null && nc === ">") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token("<>", line, col);
+		}
+		
+		if (c === "." && nc !== null && nc === ".") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token("..", line, col);
+		}
+		
+		if (c === "|" && nc !== null && nc === "|") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token("||", line, col);
+		}
+		
+		if (c === ")") {
+			this.allowSignedInteger = false;
+		}
+				
+		this.pos += 1;
+		this.col += 1;
+		return new Token(c, line, col);
+	}
+}
+
+
+/******************************************************************************************************************************************
+
+	AST
+	
+	Model of the syntax language
+
+******************************************************************************************************************************************/
+
+class AstNode {
+
+	constructor(tag) {
+		this.tag = tag;
+		this.line = 0;
+		this.col = 0;
+	}
+	
+	fromToken(token) {
+		this.line = token.line;
+		this.col = token.col;
+		return this;
+	}
+}
+
+class AstValueBoolean extends AstNode {
+	constructor(boolValue) {
+		super("ast-value-boolean");
+		this.boolValue = boolValue;
+	}
+}
+
+class AstValueInteger extends AstNode {
+	constructor(intValue) {
+		super("ast-value-integer");
+		this.intValue = intValue;
+	}
+}
+
+class AstValueText extends AstNode {
+	constructor(textValue) {
+		super("ast-value-text");
+		this.textValue = textValue;
+	}
+}
+
+class AstValueArray extends AstNode {
+	constructor(itemCount, items) {
+		super("ast-value-array");
+		this.itemCount = itemCount;
+		this.items = items;
+	}
+}
+
+class AstValueRecordField extends AstNode {
+	constructor(fieldName, fieldType, valueExpr) {
+		super("ast-value-record-field");
+		this.fieldName = fieldName;
+		this.fieldType = fieldType;
+		this.valueExpr = valueExpr;
+	}
+}
+
+class AstValueRecord extends AstNode {
+	constructor(fieldCount, fields) {
+		super("ast-value-record");
+		this.fieldCount = fieldCount;
+		this.fields = fields;
+	}
+}
+
+class AstTypeRecordField extends AstNode {
+	constructor(fieldName, fieldType) {
+		super("ast-type-record-field");
+		this.fieldName = fieldName;
+		this.fieldType = fieldType;
+	}
+}
+
+class AstTypeRecord extends AstNode {
+	constructor(fieldCount, fields) {
+		super("ast-type-record");
+		this.fieldCount = fieldCount;
+		this.fields = fields;
+	}
+}
+
+class AstOperatorBinary extends AstNode {
+	constructor(operator, left, right) {
+		super("ast-operator-binary");
+		this.operator = operator;
+		this.left = left;
+		this.right = right;
+	}	
+}
+
+class AstOperatorUnary extends AstNode {
+	constructor(operator, operand) {
+		super("ast-operator-unary");
+		this.operator = operator;
+		this.operand = operand;
+	}
+}
+
+class AstVariableDeclaration extends AstNode {
+	constructor(varName, varType, valueExpr) {
+		super("ast-variable-declaration");
+		this.varName = varName;
+		this.varType = varType;
+		this.valueExpr = valueExpr;
+	}
+}
+
+class AstVariable extends AstNode {
+	constructor(varName) {
+		super("ast-variable");
+		this.varName = varName;
+	}
+}
+
+class AstAssign extends AstNode {
+	constructor(left, right) {
+		super("ast-assign");
+		this.left = left;
+		this.right = right;
+	}
+}
+
+class AstField extends AstNode {
+	constructor(expr, fieldName) {
+		super("ast-field");
+		this.expr = expr;
+		this.fieldName = fieldName;
+	}	
+}
+
+class AstTypeNamed extends AstNode {
+	constructor(typeName) {
+		super("ast-type-named");
+		this.typeName = typeName;
+	}
+}
+
+class AstTypeArray extends AstNode {
+	constructor(underlyingType) {
+		super("ast-type-array");
+		this.underlyingType = underlyingType;
+	}
+}
+
+class AstTypeSequence extends AstNode {
+	constructor(underlyingType) {
+		super("ast-type-sequence");
+		this.underlyingType = underlyingType;
+	}
+}
+
+class AstIndex extends AstNode {
+	constructor(indexed, index) {
+		super("ast-index");
+		this.indexed = indexed;
+		this.index = index;
+	}
+}
+
+class AstBlock extends AstNode {
+	constructor(statementCount, statements) {
+		super("ast-block");
+		this.statementCount = statementCount;
+		this.statements = statements;
+	}
+}
+
+class AstIf extends AstNode {
+	constructor(condition, trueStatement, falseStatement) {
+		super("ast-if");
+		this.condition = condition;
+		this.trueStatement = trueStatement;
+		this.falseStatement = falseStatement;
+	}
+}
+
+class AstWhile extends AstNode {
+	constructor(condition, statement) {
+		super("ast-while");
+		this.condition = condition;
+		this.statement = statement;
+	}
+}
+
+class AstFor extends AstNode {
+	constructor(index, isReverse, sequence, statement) {
+		super("ast-for");
+		this.index = index;
+		this.isReverse = isReverse;
+		this.sequence = sequence;
+		this.statement = statement;
+	}
+}
+
+class AstRange extends AstNode {
+	constructor(lowerBound, upperBound) {
+		super("ast-range");
+		this.lowerBound = lowerBound;
+		this.upperBound = upperBound;
+	}
+}
+
+class AstParameter extends AstNode {
+	constructor(parameterName, parameterType) {
+		super("ast-parameter");
+		this.parameterName = parameterName;
+		this.parameterType = parameterType;
+	}
+}
+
+class AstParameterList extends AstNode {
+	constructor(parameterCount, parameters) {
+		super("ast-parameter-list");
+		this.parameterCount = parameterCount;
+		this.parameters = parameters;
+	}
+}
+
+class AstFunctionDeclaration extends AstNode {
+	constructor(functionName, parameterList, returnType, statement, isGenerator) {
+		super("ast-function-declaration");
+		this.functionName = functionName;
+		this.parameterList = parameterList;
+		this.returnType = returnType;
+		this.statement = statement;
+		this.isGenerator = isGenerator;
+	} 
+}
+
+class AstProcedureDeclaration extends AstNode {
+	constructor(procedureName, parameterList, statement) {
+		super("ast-procedure-declaration");
+		this.procedureName = procedureName;
+		this.parameterList = parameterList;
+		this.statement = statement;
+	}
+}
+
+class AstReturn extends AstNode {
+	constructor(expr) {
+		super("ast-return");
+		this.expr = expr;
+	}
+}
+
+class AstYield extends AstNode {
+	constructor(expr) {
+		super("ast-yield");
+		this.expr = expr;
+	}
+}
+
+class AstArgList extends AstNode {
+	constructor(argCount, args) {
+		super("ast-args");
+		this.argCount = argCount;
+		this.args = args;
+	}
+}
+
+class AstFunction extends AstNode {
+	constructor(functionName, argList) {
+		super("ast-function");
+		this.functionName = functionName;
+		this.argList = argList;
+	}
+}
+
+class AstProcedure extends AstNode {
+	constructor(procedureName, argList) {
+		super("ast-procedure");
+		this.procedureName = procedureName;
+		this.argList = argList;
+	}
+	
+	static fromFunction(func) {
+		let proc = new AstProcedure(func.functionName, func.argList);
+		proc.line = func.line;
+		proc.col = func.col;
+		return proc;
+	}
+}
+
+
+/******************************************************************************************************************************************
+
+	Parser
+	
+	Transforms a token sequence into and AST
+
+******************************************************************************************************************************************/
+
+class ParserError extends AstNode {
+
+	constructor(errorText) {
+		super("ast-parser-error");
+		this.errorText = errorText;
+	}
+	
+	static unexpectedToken(token, expected) {
+		return new ParserError("Unexpected token " + token.text + ", expected " + expected).fromToken(token);
+	}
+	
+}
+
+class Parser {
+
+	constructor(tokenReader) {
+		this.tokenReader = tokenReader;
+		this.nextToken = null;
+		this.readToken();
+	}
+	
+	peekToken() {
+		return this.nextToken.text;
+	}
+	
+	readToken() {
+		let token = this.nextToken;
+		this.nextToken = this.tokenReader.readToken();
+		return token;
+	}
+	
+	static isError(astNode) {
+		return astNode.tag === "ast-parser-error";
+	}
+	
+	readStatement() {
+		if (this.peekToken() === "var") {
+			return this.readVariableDeclaration();
+		}
+		if (this.peekToken() === "if") {
+			return this.readIf();
+		}
+		if (this.peekToken() === "while") {
+			return this.readWhile();
+		}
+		if (this.peekToken() === "function" || this.peekToken() === "generator") {
+			return this.readFunctionDeclaration();
+		}
+		if (this.peekToken() === "procedure") {
+			return this.readProcedureDeclaration();
+		}
+		if (this.peekToken() === "return") {
+			return this.readReturn();
+		}
+		if (this.peekToken() === "yield") {
+			return this.readYield();
+		}
+		if (this.peekToken() == "for") {
+			return this.readFor();
+		}
+		if (this.peekToken() == "begin") {
+			return this.readBlock("begin", "end", null);
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		if (this.peekToken() !== ":=" && expr.tag === "ast-function") {
+			return AstProcedure.fromFunction(expr);
+		}
+		let assignToken = this.readToken();
+		if (assignToken.text !== ":=") {
+			return ParserError.unexpectedToken(assignToken, ":=");					
+		}
+		let right = this.readExpression();
+		if (Parser.isError(right)) {
+			return right;
+		}
+		return new AstAssign(expr, right).fromToken(assignToken);
+	}
+	
+	readExpression() {
+		return this.readExpr6();
+	}	
+	
+	readExpr6() {
+		let left = this.readExpr5();
+		if (Parser.isError(left)) {
+			return left;
+		}
+			
+		while (this.peekToken() === "or") {
+			let operator = this.readToken();
+			
+			let right = this.readExpr5();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			
+			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+	
+	readExpr5() {
+		let left = this.readExpr4();		
+		if (Parser.isError(left)) {
+			return left;
+		}
+			
+		while (this.peekToken() === "and") {
+			let operator = this.readToken();
+			
+			let right = this.readExpr4();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			
+			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+		
+	readExpr4() {
+		let left = this.readExpr3();
+		if (Parser.isError(left)) {
+			return left;
+		}
+		
+		if (
+			this.peekToken() === "=" ||
+			this.peekToken() === ">" ||
+			this.peekToken() === "<" ||
+			this.peekToken() === ">=" ||
+			this.peekToken() === "<=" ||
+			this.peekToken() === "<>"
+		) {
+			let operator = this.readToken();
+			let right = this.readExpr3();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+
+	readExpr3() {
+		let left = this.readExpr2();		
+		if (Parser.isError(left)) {
+			return left;
+		}
+			
+		while (this.peekToken() === "+" || this.peekToken() === "-" || this.peekToken() === "||") {
+			let operator = this.readToken();
+			
+			let right = this.readExpr2();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			
+			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+	
+	readExpr2() {
+		let left = this.readExpr1();		
+		if (Parser.isError(left)) {
+			return left;
+		}
+			
+		while (this.peekToken() === "*" || this.peekToken() === "/") {
+			let operator = this.readToken();
+			
+			let right = this.readExpr1();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			
+			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+	
+	readExpr1() {
+		let expr = this.readExpr0();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		
+		while (this.peekToken() === "[" || this.peekToken() === ".") {			
+			let token = this.readToken();
+			if (token.text === "[") {
+				let index = this.readExpression();
+				if (Parser.isError(index)) {
+					return index;
+				}
+				expr = new AstIndex(expr, index).fromToken(token);
+				let closeToken = this.readToken();
+				if (closeToken.text !== "]") {
+					return ParserError.unexpectedToken(closeToken, "]");					
+				}
+			} else if (token.text === ".") {
+				let fieldName = this.readToken();
+				if (!TokenReader.isIdentifier(fieldName.text)) {
+					return ParserError.unexpectedToken(fieldName, "identifier")
+				}
+				expr = new AstField(expr, fieldName.text).fromToken(token);
+			} else {
+				return ParserError.unexpectedToken(token, "[, .");					
+			}
+		}
+		
+		return expr;
+	}
+
+	readExpr0() {
+	
+		if (this.peekToken() === "(") {
+			return this.readExprGroup();
+		}
+	
+		if (this.peekToken() === "[") {
+			return this.readArrayValue();
+		}
+		
+		if (this.peekToken() === "{") {
+			return this.readRecordValue();
+		}
+					
+		let token = this.readToken();
+
+		if (token.text === "-" || token.text === "not") {
+			let operand = this.readExpr1();
+			if (Parser.isError(operand)) {
+				return operand;
+			}
+			return new AstOperatorUnary(token.text, operand).fromToken(token);
+		}
+		
+		if (token.text === "true" || token.text === "false") {
+			return new AstValueBoolean(token.text === "true").fromToken(token);
+		}
+		
+		if (token.text === "length" && this.peekToken() === "(") {
+			let groupExpr = this.readExprGroup();
+			if (Parser.isError(groupExpr)) {
+				return groupExpr;
+			}
+			return new AstOperatorUnary("length", groupExpr).fromToken(token);
+		}
+		
+		if (token.text === "next" && this.peekToken() === "(") {
+			let groupExpr = this.readExprGroup();
+			if (Parser.isError(groupExpr)) {
+				return groupExpr;
+			}
+			return new AstOperatorUnary("next", groupExpr).fromToken(token);
+		}
+
+		if (token.text === "ended" && this.peekToken() === "(") {
+			let groupExpr = this.readExprGroup();
+			if (Parser.isError(groupExpr)) {
+				return groupExpr;
+			}
+			return new AstOperatorUnary("ended", groupExpr).fromToken(token);
+		}
+
+		if (TokenReader.isInteger(token.text)) {
+			return new AstValueInteger(parseInt(token.text, 10)).fromToken(token);
+		}
+		
+		if (TokenReader.isString(token.text)) {
+			return new AstValueText(TokenReader.unescapeString(token.text)).fromToken(token);
+		}
+		
+		if (TokenReader.isIdentifier(token.text)) {
+			if (this.peekToken() === "(") {
+				let argList = this.readArgList();
+				if (Parser.isError(argList)) {
+					return argList;
+				}
+				return new AstFunction(token.text, argList).fromToken(token);
+			} else {
+				return new AstVariable(token.text).fromToken(token);
+			}
+		}
+		
+		return ParserError.unexpectedToken(token, "expression");			
+	}
+	
+	readExprGroup() {
+		let openToken = this.readToken();
+		if (openToken.text !== "(") {
+			return ParserError.unexpectedToken(openToken, "(");			
+		}
+		let groupExpr = this.readExpression();
+		if (Parser.isError(groupExpr)) {
+			return groupExpr;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== ")") {
+			return ParserError.unexpectedToken(closeToken, ")");			
+		}
+		return groupExpr;
+	}
+	
+	readArrayValue() {
+		let openToken = this.readToken();
+		if (openToken.text !== "[") {
+			return ParserError.unexpectedToken(openToken, "[");
+		}
+		let itemValues = [];
+		let itemIndex = 0;
+		while (this.peekToken() !== "]") {
+			let valExpr = this.readExpression();
+			if (Parser.isError(valExpr)) {
+				return valExpr;
+			}
+			itemValues[itemIndex] = valExpr;
+			itemIndex++;
+			if (this.peekToken() === "]") {
+				break;
+			}
+			let sepToken = this.readToken();
+			if (sepToken.text != ",") {
+				return ParserError.unexpectedToken(sepToken, "], ,");
+			}
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== "]") {
+			return ParserError.unexpectedToken(closeToken, "]");
+		}
+		return new AstValueArray(itemIndex, itemValues).fromToken(openToken);
+	}
+	
+	readRecordValueField() {
+		let fieldName = this.readToken();
+		if (!TokenReader.isIdentifier(fieldName.text)) {
+			return ParserError.unexpectedToken(fieldName, "identifier")
+		}
+		let fieldType = this.readType();
+		if (Parser.isError(fieldType)) {
+			return fieldType;
+		}
+		let assign = this.readToken();
+		if (assign.text !== ":=") {
+			return ParserError.unexpectedToken(assign, ":=");
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstValueRecordField(fieldName.text, fieldType, expr).fromToken(fieldName);	
+	}
+	
+	readRecordValue() {
+		let openToken = this.readToken();
+		if (openToken.text !== "{") {
+			return ParserError.unexpectedToken(openToken, "{");
+		}
+		let fields = [];
+		let fieldIndex = 0;
+		while (this.peekToken() !== "}") {
+			let fieldExpr = this.readRecordValueField();
+			if (Parser.isError(fieldExpr)) {
+				return fieldExpr;
+			}
+			fields[fieldIndex] = fieldExpr;
+			fieldIndex++;
+			if (this.peekToken() === "}") {
+				break;
+			}
+			let sepToken = this.readToken();
+			if (sepToken.text != ",") {
+				return ParserError.unexpectedToken(sepToken, "}, ,");
+			}
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== "}") {
+			return ParserError.unexpectedToken(closeToken, "}");
+		}
+		return new AstValueRecord(fieldIndex, fields).fromToken(openToken);		
+	}
+	
+	readType() {
+		if (this.peekToken() === "sequence") {
+			return this.readTypeSequence();
+		}
+		if (this.peekToken() === "{") {
+			return this.readTypeRecord();
+		}
+		let typeName = this.readToken();
+		if (!TokenReader.isIdentifier(typeName.text)) {
+			return ParserError.unexpectedToken(typeName, "identifier");
+		}
+		let typeExpr = new AstTypeNamed(typeName.text).fromToken(typeName);
+		while (this.peekToken() == "[") {
+			let openToken = this.readToken();
+			let closeToken = this.readToken();
+			if (closeToken.text !== "]") {
+				return ParserError.unexpectedToken(closeToken, "]");
+			}
+			typeExpr = new AstTypeArray(typeExpr).fromToken(openToken);
+		}
+		return typeExpr;
+	}
+	
+	readTypeSequence() {
+		let seqToken = this.readToken();
+		if (seqToken.text !== "sequence") {
+			return ParserError.unexpectedToken(fieldName, "identifier")
+		}
+		let openToken = this.readToken();
+		if (openToken.text !== "(") {
+			return ParserError.unexpectedToken(openToken, "(");
+		}
+		let underlyingType = this.readType();
+		if (Parser.isError(underlyingType)) {
+			return underlyingType;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== ")") {
+			return ParserError.unexpectedToken(closeToken, ")");
+		}
+		return new AstTypeSequence(underlyingType);
+	}
+	
+	readTypeRecordField() {
+		let fieldName = this.readToken();
+		if (!TokenReader.isIdentifier(fieldName.text)) {
+			return ParserError.unexpectedToken(fieldName, "identifier")
+		}
+		let fieldType = this.readType();
+		if (Parser.isError(fieldType)) {
+			return fieldType;
+		}
+		return new AstTypeRecordField(fieldName.text, fieldType).fromToken(fieldName);	
+	}
+
+	readTypeRecord() {
+		let openToken = this.readToken();
+		if (openToken.text !== "{") {
+			return ParserError.unexpectedToken(openToken, "{");
+		}
+		let fields = [];
+		let fieldIndex = 0;
+		while (this.peekToken() !== "}") {
+			if (fieldIndex > 0) {
+				let sepToken = this.readToken();
+				if (sepToken.text != ",") {
+					return ParserError.unexpectedToken(sepToken, "}, ,");
+				}
+			}
+			let fieldExpr = this.readTypeRecordField();
+			if (Parser.isError(fieldExpr)) {
+				return fieldExpr;
+			}
+			fields[fieldIndex] = fieldExpr;
+			fieldIndex++;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== "}") {
+			return ParserError.unexpectedToken(closeToken, "}");
+		}
+		return new AstTypeRecord(fieldIndex, fields).fromToken(openToken);		
+	}
+	
+	readVariableDeclaration() {
+		let varToken = this.readToken();
+		if (varToken.text !== "var") {
+			return ParserError.unexpectedToken(varToken, "var");
+		}
+		let varName = this.readToken();
+		if (!TokenReader.isIdentifier(varName.text)) {
+			return ParserError.unexpectedToken(varName, "identifier")
+		}
+		let varType = this.readType();
+		if (Parser.isError(varType)) {
+			return varType;
+		}
+		let assign = this.readToken();
+		if (assign.text !== ":=") {
+			return ParserError.unexpectedToken(assign, ":=");
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstVariableDeclaration(varName.text, varType, expr).fromToken(varToken);
+	}
+	
+	readIfBlock(fromToken) {
+		let statementIndex = 0;
+		let statements = [];
+		let token = this.peekToken();
+		while (token !== "end" && token !== "else" && token !== "elsif") {
+			let statement = this.readStatement();
+			if (Parser.isError(statement)) {
+				return statement;
+			}
+			statements[statementIndex] = statement;
+			statementIndex++;			
+			token = this.peekToken();
+		}
+		return new AstBlock(statementIndex, statements).fromToken(fromToken);
+	}
+	
+	readIf() {
+		return this.readIfOrElsif(true);
+	}
+	
+	readElsif() {
+		return this.readIfOrElsif(false);
+	}
+	
+	readIfOrElsif(isIf) {
+		let ifToken = this.readToken();
+		if (ifToken.text !== (isIf ? "if" : "elsif")) {
+			return ParserError.unexpectedToken(ifToken, (isIf ? "if" : "elsif"));
+		}
+		let condition = this.readExpression();
+		if (Parser.isError(condition)) {
+			return condition;
+		}
+		let thenToken = this.readToken();
+		if (thenToken.text !== "then") {
+			return ParserError.unexpectedToken(ifToken, "then");
+		}
+		let trueStatement = this.readIfBlock(thenToken);
+		if (Parser.isError(trueStatement)) {
+			return trueStatement;
+		}
+		if (this.peekToken() === "elsif") {
+			let falseStatement = this.readElsif();
+			if (Parser.isError(falseStatement)) {
+				return falseStatement;
+			}
+			return new AstIf(condition, trueStatement, falseStatement).fromToken(ifToken);
+		}
+		let falseStatement = null;
+		if (this.peekToken() === "else") {
+			let elseToken = this.readToken();
+			falseStatement = this.readIfBlock(elseToken);
+			if (Parser.isError(falseStatement)) {
+				return falseStatement;
+			}
+		}
+		let endToken = this.readToken();
+		if (endToken.text !== "end") {
+			return ParserError.unexpectedToken(endToken, "end");
+		}
+		let endIfToken = this.readToken();
+		if (endIfToken.text !== "if") {
+			return ParserError.unexpectedToken(endIfToken, "if");
+		}
+		return new AstIf(condition, trueStatement, falseStatement).fromToken(ifToken);
+	}
+	
+	readBlock(beginTokenText, endTokenText, endTokenSuffixText) {
+		let beginToken = this.readToken();
+		if (beginToken.text !== beginTokenText) {
+			return ParserError.unexpectedToken(beginToken, beginTokenText);
+		}
+		let statementIndex = 0;
+		let statements = [];
+		let token = this.peekToken();
+		while (token !== endTokenText) {
+			let statement = this.readStatement();
+			if (Parser.isError(statement)) {
+				return statement;
+			}
+			statements[statementIndex] = statement;
+			statementIndex++;			
+			token = this.peekToken();
+		}
+		this.readToken();
+		if (endTokenSuffixText !== null) {
+			let endTokenSuffix = this.readToken();
+			if (endTokenSuffix.text !== endTokenSuffixText) {
+				return ParserError.unexpectedToken(endTokenSuffix, endTokenSuffixText);
+			}
+		}
+		return new AstBlock(statementIndex, statements).fromToken(beginToken);
+	}
+	
+	readWhile() {
+		let whileToken = this.readToken();
+		if (whileToken.text !== "while") {
+			return ParserError.unexpectedToken(whileToken,  "while");
+		}
+		let condition = this.readExpression();
+		if (Parser.isError(condition)) {
+			return condition;
+		}
+		let statement = this.readBlock("loop", "end", "loop");
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstWhile(condition, statement).fromToken(whileToken);
+	}
+	
+	readParameter() {
+		let parameterName = this.readToken();
+		if (!TokenReader.isIdentifier(parameterName.text)) {
+			return ParserError.unexpectedToken(parameterName, "identifier")
+		}
+		let parameterType = this.readType();
+		if (Parser.isError(parameterType)) {
+			return parameterType;
+		}
+		return new AstParameter(parameterName.text, parameterType).fromToken(parameterName);	
+	}
+
+	readParameterList() {
+		let openToken = this.readToken();
+		if (openToken.text !== "(") {
+			return ParserError.unexpectedToken(openToken, "(");
+		}
+		let parameters = [];
+		let parameterIndex = 0;
+		while (this.peekToken() !== ")") {
+			if (parameterIndex > 0) {
+				let sepToken = this.readToken();
+				if (sepToken.text != ",") {
+					return ParserError.unexpectedToken(sepToken, "}, ,");
+				}
+			}
+			let parameter = this.readParameter();
+			if (Parser.isError(parameter)) {
+				return parameter;
+			}
+			parameters[parameterIndex] = parameter;
+			parameterIndex++;
+		}
+		this.readToken();
+		return new AstParameterList(parameterIndex, parameters).fromToken(openToken);		
+	}
+	
+	readFunctionDeclaration() {
+		let functionToken = this.readToken();
+		if (functionToken.text !== "function" && functionToken.text !== "generator") {
+			return ParserError.unexpectedToken(functionToken,  "function or generator");
+		}
+		let isGenerator = functionToken.text === "generator";
+		let functionName = this.readToken();
+		if (!TokenReader.isIdentifier(functionName.text)) {
+			return ParserError.unexpectedToken(functionName, "identifier")
+		}
+		let parameterList = this.readParameterList();
+		if (Parser.isError(parameterList)) {
+			return parameterList;
+		}
+		let returnType = this.readType();
+		if (Parser.isError(returnType)) {
+			return returnType;
+		}
+		let statement = this.readBlock("begin", "end", functionName.text);
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstFunctionDeclaration(functionName.text, parameterList, returnType, statement, isGenerator).fromToken(functionToken);
+	}
+	
+	readProcedureDeclaration() {
+		let procedureToken = this.readToken();
+		if (procedureToken.text !== "procedure") {
+			return ParserError.unexpectedToken(procedureToken,  "procedure");
+		}
+		let procedureName = this.readToken();
+		if (!TokenReader.isIdentifier(procedureName.text)) {
+			return ParserError.unexpectedToken(procedureName, "identifier")
+		}
+		let parameterList = this.readParameterList();
+		if (Parser.isError(parameterList)) {
+			return parameterList;
+		}
+		let statement = this.readBlock("begin", "end", procedureName.text);
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstProcedureDeclaration(procedureName.text, parameterList, statement).fromToken(procedureToken);
+	}
+
+	readReturn() {
+		let retToken = this.readToken();
+		if (retToken.text !== "return") {
+			return ParserError.unexpectedToken(retToken, "return");
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstReturn(expr).fromToken(retToken);
+	}
+	
+	readYield() {
+		let yieldToken = this.readToken();
+		if (yieldToken.text !== "yield") {
+			return ParserError.unexpectedToken(yieldToken, "yield");
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstYield(expr).fromToken(yieldToken);
+	}
+	
+	readArgList() {
+		let openToken = this.readToken();
+		if (openToken.text !== "(") {
+			return ParserError.unexpectedToken(openToken, "(");
+		}
+		let args = [];
+		let argIndex = 0;
+		while (this.peekToken() !== ")") {
+			if (argIndex > 0) {
+				let sepToken = this.readToken();
+				if (sepToken.text != ",") {
+					return ParserError.unexpectedToken(sepToken, "}, ,");
+				}
+			}
+			let arg = this.readExpression();
+			if (Parser.isError(arg)) {
+				return arg;
+			}
+			args[argIndex] = arg;
+			argIndex++;
+		}
+		this.readToken();
+		return new AstArgList(argIndex, args).fromToken(openToken);		
+	}
+	
+	readFor() {
+		let forToken = this.readToken();
+		if (forToken.text !== "for") {
+			return ParserError.unexpectedToken(forToken, "for");
+		}
+		let index = this.readToken();
+		if (!TokenReader.isIdentifier(index.text)) {
+			return ParserError.unexpectedToken(index, "identifier")
+		}
+		let inToken = this.readToken();
+		if (inToken.text !== "in") {
+			return ParserError.unexpectedToken(inToken, "in");
+		}
+		let isReverse = false;
+		if (this.peekToken() === "reverse") {
+			this.readToken();
+			isReverse = true;
+		}
+		let sequence = this.readExpression();
+		if (Parser.isError(sequence)) {
+			return sequence;
+		}
+		if (this.peekToken() === "..") {
+			let rangeToken = this.readToken();
+			let upperBound = this.readExpression();
+			if (Parser.isError(upperBound)) {
+				return upperBound;
+			}
+			sequence = new AstRange(sequence, upperBound).fromToken(rangeToken);
+		}
+		let statement = this.readBlock("loop", "end", "loop");
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstFor(index.text, isReverse, sequence, statement).fromToken(forToken);
+	}
+}
+
+
+
+/******************************************************************************************************************************************
+
+	Compiler
+	
+	Transforms AST in StackMachine code
+
+******************************************************************************************************************************************/
+
+
+class EvalResult {
+	
+	constructor(tag) {
+		this.tag = tag;
+	}
+	
+	isError() {
+		return false;
+	}
+	
+}
+
+class EvalResultType extends EvalResult {
+	constructor(tag, isRef) {
+		super(tag);
+		this.isRef = isRef;
+	}
+	
+	typeKey() {
+		return "not managed " + evalType;
+	}
+	
+}
+
+class EvalTypeBuiltIn extends EvalResultType {
+	constructor(typeName, isRef) {
+		super("res-type-built-in", isRef);
+		this.typeName = typeName;
+	}
+	
+	typeKey() {
+		return this.typeName;
+	}
+	
+}
+
+class EvalTypeRecordField {
+	constructor(fieldName, fieldType) {
+		this.fieldName = fieldName;
+		this.fieldType = fieldType;
+		this.offset = 0;
+	}
+}
+
+class EvalTypeRecord extends EvalResultType {
+	constructor(fieldCount, fields) {
+		super("res-type-record", true);
+		this.fieldCount = fieldCount;
+		this.fields = fields;
+		this.refFieldCount = 0;
+		for (let i = 0; i < fields.length; i++) {
+			if (fields[i].fieldType.isRef) {
+				fields[i].offset = this.refFieldCount;
+				this.refFieldCount++;
+			}
+		}
+		let noRefIndex = this.refFieldCount;
+		for (let i = 0; i < fields.length; i++) {
+			if (!fields[i].fieldType.isRef) {
+				fields[i].offset = noRefIndex;
+				noRefIndex++;
+			}
+		}
+	}
+	
+	typeKey() {
+		let name = "{";
+		for (let i = 0; i < this.fieldCount; i++) {
+			name += (i == 0 ? "" : ", ") + this.fields[i].fieldName + " " + this.fields[i].fieldType.typeKey();
+		}
+		return name + "}";
+	}
+}
+
+
+class EvalTypeArray extends EvalResultType {
+	constructor(underlyingType) {
+		super("res-type-array", true);
+		this.underlyingType = underlyingType;
+	}
+	
+	typeKey() {
+		return (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "[]";
+	}
+}
+
+class EvalTypeSequence extends EvalResultType {
+	constructor(underlyingType) {
+		super("res-type-sequence", true);
+		this.underlyingType = underlyingType;
+	}
+	
+	typeKey() {
+		return "sequence(" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + ")";
+	}
+}
+
+class EvalResultParameter extends EvalResult {
+	constructor(parameterName, parameterType) {
+		super("res-parameter");
+		this.parameterName = parameterName;
+		this.parameterType = parameterType;
+	}
+}
+
+class EvalResultParameterList extends EvalResult {
+	constructor(parameterCount, parameters) {
+		super("res-parameter-list");
+		this.parameterCount = parameterCount;
+		this.parameters = parameters;
+	}
+}
+
+class EvalResultFunction extends EvalResult {
+	constructor(functionName, parameterList, returnType, isGenerator) {
+		super("res-function");
+		this.functionName = functionName;
+		this.parameterList = parameterList;
+		this.returnType = returnType;
+		this.isGenerator = isGenerator;
+		this.codeBlockIndex = -1;
+		this.nativeIndex = -1;
+	}
+	
+	static fromNative(functionName, parameterList, returnType, nativeIndex) {
+		let nativeFunc = new EvalResultFunction(functionName, parameterList, returnType, false);
+		nativeFunc.nativeIndex = nativeIndex;
+		return nativeFunc;
+	}
+
+	functionKey() {
+		let funcKey = this.functionName + "(";
+		for (let i = 0; i < this.parameterList.parameterCount; i++) {
+			funcKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+		}
+		return funcKey + ")";
+	}
+}
+
+class EvalResultProcedure extends EvalResult {
+	constructor(procedureName, parameterList) {
+		super("res-procedure");
+		this.procedureName = procedureName;
+		this.parameterList = parameterList;
+		this.codeBlockIndex = -1;
+		this.nativeIndex = -1;
+	}
+	
+	static fromNative(procedureName, parameterList, nativeIndex) {
+		let nativeProc = new EvalResultProcedure(procedureName, parameterList);
+		nativeProc.nativeIndex = nativeIndex;
+		return nativeProc;
+	}
+	
+	procedureKey() {
+		let procKey = this.procedureName + "(";
+		for (let i = 0; i < this.parameterList.parameterCount; i++) {
+			procKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+		}
+		return procKey + ")";
+	}
+}
+
+
+class EvalResultValue extends EvalResult {
+	constructor(resultType, valueType) {
+		super(resultType);
+		this.valueType = valueType;
+	}
+}
+
+class EvalResultInteger extends EvalResultValue {
+	constructor(intValue) {
+		super("res-integer", EVAL_TYPE_INTEGER);
+		this.intValue = intValue;
+	}
+}
+
+class EvalResultBoolean extends EvalResultValue {
+	constructor(boolValue) {
+		super("res-boolean", EVAL_TYPE_BOOLEAN);
+		this.boolValue = boolValue;
+	}
+}
+
+class EvalResultReturn extends EvalResult {
+	constructor(returnValue) {
+		super("res-return");
+		this.returnValue = returnValue;
+	}
+}
+
+class EvalResultYield extends EvalResult {
+	constructor(yieldValue) {
+		super("res-yield");
+		this.yieldValue = yieldValue;
+	}
+}
+
+class EvalResultOk extends EvalResult {
+	constructor(okText) {
+		super("res-ok");
+		this.okText = okText;
+	}
+}
+
+class EvalError extends EvalResult {
+
+	constructor(errorText) {
+		super("res-error");
+		this.errorText = errorText;
+		this.line = 0;
+		this.col = 0;
+	}
+	
+	isError() {
+		return true;
+	}
+	
+	fromExpr(expr) {
+		this.line = expr.line;
+		this.col = expr.col;
+		return this;
+	}
+	
+	static unassignable(tag) {
+		return new EvalError("Unassignable left expression " + tag);
+	}
+	
+	static unknownBinaryOperator(operator) {
+		return new EvalError("Unknown binary operator " + operator);
+	}
+	
+	static wrongType(exprType, expected) {
+		return new EvalError("Wrong type " + exprType.typeKey() + ", expected " + expected);
+	}
+	
+	static unknownType(exprType) {
+		return new EvalError("Unknown type " + exprType);
+	}
+	
+	static variableAlreadyExists(varName) {
+		return new EvalError("Variable " + varName + " already exists");
+	}
+	
+	static functionAlreadyExists(funcName) {
+		return new EvalError("Function " + funcName + " already exists");
+	}
+	
+	static procedureAlreadyExists(procName) {
+		return new EvalError("Procedure " + procName + " already exists");
+	}
+
+	static unknownVariable(varName) {
+		return new EvalError("Unknown variable " + varName);
+	}
+	
+	static unknownField(fieldName, record) {
+		return new EvalError("Unknown field " + fieldName + " in " + record);
+	}
+	
+	static unknownFunction(funcName) {
+		return new EvalError("Unknown function " + funcName);
+	}
+	
+	static unknownProcedure(procName) {
+		return new EvalError("Unknown procedure " + procName);
+	}
+
+	static indexOutOfBound(index) {
+		return new EvalError("Index out of bound " + index);
+	}
+	
+	static noFunctionReturn(funcName) {
+		return new EvalError("No return for function " + funcName);
+	}
+	
+	static noFunctionYield(funcName) {
+		return new EvalError("No yield for function " + funcName);
+	}
+
+	static unexpectedReturn() {
+		return new EvalError("Unexpected return");
+	}
+	
+	static unexpectedYield() {
+		return new EvalError("Unexpected yield");
+	}
+
+	static unreachableCode() {
+		return new EvalError("Unreachable code");
+	}
+	
+}
+
+const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
+const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
+const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
+
+
+class CompilerContext {
+	
+	constructor() {
+		this.globalScope = new CompilerScope(null, false, false, null);
+		this.types = {
+			"integer": EVAL_TYPE_INTEGER,
+			"boolean": EVAL_TYPE_BOOLEAN,
+			"text": EVAL_TYPE_TEXT
+		};
+		this.functions = {};
+		this.procedures = {};
+		this.codeBlocks = [];
+	}
+	
+	getFunction(functionKey) {
+		let func = this.functions[functionKey];
+		return func === undefined ? null : func;
+	}
+	
+	addFunction(evalFunc) {
+		this.functions[evalFunc.functionKey()] = evalFunc;
+	}
+	
+	getProcedure(procedureKey) {
+		let proc = this.procedures[procedureKey];
+		return proc === undefined ? null : proc;
+	}
+	
+	addProcedure(evalProc) {
+		this.procedures[evalProc.procedureKey()] = evalProc;
+	}
+	
+	getType(typeName) {
+		let type = this.types[typeName];
+		return type === undefined ? null : type;
+	}
+	
+	addType(evalType) {
+		let uniqueType = this.types[evalType.typeKey()];
+		if (uniqueType === undefined) {
+			this.types[evalType.typeKey()] = evalType;
+			return evalType;
+		}
+		return uniqueType;
+	}
+	
+	addCodeBlock() {
+		let i = this.codeBlocks.length;
+		this.codeBlocks[i] = [];
+		return i;
+	}
+			
+}
+
+
+class CompilerVariable {
+	constructor(varName, varType, isGlobal, isParameter, offset) {
+		this.varName = varName;
+		this.varType = varType;
+		this.isGlobal = isGlobal;
+		this.isParameter = isParameter;
+		this.offset = offset;
+	}
+}
+
+class CompilerScope {
+
+	constructor(parent, isFrame, isGenerator, returnType) {
+		this.parent = parent;
+		this.isFrame = isFrame;
+		this.isGenerator = isGenerator;
+		this.returnType = returnType;
+		this.isGlobal = parent === null || (this.parent.isGlobal && isFrame === false);
+		this.variables = [];
+		this.parameters = [];
+		this.variableCount = 0;
+		this.parameterCount = 0;
+		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableCount);
+	}
+	
+	getLocalVariable(varName) {
+		for (let i = 0; i < this.variableCount; i++) {
+			if (this.variables[i].varName === varName) {
+				return this.variables[i];
+			}
+		}
+		for (let i = 0; i < this.parameterCount; i++) {
+			if (this.parameters[i].varName === varName) {
+				return this.parameters[i];
+			}
+		}
+		return null;
+	}
+	
+	getVariable(varName) {
+		let scope = this;
+		while (scope !== null) {
+		 	let val = scope.getLocalVariable(varName);
+			if (val !== null) {
+				return val;
+			}
+			scope = scope.parent;
+		}
+		return null;
+	}
+	
+	addParameter(varName, varType, offset) {
+		let newVar = new CompilerVariable(varName, varType, false, true, offset);
+		this.parameters[this.parameterCount] = newVar;
+		this.parameterCount++;
+		return newVar;	
+	}
+
+
+	addVariable(varName, varType) {
+		let newVar = new CompilerVariable(varName, varType, this.isGlobal, false, this.offset + this.variableCount);
+		this.variables[this.variableCount] = newVar;
+		this.variableCount++;
+		return newVar;	
+	}
+	
+}
+
+
+class Compiler {
+
+	constructor(context) {
+		this.context = context;
+		this.scope = this.context.globalScope;
+		this.codes = [];
+		this.codeSize = 0;
+	}
+	
+	resetCode() {
+		this.codes = [];
+		this.codeSize = 0;
+	}
+	
+	setLoc(offset) {
+		this.codes[offset] = this.codeSize;
+	}
+	
+	code1(inst) {
+		this.codes[this.codeSize] = inst;
+		this.codeSize++;
+	}
+	
+	code2(inst, arg) {
+		this.codes[this.codeSize] = inst;
+		this.codeSize++;
+		this.codes[this.codeSize] = arg;
+		this.codeSize++;
+	}
+	
+	codePush(val) {
+		this.code2("push", val);
+	}
+		
+	codePushGlobal(offset) {
+		this.code2("push_global", offset);
+	}
+	
+	codePushGlobalRef(offset) {
+		this.code2("push_global_ref", offset);
+	}
+	
+	codePushLocal(offset) {
+		this.code2("push_local", offset);
+	}
+	
+	codePushOffset(offset) {
+		this.code2("push_offset", offset);
+	}
+	
+	codePushPtrOffset() {
+		this.code1("push_ptr_offset");
+	}
+	
+	codeAlloc() {
+		this.code1("alloc");
+	}
+	
+	codeAllocInit() {
+		this.code1("alloc_init");
+	}
+	
+	codePopGlobal(offset) {
+		this.code2("pop_global", offset);
+	}
+	
+	codePopLocal(offset) {
+		this.code2("pop_local", offset);
+	}
+	
+	codePopPtr(offset) {
+		this.code2("pop_ptr", offset);
+	}
+	
+	codePopPtrOffset() {
+		this.code1("pop_ptr_offset");
+	}
+		
+	codePopVoid(count) {
+		this.code2("pop_void", count);
+	}
+	
+	codeSwap() {
+		this.code1("swap");
+	}
+	
+	codeAdd() {
+		this.code1("add");
+	}
+	
+	codeSub() {
+		this.code1("sub");
+	}
+
+	codeDiv() {
+		this.code1("div");
+	}
+
+	codeMul() {
+		this.code1("mul");
+	}
+	
+	codeNeg() {
+		this.code1("neg");
+	}
+	
+	codeGt() {
+		this.code1("gt");
+	}
+
+	codeGte() {
+		this.code1("gte");
+	}
+
+	codeLt() {
+		this.code1("lt");
+	}
+
+	codeLte() {
+		this.code1("lte");
+	}
+	
+	codeEq() {
+		this.code1("eq");
+	}
+	
+	codeNe() {
+		this.code1("ne");
+	}
+
+	codeAnd() {
+		this.code1("and");
+	}
+	
+	codeOr() {
+		this.code1("or");
+	}
+	
+	codeNot() {
+		this.code1("not");
+	}
+		
+	codeLength() {
+		this.code1("length");
+	}
+	
+	codeNext() {
+		this.code1("next");
+	}
+	
+	codeEnded() {
+		this.code1("ended");
+	}
+	
+	codeEqStr() {
+		this.code1("eq_str");
+	}
+	
+	codeJz(offset) {
+		this.code2("jz", offset);
+		return this.codeSize - 1;
+	}
+	
+	codeJnz(offset) {
+		this.code2("jnz", offset);
+		return this.codeSize - 1;
+	}
+	
+	codeJmp(offset) {
+		this.code2("jmp", offset);
+		return this.codeSize - 1;
+	}
+			
+	codeRet() {
+		this.code1("ret");
+	}
+
+	codeRetVal() {
+		this.code1("ret_val");
+	}
+	
+	codeYield() {
+		this.code1("yield");
+	}
+	
+	codeYieldDone() {
+		this.code1("yield_done");
+	}
+	
+	codeCall(ptr) {
+		this.code2("call", ptr);
+	}
+		
+	codeCallNative(ptr) {
+		this.code2("call_native", ptr);
+	}
+	
+	codeInitGenerator(ptr) {
+		this.code2("init_generator", ptr);
+	}
+	
+	eval(expr) {
+		if (expr.tag === "ast-type-named") {
+			let evalType = this.context.getType(expr.typeName);
+			if (evalType === null) {
+				return EvalError.unknownType(expr.typeName).fromExpr(expr);
+			}
+			return evalType;
+		}
+		if (expr.tag === "ast-type-array") {
+			let underType = this.eval(expr.underlyingType);
+			if (underType.isError()) {
+				return underType;
+			}
+			return this.context.addType(new EvalTypeArray(underType));
+		}
+		if (expr.tag === "ast-type-sequence") {
+			let underType = this.eval(expr.underlyingType);
+			if (underType.isError()) {
+				return underType;
+			}
+			return this.context.addType(new EvalTypeSequence(underType));
+		}
+		if (expr.tag === "ast-type-record") {
+			let fields = [];
+			for (let i = 0; i < expr.fieldCount; i++) {
+				let fieldType = this.eval(expr.fields[i].fieldType);
+				if (fieldType.isError()) {
+					return fieldType;
+				}
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
+			}
+			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
+		}
+		if (expr.tag === "ast-value-boolean") {
+			this.codePush(expr.boolValue ? 1 : 0);
+			return EVAL_TYPE_BOOLEAN;
+		}
+		if (expr.tag === "ast-value-integer") {
+			this.codePush(expr.intValue);
+			return EVAL_TYPE_INTEGER;
+		}
+		if (expr.tag === "ast-value-text") {
+			this.codePush(0);
+			this.codePush(expr.textValue.length);
+			this.codeAllocInit();
+			for (let i = 0; i < expr.textValue.length; i++) {
+				this.code1(expr.textValue.charCodeAt(i));
+			}
+			return EVAL_TYPE_TEXT;
+		}
+		if (expr.tag === "ast-value-array") {
+			if (expr.itemCount === 0) {
+				return EvalError.wrongType(null, "wtf to do with empty array").fromExpr(expr);
+			}
+			// Evaluate first item to get the type
+			let firstItemType = this.eval(expr.items[0]);
+			if (firstItemType.isError()) {
+				return firstItemType;
+			}
+			// Allocate the array
+			this.codePush(firstItemType.isRef ? expr.itemCount : 0);
+			this.codePush(expr.itemCount);
+			this.codeAlloc();
+			// Swap the array, and the first item, and pop the first item in the array
+			this.codeSwap();
+			this.codePopPtr(0);
+			// Evalute the next items, and pop them in the array
+			for (let i = 1; i < expr.itemCount; i++) {
+				let itemType = this.eval(expr.items[i]);
+				if (itemType.isError()) {
+					return itemType;
+				}
+				if (itemType !== firstItemType) {
+					return EvalError.wrongType(itemType, firstItemType.typeKey()).fromExpr(expr.items[i]);
+				}
+				this.codePopPtr(i);
+			}
+			return this.context.addType(new EvalTypeArray(firstItemType));
+		}
+		if (expr.tag === "ast-value-record") {
+			let fields = [];
+			for (let i = 0; i < expr.fieldCount; i++) {
+				let fieldType = this.eval(expr.fields[i].fieldType);
+				if (fieldType.isError()) {
+					return fieldType;
+				}
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
+			}
+			let recordType = this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
+			this.codePush(recordType.refFieldCount);
+			this.codePush(expr.fieldCount);
+			this.codeAlloc();
+			for (let i = 0; i < expr.fieldCount; i++) {
+				let fieldValueType = this.eval(expr.fields[i].valueExpr);
+				if (fieldValueType.isError()) {
+					return fieldValueType;
+				}
+				if (fieldValueType !== fields[i].fieldType) {
+					return EvalError.wrongType(fieldValueType, fieldType.typeKey()).fromExpr(expr.fields[i].valueExpr);
+				}
+				this.codePopPtr(fields[i].offset);
+			}
+			return recordType;
+		}
+		if (expr.tag === "ast-operator-binary") {
+			if (expr.operator === "and" || expr.operator === "or") {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				if (leftType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(leftType, "boolean").fromExpr(expr.left);
+				}
+				let skipLoc = expr.operator === "and" ? this.codeJz(0) : this.codeJnz(0);
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(rightType, "boolean").fromExpr(expr.right);
+				}
+				let endLoc = this.codeJmp(0);
+				this.setLoc(skipLoc);
+				this.codePush(expr.operator === "and" ? 0 : 1);
+				this.setLoc(endLoc);
+				return EVAL_TYPE_BOOLEAN;
+			}
+			if (expr.operator === "||") {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				if (leftType !== EVAL_TYPE_TEXT) {
+					return EvalError.wrongType(leftType, "text").fromExpr(expr.left);
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== EVAL_TYPE_TEXT) {
+					return EvalError.wrongType(rightType, "text").fromExpr(expr.right);
+				}
+				this.codePush(2);
+				this.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
+				return EVAL_TYPE_TEXT;
+			}
+			if (
+				expr.operator === "+" || expr.operator === "-" ||
+				expr.operator === "/" || expr.operator === "*" ||
+				expr.operator === ">" || expr.operator === "<" ||
+				expr.operator === ">=" || expr.operator === "<="
+			) {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				if (leftType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(leftType, "integer").fromExpr(expr.left);
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(rightType, "integer").fromExpr(expr.right);
+				}
+				if (expr.operator === "+") {
+					this.codeAdd();
+				} else if (expr.operator === "-") {
+					this.codeSub();
+				} else if (expr.operator === "/") {
+					this.codeDiv();
+				} else if (expr.operator === "*") {
+					this.codeMul();
+				} else if (expr.operator === ">") {
+					this.codeGt();
+				} else if (expr.operator === "<") {
+					this.codeLt();
+				} else if (expr.operator === ">=") {
+					this.codeGte();
+				} else {
+					this.codeLte();
+				}
+				if (
+					expr.operator === "+" || expr.operator === "-" ||
+					expr.operator === "/" || expr.operator === "*"
+				) {
+					return EVAL_TYPE_INTEGER;
+				}
+				return EVAL_TYPE_BOOLEAN;
+			}
+			if (expr.operator === "=" || expr.operator === "<>") {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== leftType) {
+					return EvalError.wrongType(rightType, leftType).fromExpr(expr.right);
+				}
+				if (rightType === EVAL_TYPE_TEXT) {
+					this.codeEqStr();
+					if (expr.operator === "<>") {
+						this.codeNot();
+					}
+				} else {
+					if (expr.operator === "=") {
+						this.codeEq();
+					} else {
+						this.codeNe();
+					}
+				}
+				return EVAL_TYPE_BOOLEAN;
+			}
+			return EvalError.unknownBinaryOperator(expr.operator).fromExpr(expr);
+		}
+		if (expr.tag === "ast-operator-unary") {
+			let operandType = this.eval(expr.operand);
+			if (operandType.isError()) {
+				return operand;
+			}
+			if (expr.operator === "not") {
+				if (operandType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(operandType, "boolean").fromExpr(expr.operand);
+				}
+				this.codeNot();
+				return EVAL_TYPE_BOOLEAN;
+			}
+			if (expr.operator === "-") {
+				if (operandType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(operandType, "integer").fromExpr(expr.operand);
+				}
+				this.codeNeg();
+				return EVAL_TYPE_INTEGER;
+			}
+			if (expr.operator === "length") {
+				if (!operandType.isRef) {
+					return EvalError.wrongType(operandType, "reference type").fromExpr(expr.operand);
+				}
+				this.codeLength();
+				return EVAL_TYPE_INTEGER;
+			}
+			if (expr.operator === "next") {
+				if (operandType.tag !== "res-type-sequence") {
+					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
+				}
+				this.codeNext();
+				return operandType.underlyingType;
+			}
+			if (expr.operator === "ended") {
+				if (operandType.tag !== "res-type-sequence") {
+					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
+				}
+				this.codeEnded();
+				return EVAL_TYPE_BOOLEAN;
+			}
+			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
+		}
+		if (expr.tag === "ast-variable-declaration") {
+			if (this.scope.getLocalVariable(expr.varName) !== null) {
+				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
+			}
+			let initValueType = this.eval(expr.valueExpr);
+			if (initValueType.isError()) {
+				return initValueType;
+			}
+			let varType = this.eval(expr.varType);
+			if (varType.isError()) {
+				return varType;
+			}
+			if (
+				initValueType.tag === "res-type-array" &&
+			    initValueType.underlyingType === null &&
+			    varType.tag === "res-type-array"
+			) {
+				initValueType = varType;
+			} else if (initValueType !== varType) {
+				return EvalError.wrongType(initValue.valueType, varType.typeKey()).fromExpr(expr.valueExpr);
+			}
+			this.scope.addVariable(expr.varName, varType);
+			return new EvalResultOk("Variable created");
+		}
+		if (expr.tag === "ast-variable") {
+			let v = this.scope.getVariable(expr.varName);
+			if (v === null) {
+				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
+			}
+			if (v.isGlobal) {
+				this.codePushGlobal(v.offset);
+			} else {
+				this.codePushLocal(v.offset);
+			}
+			return v.varType;
+		}
+		if (expr.tag === "ast-index") {
+			// evaluate the array ref
+			let indexedType = this.eval(expr.indexed);
+			if (indexedType.isError()) {
+				return indexedType;
+			}
+			if (indexedType.tag !== "res-type-array") {
+				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
+			}
+			// evaluate the index
+			let indexType = this.eval(expr.index);
+			if (indexType.isError()) {
+				return indexType;
+			}
+			if (indexType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
+			}
+			// push the result on the stack
+			this.codePushPtrOffset();
+			return indexedType.underlyingType;
+		}		
+		if (expr.tag === "ast-field") {
+			let recordType = this.eval(expr.expr);
+			if (recordType.isError()) {
+				return recordType;
+			}
+			if (recordType.tag != "res-type-record") {
+				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
+			}
+			for (let i = 0; i < recordType.fieldCount; i++) {
+				if (recordType.fields[i].fieldName === expr.fieldName) {
+					this.codePush(recordType.fields[i].offset);
+					this.codePushPtrOffset();
+					return recordType.fields[i].fieldType;
+				}
+			}
+			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+		}
+		if (expr.tag === "ast-assign") {
+			if (expr.left.tag === "ast-variable") {
+				// search the variable
+				let variable = this.scope.getVariable(expr.left.varName);
+				if (variable === null) {
+					return EvalError.unknownVariable(expr.left.varName).fromExpr(expr.left);
+				}
+				// evaluate the value
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return value;
+				}
+				if (valueType !== variable.varType) {
+					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
+				}
+				// assign the value
+				if (variable.isGlobal) {
+					this.codePopGlobal(variable.offset);
+				} else {
+					this.codePopLocal(variable.offset);
+				}
+				return new EvalResultOk("assigned");
+			}
+			if (expr.left.tag === "ast-index") {
+				let indexExpr = expr.left;
+				// Evaluate the indexed ptr
+				let indexedType = this.eval(indexExpr.indexed);
+				if (indexedType.isError()) {
+					return indexed;
+				}
+				if (indexedType.tag !== "res-type-array") {
+					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
+				}
+				// Evaluate the index
+				let indexType = this.eval(indexExpr.index);
+				if (indexType.isError()) {
+					return index;
+				}
+				if (indexType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(indexType, "integer").fromExpr(indexExpr.index);
+				}
+				// Evaluate the value to assign
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return value;
+				}
+				if (valueType !== indexedType.underlyingType) {
+					return EvalError.wrongType(valueType, indexedType.underlyingType.typeKey()).fromExpr(expr.right);
+				}
+				// Assigne the value
+				this.codePopPtrOffset();
+				return new EvalResultOk("assigned");
+			}
+			if (expr.left.tag === "ast-field") {
+				let fieldExpr = expr.left;
+				// evaluate the record
+				let recordType = this.eval(fieldExpr.expr);
+				if (recordType.isError()) {
+					return recordType;
+				}
+				if (recordType.tag != "res-type-record") {
+					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
+				}
+				// search and push the offset of the field
+				let fieldIndex = -1;
+				for (let i = 0; i < recordType.fieldCount; i++) {
+					if (recordType.fields[i].fieldName === fieldExpr.fieldName) {
+						fieldIndex = i;
+						break;
+					}
+				}
+				if (fieldIndex === -1) {
+					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
+				}
+				this.codePush(recordType.fields[fieldIndex].offset);
+				// Evaluate the value to assign
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return value;
+				}
+				if (valueType !== recordType.fields[fieldIndex].fieldType) {
+					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
+				}
+				// Assigne the value
+				this.codePopPtrOffset();
+				return new EvalResultOk("assigned");
+			}
+			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
+		}
+		if (expr.tag == "ast-block") {
+			let ret = null;
+			this.scope = new CompilerScope(this.scope, false, false, null);
+			for (let i = 0; i < expr.statementCount; i++) {
+				if (ret !== null) {
+					return EvalError.unreachableCode().fromExpr(expr.statements[i]);
+				}
+				let val = this.eval(expr.statements[i]);
+				if (val.isError()) {
+					return val;
+				}
+				if (val.tag === "res-return") {
+					if (ret === null) {
+						ret = val;
+					} else if ( val.returnType !== ret.returnType) {
+						return EvalError.wrongType(val.valueType, ret.returnType).fromExpr(expr.statements[i]);	
+					}
+				} else if (val.tag !== "res-ok" && val.tag !== "res-yield") {
+					return EvalError.wrongType(val.valueType, "statement").fromExpr(expr.statements[i]);	
+				}
+			}
+			if (ret === null) {
+				if (this.scope.variableCount > 0) {
+					this.codePopVoid(this.scope.variableCount);
+				}
+			}
+			this.scope = this.scope.parent;
+			return ret === null ? new EvalResultOk("block") : ret;
+		}
+		if (expr.tag === "ast-if") {
+			let condType = this.eval(expr.condition);
+			if (condType.isError()) {
+				return condType;
+			}
+			if (condType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
+			}
+			let falseLoc = this.codeJz(0);
+			let trueRet =  this.eval(expr.trueStatement);
+			if (trueRet.isError()) {
+				return trueRet;
+			}
+			if (trueRet.tag !== "res-ok" && trueRet.tag !== "res-return") {
+				return EvalError.wrongType(trueRet, "statement").fromExpr(expr.trueStatement);	
+			}
+			let endLoc = expr.falseStatement === null ? 0 : this.codeJmp(0);
+			this.setLoc(falseLoc);
+			if (expr.falseStatement === null) {
+				return new EvalResultOk("if");
+			}
+			let falseRet = this.eval(expr.falseStatement);
+			if (falseRet.isError()) {
+				return falseRet;
+			}
+			if (falseRet.tag !== "res-ok" && falseRet.tag !== "res-return") {
+				return EvalError.wrongType(falseRet, "statement").fromExpr(expr.falseStatement);	
+			}
+			this.setLoc(endLoc);
+			if (falseRet.tag === "res-return" && trueRet.tag === "res-return") {
+				if (falseRet.returnType !== trueRet.returnType) {
+					return EvalError.wrongType(falseRet.returnType, trueRet.returnType.typeKey()).fromExpr(expr.falseStatement);	
+				}
+				return trueRet;
+			}
+			return new EvalResultOk("if");
+		}
+		if (expr.tag === "ast-while") {
+			let testLoc = this.codeSize;
+			let conditionType = this.eval(expr.condition);
+			if (conditionType.isError()) {
+				return condition;
+			}
+			if (conditionType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
+			}
+			let endLoc = this.codeJz(0);
+			let stmtRet = this.eval(expr.statement);
+			if (stmtRet.isError()) {
+				return stmtRet;
+			}
+			if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+				return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+			}
+			this.codeJmp(testLoc);
+			this.setLoc(endLoc);
+			return new EvalResultOk("while");
+		}
+		if (expr.tag === "ast-for") {
+			if (expr.sequence.tag === "ast-range") {
+				this.scope = new CompilerScope(this.scope, false, false, null);
+				let startBoundExpr = expr.isReverse ? expr.sequence.upperBound : expr.sequence.lowerBound;
+				let endBoundExpr = expr.isReverse ? expr.sequence.lowerBound : expr.sequence.upperBound;				
+				let endBoundType = this.eval(endBoundExpr);
+				if (endBoundType.isError()) {
+					return endBoundType;
+				}
+				if (endBoundType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
+				}
+				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER);
+				let startBoundType = this.eval(startBoundExpr);
+				if (startBoundType.isError()) {
+					return startBoundType;
+				}
+				if (startBoundType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
+				}
+				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER);
+				let testLoc = this.codeSize;
+				this.codePushLocal(indexVar.offset);
+				this.codePushLocal(endBoundVar.offset);
+				if (expr.isReverse) {
+					this.codeGte();
+				} else {
+					this.codeLte();
+				}
+				let endLoc = this.codeJz(0);
+				let stmtRet = this.eval(expr.statement);
+				if (stmtRet.isError()) {
+					return stmtRet;
+				}
+				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+				}
+				this.codePush(1);
+				if (expr.isReverse) {
+					this.codeSub();
+				} else {
+					this.codeAdd();
+				}
+				this.codeJmp(testLoc);
+				this.setLoc(endLoc);
+				this.codePopVoid(this.scope.variableCount);
+				this.scope = this.scope.parent;
+				return new EvalResultOk("for");
+			} else {
+				this.scope = new CompilerScope(this.scope, false, false, null);
+				let sequence = this.eval(expr.sequence);
+				if (sequence.isError()) {
+					return sequence;
+				}
+				if (sequence.tag !== "res-type-sequence") {
+					return EvalError.wrongType(stmt, "sequence").fromExpr(expr.sequence);
+				}
+				let sequenceVar = this.scope.addVariable("_for_sequence", sequence);
+				this.codePushLocal(sequenceVar.offset);
+				this.codeNext();
+				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType);
+				let testLoc = this.codeSize;
+				this.codePushLocal(sequenceVar.offset);
+				this.codeEnded();
+				let endLoc = this.codeJnz(0);
+				let stmtRet = this.eval(expr.statement);
+				if (stmtRet.isError()) {
+					return stmtRet;
+				}
+				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+				}
+				this.codePushLocal(sequenceVar.offset);
+				this.codeNext();
+				this.codePopLocal(indexVar.offset);
+				this.codeJmp(testLoc);
+				this.setLoc(endLoc);
+				this.codePopVoid(this.scope.variableCount);
+				this.scope = this.scope.parent;
+				return new EvalResultOk("for");
+			}
+			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
+		}
+		if (expr.tag === "ast-parameter") {
+			let paramType = this.eval(expr.parameterType);
+			if (paramType.isError()) {
+				return paramType;
+			}
+			return new EvalResultParameter(expr.parameterName, paramType);
+		}
+		if (expr.tag === "ast-parameter-list") {
+			let parameters = [];
+			for (let i = 0; i < expr.parameterCount; i++) {
+				let parameter = this.eval(expr.parameters[i]);
+				if (parameter.isError()) {
+					return parameter;
+				}
+				for (let k = 0; k < i; k++) {
+					if (parameters[k].parameterName === parameter.parameterName) {
+						return new EvalError.parameterAlreadyExists(parameterNamer).fromExpr(expr.parameters[i]);
+					}
+				}
+				parameters[i] = parameter;
+			}
+			return new EvalResultParameterList(expr.parameterCount, parameters);
+		}
+		if (expr.tag === "ast-return") {
+			// Eval the returned expression
+			let retType = this.eval(expr.expr);
+			if (retType.isError()) {
+				return retType;
+			}
+			// Find frame scope
+			let currentScope = this.scope;
+			while (currentScope !== null) {
+				if (currentScope.isFrame) {
+					break;
+				}
+				currentScope = currentScope.parent;
+			}
+			if (currentScope === null || currentScope.isGenerator !== false) {
+				return EvalError.unexpectedReturn().fromExpr(expr);
+			}
+			// Check the return type
+			if (retType !== currentScope.returnType) {
+				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+			}
+			this.codeRetVal();
+			return new EvalResultReturn(retType);
+		}
+		if (expr.tag === "ast-yield") {
+			// Check that the frame is a generator
+			let frameScope = this.scope;
+			while (frameScope !== null && frameScope.isFrame === false) {
+				frameScope = frameScope.parent;
+			}
+			if (frameScope === null || frameScope.isGenerator !== true) {
+				return EvalError.unexpectedYield().fromExpr(expr);
+			}
+			// Eval the returned expression
+			let retType = this.eval(expr.expr);
+			if (retType.isError()) {
+				return retType;
+			}
+			// Check the return type
+			if (retType !== frameScope.returnType) {
+				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+			}
+			this.codeYield();
+			return new EvalResultYield(retType);
+		}
+		if (expr.tag === "ast-function-declaration") {
+			let parameterList = this.eval(expr.parameterList);
+			if (parameterList.isError(parameterList)) {
+				return parameterList;
+			}
+			let returnType = this.eval(expr.returnType);
+			if (returnType.isError()) {
+				return returnType;
+			}
+			let evalFunc = new EvalResultFunction(expr.functionName, parameterList, returnType, expr.isGenerator);
+			if (this.context.getFunction(evalFunc.functionKey()) !== null) {
+				return EvalError.functionAlreadyExists(evalFunc.functionKey()).fromExpr(expr);
+			}
+			this.context.addFunction(evalFunc);
+			{ // begin Compile function
+				let oldCodes = this.codes;
+				let oldCodeSize = this.codeSize;
+				let codeBlockIndex = this.context.addCodeBlock();
+				this.codes = this.context.codeBlocks[codeBlockIndex];
+				this.codeSize = 0;
+				evalFunc.codeBlockIndex = codeBlockIndex;
+				this.scope = new CompilerScope(this.scope, true, evalFunc.isGenerator, returnType);
+				for (let i = 0; i < parameterList.parameterCount; i++) {
+					if (evalFunc.isGenerator === true) {
+						this.scope.addVariable(
+							parameterList.parameters[i].parameterName,
+							parameterList.parameters[i].parameterType
+						);
+					} else {
+						this.scope.addParameter(
+							parameterList.parameters[i].parameterName,
+							parameterList.parameters[i].parameterType,
+							i - parameterList.parameterCount - 4
+						);
+					}
+				}
+				let ret = this.eval(expr.statement);
+				if (ret.isError()) {
+					return ret;
+				}
+				if (evalFunc.isGenerator === true) {
+					this.codeYieldDone();
+				} else if (ret.tag !== "res-return") {
+					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
+				}
+				this.scope = this.scope.parent;
+				this.codes = oldCodes;
+				this.codeSize = oldCodeSize;
+			} // End Compile function
+			return new EvalResultOk("Function created");
+		}
+		if (expr.tag === "ast-procedure-declaration") {
+			let parameterList = this.eval(expr.parameterList);
+			if (parameterList.isError(parameterList)) {
+				return parameterList;
+			}
+			let evalProc = new EvalResultProcedure(expr.procedureName, parameterList);
+			if (this.context.getProcedure(evalProc.procedureKey()) !== null) {
+				return EvalError.procedureAlreadyExists(evalProc.procedureKey()).fromExpr(expr);
+			}
+			this.context.addProcedure(evalProc);
+			{ // begin Compile procedure
+				let oldCodes = this.codes;
+				let oldCodeSize = this.codeSize;
+				let codeBlockIndex = this.context.addCodeBlock();
+				this.codes = this.context.codeBlocks[codeBlockIndex];
+				this.codeSize = 0;
+				evalProc.codeBlockIndex = codeBlockIndex;
+				this.scope = new CompilerScope(this.scope, true, false, null);
+				for (let i = 0; i < parameterList.parameterCount; i++) {
+					this.scope.addParameter(
+						parameterList.parameters[i].parameterName,
+						parameterList.parameters[i].parameterType,
+						i - parameterList.parameterCount - 4
+					);
+				}
+				let ret = this.eval(expr.statement);
+				if (ret.isError()) {
+					return ret;
+				}
+				if (ret.tag !== "res-ok") {
+					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
+				}
+				this.codeRet();
+				this.scope = this.scope.parent;
+				this.codes = oldCodes;
+				this.codeSize = oldCodeSize;
+			} // End Compile procedure
+			return new EvalResultOk("Procedure created");
+		}
+		if (expr.tag === "ast-function") {
+			let argTypes = [];
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				let argType = this.eval(expr.argList.args[i]);
+				if (argType.isError()) {
+					return argType;
+				}
+				argTypes[i] = argType;
+			}
+			let funcKey = expr.functionName + "(";
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				funcKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+			}
+			funcKey += ")";
+			let func = this.context.getFunction(funcKey);
+			if (func === null) {
+				return EvalError.unknownFunction(funcKey).fromExpr(expr);
+			}
+			this.codePush(expr.argList.argCount);
+			if (func.nativeIndex !== -1) {
+				this.codeCallNative(func.nativeIndex);
+			} else if (func.isGenerator === true) {
+				this.codeInitGenerator(func.codeBlockIndex);
+			} else {
+				this.codeCall(func.codeBlockIndex);
+			}
+			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
+		}
+		if (expr.tag === "ast-procedure") {
+			let argTypes = [];
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				let argType = this.eval(expr.argList.args[i]);
+				if (argType.isError()) {
+					return argType;
+				}
+				argTypes[i] = argType;
+			}
+			let procKey = expr.procedureName + "(";
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+			}
+			procKey += ")";
+			let proc = this.context.getProcedure(procKey);
+			if (proc === null) {
+				return EvalError.unknownProcedure(procKey).fromExpr(expr);
+			}
+			this.codePush(expr.argList.argCount);
+			if (proc.nativeIndex !== -1) {
+				this.codeCallNative(proc.nativeIndex);
+			} else {
+				this.codeCall(proc.codeBlockIndex);
+			}
+			return new EvalResultOk("procedure");;
+		}
+		return EvalError.unknownType(expr.tag).fromExpr(expr);
+	}
+}
+
+/******************************************************************************************************************************************
+
+	RefManager
+	
+	Manage chunks of memory with reference counting
+	
+	TODO:
+	
+	The RefManager should manage all resource that must be closed
+	
+		* pointer to allocated heap memory
+		* file
+		* sockets
+
+******************************************************************************************************************************************/
+
+class CountedRef {
+	constructor(tag) {
+		this.tag = tag;
+		this.refCount = 1;
+	}
+}
+
+class CountedRefObject extends CountedRef {
+	constructor(refSize, totalSize) {
+		super("ref-object");
+		this.refSize = refSize;
+		this.totalSize = totalSize;
+		this.ptr = [];
+		for (let i = 0; i < this.totalSize; i++) {
+			this.ptr[i] = 0;
+		}
+	}
+}
+
+class CountedRefFrame extends CountedRef {
+	constructor(totalSize) {
+		super("ref-frame");
+		this.totalSize = totalSize;
+		this.ptr = [];
+		this.mapPtr = [];
+		for (let i = 0; i < this.totalSize; i++) {
+			this.ptr[i] = 0;
+			this.mapPtr[i] = false;
+		}		
+	}
+}
+
+class RefManager {
+
+	constructor() {
+		this.refs = [ null ];
+		this.refCount = 1;
+		this.freeRefIds = [];
+		this.freeRefIdCount = 0;
+	}
+	
+	createRefId() {
+		let refId = -1;
+		if (this.freeRefIdCount > 0) {
+			refId = this.freeRefIds[this.freeRefIdCount - 1];
+			this.freeRefIdCount--;
+		} else {
+			refId = this.refCount;
+			this.refCount++;
+		}
+		return refId;
+	}
+	
+	createObject(refSize, totalSize) {
+		let refId = this.createRefId();
+		this.refs[refId] = new CountedRefObject(refSize, totalSize);
+		return refId;
+	}
+	
+	createFrame(totalSize) {
+		let refId = this.createRefId();
+		this.refs[refId] = new CountedRefFrame(totalSize);
+		return refId;
+	}		
+
+	createObjectFromString(str) {
+		let refId = this.createObject(0, str.length);
+		for (let i = 0; i < str.length; i++) {
+			this.refs[refId].ptr[i] = str.charCodeAt(i);
+		}
+		return refId;
+	}
+	
+	resizeObject(refId, newSize) {
+		let ref = this.refs[refId];
+		if (newSize < ref.refSize) {
+			newSize = ref.refSize;
+		}
+		for (let i = ref.totalSize; i < newSize; i++) {
+			ref.ptr[i] = 0;
+		}
+		ref.totalSize = newSize;
+	}
+	
+	resizeFrame(refId, newSize) {
+		let ref = this.refs[refId];
+		for (let i = ref.totalSize; i < newSize; i++) {
+			ref.ptr[i] = 0;
+			ref.mapPtr[i] = false;
+		}
+		ref.totalSize = newSize;
+	}
+	
+	destroyObject(ref) {
+		for (let i = 0; i < ref.refSize; i++) {
+			if (ref.ptr[i] !== 0) {
+				this.decRefCount(ref.ptr[i]);
+			}
+		}
+		ref.ptr = null
+	}
+	
+	destroyFrame(ref) {
+		for (let i = ref.totalSize - 1; i >= 0; i--) {
+			if (ref.mapPtr[i] === true) {
+				this.decRefCount(ref.ptr[i]);
+			}
+		}
+		ref.ptr = null;
+	}
+	
+	destroyRef(ref) {
+		if (ref.tag === "ref-object") { 
+			this.destroyObject(ref);
+		} else if (ref.tag === "ref-frame") {
+			this.destroyFrame(ref);
+		}
+	}
+	
+	incRefCount(refId) {
+		this.refs[refId].refCount++;
+	}
+	
+	decRefCount(refId) {
+		let ref = this.refs[refId];
+		if (ref === null) {
+			console.log("illegal decRefCount on refId " + refId);
+		}
+		ref.refCount--;
+		if (ref.refCount === 0) {
+			this.destroyRef(ref);
+			this.refs[refId] = null;
+			this.freeRefIds[this.freeRefIdCount] = refId;
+			this.freeRefIdCount++;
+		}
+	}
+	
+	objectSize(refId) {
+		return this.refs[refId].totalSize;
+	}
+	
+	objectIsOffsetRef(refId, offset) {
+		return offset < this.refs[refId].refSize;
+	}
+	
+	frameSize(refId) {
+		return this.refs[refId].totalSize;
+	}
+
+	objectPtr(refId) {
+		return this.refs[refId].ptr;
+	}
+	
+	framePtr(refId) {
+		return this.refs[refId].ptr;
+	}
+	
+	frameMapPtr(refId) {
+		return this.refs[refId].mapPtr;
+	}
+	
+	copyObject(srcIndex, srcOffset, srcLength, dstIndex, dstOffset) {
+		let dstPtr = this.objectPtr(dstIndex);
+		let srcPtr = this.objectPtr(srcIndex);
+		for(let i = 0; i < srcLength; i++) {
+			dstPtr[dstOffset + i] = srcPtr[srcOffset + i];
+		}
+	}
+
+}
+
+/******************************************************************************************************************************************
+
+	StackMachine
+	
+	Execute pcode
+	
+	
+	Stack Frame:
+		arg1				<- BP - 4 - argCount 
+		...
+		argN				<- BP - 5
+		argCount			<- BP - 4
+		retCodeBlockId		<- BP - 3
+		retIP				<- BP - 2
+		oldBP				<- BP - 1
+		local1				<- BP
+		
+	Frame Object
+		codeBlockId
+		ip
+		argCount
+		arg1
+		argN
+		local1
+		...
+		localN
+		refOffset1
+		...
+		refOffsetN
+		refCount	
+
+******************************************************************************************************************************************/
+
+class StackMachine {
+
+	constructor() {
+		this.stackMap = [];
+		this.stack = [];
+		this.sp = 0;
+		this.bp = 0;
+		this.refMan = new RefManager();
+	}
+	
+	popResult() {
+		this.sp--;
+		return this.stack[this.sp];
+	}
+	
+	execute(codes, codeBlocks, natives) {
+		let currentCodeBlock = codes;
+		let currentCodeBlockId = -1;
+		let i = 0;
+		while (i < currentCodeBlock.length) {
+			let code = currentCodeBlock[i];
+			i++;
+			if (code === "debug") {
+				console.log(this);
+			} else if (code === "swap") {
+				let tmp = this.stack[this.sp - 2];
+				this.stack[this.sp - 2] = this.stack[this.sp - 1];
+				this.stack[this.sp - 1] = tmp;
+				let tmpMap = this.stackMap[this.sp - 2];
+				this.stackMap[this.sp - 2] = this.stackMap[this.sp - 1];
+				this.stackMap[this.sp - 1] = tmpMap;
+			} else if (code === "add") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "add on ref not allowed";
+				}
+				this.stack[this.sp - 2] += this.stack[this.sp - 1];
+				this.sp--;
+			} else if (code === "sub") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "sub on ref not allowed";
+				}
+				this.stack[this.sp - 2] -= this.stack[this.sp - 1];
+				this.sp--;
+			} else if (code === "div") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "div on ref not allowed";
+				}
+				let divisor = this.stack[this.sp - 1];
+				if (divisor === 0) {
+					return "div by zero";
+				}
+				this.stack[this.sp - 2] = Math.trunc(this.stack[this.sp - 2] / divisor);
+				this.sp--;
+			} else if (code === "mul") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "mul on ref not allowed";
+				}
+				this.stack[this.sp - 2] *= this.stack[this.sp - 1];
+				this.sp--;
+			} else if (code === "neg") {
+				if (this.stackMap[this.sp - 1] === true) {
+					return "neg on ref not allowed";
+				}
+				this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
+			} else if (code === "gt") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "gt on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "lt") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "lt on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "gte") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "gte on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "lte") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "lte on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "and") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "and on ref not allowed";
+				}
+				this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) && (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
+				this.sp--;
+			} else if (code === "or") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "or on ref not allowed";
+				}
+				this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) || (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
+				this.sp--;
+			} else if (code === "not") {
+				if (this.stackMap[this.sp - 1] === true) {
+					return "not on ref not allowed";
+				}
+				this.stack[this.sp - 1] = this.stack[this.sp - 1] === 0 ? 1 : 0;
+			} else if (code === "eq" || code === "eq_str") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "eq on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "ne") {
+				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
+					return "ne on ref not allowed";
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "push_ptr_offset") {
+				if (this.stackMap[this.sp - 2] !== true) {
+					return "push_ptr_offset ptr must be a ref";
+				}
+				if (this.stackMap[this.sp - 1] === true) {
+					return "push_ptr_offset offset must not be a ref";
+				}
+				let refId = this.stack[this.sp - 2];
+				let ptr = this.refMan.objectPtr(refId);
+				let offset = this.stack[this.sp - 1];
+				if (offset < 0 || offset >= this.refMan.objectSize(refId)) {
+					return "push_ptr_offset: offset " + offset + " out of bound for refid " + refId;;
+				}
+				this.stack[this.sp - 2] = ptr[offset];
+				this.stackMap[this.sp - 2] = this.refMan.objectIsOffsetRef(refId, offset);
+				if (this.stackMap[this.sp - 2] === true) {
+					this.refMan.incRefCount(ptr[offset]);
+				}
+				this.sp--;
+				this.refMan.decRefCount(refId);
+			} else if (code === "pop_ptr_offset") {
+				if (this.stackMap[this.sp - 3] !== true) {
+					return "pop_ptr_offset ptr must be a ref";
+				}
+				if (this.stackMap[this.sp - 2] === true) {
+					return "pop_ptr_offset offset must not be a ref";
+				}
+				let refId = this.stack[this.sp - 3];
+				let ptr = this.refMan.objectPtr(refId);
+				let offset = this.stack[this.sp - 2];
+				let offsetIsRef = this.refMan.objectIsOffsetRef(refId, offset);
+				let val = this.stack[this.sp - 1];
+				if (this.stackMap[this.sp - 1] !== offsetIsRef) {
+					return "pop_ptr_offset val is ref mismatch ptr offset";
+				}
+				if (offset < 0 || offset >= this.refMan.objectSize(refId)) {
+					return "pop_ptr_offset: offset " + offset + " out of bound for refid " + refId;
+				}
+				if (offsetIsRef === true) {
+					this.refMan.decRefCount(ptr[offset]);
+				}
+				ptr[offset] = val;
+				this.sp -= 3;
+				this.refMan.decRefCount(refId);
+			} else if (code === "ret_val") {
+				let retVal = this.stack[this.sp - 1];
+				let retValIsRef = this.stackMap[this.sp - 1];
+				let previousBp = this.stack[this.bp - 1];
+				let previousIp = this.stack[this.bp - 2];
+				let previousCodeBlockId = this.stack[this.bp - 3];
+				let argCount = this.stack[this.bp - 4];
+				for (let i = this.sp - 2; i >= this.bp - 4 - argCount; i--) {
+					if (this.stackMap[i] === true) {
+						this.refMan.decRefCount(this.stack[i]);
+					}
+				}
+				this.sp = this.bp - 3 - argCount;
+				this.stack[this.sp - 1] = retVal;
+				this.stackMap[this.sp - 1] = retValIsRef;
+				this.bp = previousBp;
+				currentCodeBlockId = previousCodeBlockId;
+				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				i = previousIp;
+			} else if (code === "ret") {
+				let previousBp = this.stack[this.bp - 1];
+				let previousIp = this.stack[this.bp - 2];
+				let previousCodeBlockId = this.stack[this.bp - 3];
+				let argCount = this.stack[this.bp - 4];
+				for (let i = this.sp - 1; i >= this.bp - 4 - argCount; i--) {
+					if (this.stackMap[i] === true) {
+						this.refMan.decRefCount(this.stack[i]);
+					}
+				}
+				this.sp = this.bp - 4 - argCount;
+				this.bp = previousBp;
+				currentCodeBlockId = previousCodeBlockId;
+				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				i = previousIp;
+			} else if (code === "yield") {
+				let refId = this.stack[this.bp - 4];
+				this.refMan.resizeFrame(refId, 1 + (this.sp - this.bp));
+				let ptr = this.refMan.framePtr(refId);
+				let mapPtr = this.refMan.frameMapPtr(refId);
+				ptr[1] = i;
+				for (let i = 0; i < this.sp - this.bp - 1; i++) {
+					ptr[i + 2] = this.stack[this.bp + i];
+					mapPtr[i + 2] = this.stackMap[this.bp + i];
+				}
+				let retVal = this.stack[this.sp - 1];
+				let retValIsRef = this.stackMap[this.sp - 1];
+				let previousBp = this.stack[this.bp - 1];
+				let previousIp = this.stack[this.bp - 2];
+				let previousCodeBlockId = this.stack[this.bp - 3];
+				this.sp = this.bp - 3;
+				this.stack[this.sp - 1] = retVal;
+				this.stackMap[this.sp - 1] = retValIsRef;
+				this.bp = previousBp;
+				currentCodeBlockId = previousCodeBlockId;
+				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				i = previousIp;
+				this.refMan.decRefCount(refId);		
+			} else if (code === "yield_done") {
+				let refId = this.stack[this.bp - 4];
+				this.refMan.resizeFrame(refId, 2);
+				let ptr = this.refMan.framePtr(refId);
+				ptr[1] = i - 1;
+				let previousBp = this.stack[this.bp - 1];
+				let previousIp = this.stack[this.bp - 2];
+				let previousCodeBlockId = this.stack[this.bp - 3];
+				for (let i = this.sp - 1; i >= this.bp - 4; i --) {
+					if (this.stackMap[i] === true) {
+						this.refMan.decRefCount(this.stack[i]);
+					}
+				}
+				this.sp = this.bp - 3;
+				this.stack[this.sp - 1] = 0;
+				this.stackMap[this.sp - 1] = false;
+				this.bp = previousBp;
+				currentCodeBlockId = previousCodeBlockId;
+				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				i = previousIp;
+			} else if (code === "length") {
+			 	let l = this.refMan.objectSize(this.stack[this.sp - 1]);
+			 	this.refMan.decRefCount(this.stack[this.sp - 1]);
+				this.stack[this.sp - 1] = l;
+				this.stackMap[this.sp - 1] = false;
+			} else if (code === "next") {
+				let refId = this.stack[this.sp - 1];
+				let ptr = this.refMan.framePtr(refId);
+				let mapPtr = this.refMan.frameMapPtr(refId);
+				this.stack[this.sp] = currentCodeBlockId;
+				this.stackMap[this.sp] = false;
+				this.sp++;
+				this.stack[this.sp] = i;
+				this.stackMap[this.sp] = false;
+				this.sp++;
+				this.stack[this.sp] = this.bp;
+				this.stackMap[this.sp] = false;
+				this.sp++;
+				this.bp = this.sp;
+				let frameSize = this.refMan.frameSize(refId);
+				for (let i = 0; i < frameSize - 2; i++) {
+					this.stack[this.sp] = ptr[i + 2];
+					this.stackMap[this.sp] = mapPtr[i + 2];
+					this.sp++;
+				}
+				currentCodeBlockId = ptr[0];
+				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				i = ptr[1];
+				if (i >= currentCodeBlock.length) {
+					return "next: ip " + i + " out of bound for codeBlockId " + currentCodeBlockId;
+				}
+			} else if (code === "ended") {
+				let refId = this.stack[this.sp - 1];
+				let objPtr = this.refMan.objectPtr(refId);
+				let ended = objPtr[1] >= codeBlocks[objPtr[0]].length - 1 ? 1 : 0;
+				this.refMan.decRefCount(this.stack[this.sp - 1]);
+				this.stack[this.sp - 1] = ended;
+			} else if (code === "alloc") {
+				let refSize = this.stack[this.sp - 2];
+				let totalSize = this.stack[this.sp - 1];
+				this.stack[this.sp - 2] = this.refMan.createObject(refSize, totalSize);
+				this.stackMap[this.sp - 2] = true;
+				this.sp--;
+			} else if (code === "alloc_init") {
+				let refSize = this.stack[this.sp - 2];
+				let totalSize = this.stack[this.sp - 1];
+				let refId = this.refMan.createObject(refSize, totalSize);
+				for (let j = 0; j < totalSize; j++) {
+					this.refMan.objectPtr(refId)[j] = currentCodeBlock[i];
+					i++;
+				}
+				this.stack[this.sp - 2] = refId;
+				this.stackMap[this.sp - 2] = true;
+				this.sp--;
+			} else {
+				//
+				// 1 operand (in arg1)
+				//
+				let arg1 = currentCodeBlock[i];
+				i++;
+				if (code === "jz") {
+					this.sp--;
+					if (this.stack[this.sp] === 0) {
+						i = arg1;
+					}
+				} else if (code === "jnz") {
+					this.sp--;
+					if (this.stack[this.sp] !== 0) {
+						i = arg1;
+					}
+				} else if (code === "jmp") {
+					i = arg1;
+				} else if (code === "push") {
+					this.stack[this.sp] = arg1;
+					this.stackMap[this.sp] = false;
+					this.sp++;
+				} else if (code === "push_global") {
+					this.stack[this.sp] = this.stack[arg1];
+					this.stackMap[this.sp] = this.stackMap[arg1];
+					if (this.stackMap[this.sp] === true) {
+						this.refMan.incRefCount(this.stack[this.sp]);
+					}
+					this.sp++;
+				} else if (code === "push_local") {
+					this.stack[this.sp] = this.stack[this.bp + arg1];
+					this.stackMap[this.sp] = this.stackMap[this.bp + arg1];
+					if (this.stackMap[this.sp] === true) {
+						this.refMan.incRefCount(this.stack[this.sp]);
+					}
+					this.sp++;
+				} else if (code === "push_offset") {
+					this.stack[this.sp] = this.stack[this.sp + arg1];
+					this.stackMap[this.sp] = this.stackMap[this.sp + arg1];
+					this.sp++;
+				} else if (code === "pop_global") {
+					this.sp--;
+					if (this.stackMap[arg1] === true) {
+						this.refMan.decRefCount(this.stack[arg1]);
+					}
+					this.stack[arg1] = this.stack[this.sp];
+					this.stackMap[arg1] = this.stackMap[this.sp];
+				} else if (code === "pop_local") {
+					this.sp--;
+					if (this.stackMap[this.bp + arg1] === true) {
+						this.refMan.decRefCount(this.stack[this.bp + arg1]);
+					}
+					this.stack[this.bp + arg1] = this.stack[this.sp];
+					this.stackMap[this.bp + arg1] = this.stackMap[this.sp];
+				} else if (code === "pop_ptr") {
+					this.refMan.objectPtr(this.stack[this.sp - 2])[arg1] = this.stack[this.sp - 1];
+					this.sp--;
+				} else if (code === "pop_void") {
+					for (let i = this.sp - 1; i >= this.sp - arg1; i--) {
+						if (this.stackMap[i] === true) {
+							this.refMan.decRefCount(this.stack[i]);
+						}
+					}
+					this.sp -= arg1;
+				} else if (code === "call") {
+					this.stack[this.sp] = currentCodeBlockId;
+					this.stackMap[this.sp] = false;
+					this.sp++;
+					this.stack[this.sp] = i;
+					this.stackMap[this.sp] = false;
+					this.sp++;					
+					this.stack[this.sp] = this.bp;
+					this.stackMap[this.sp] = false;
+					this.sp++;
+					this.bp = this.sp;
+					currentCodeBlockId = arg1;
+					currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+					i = 0;
+				} else if (code === "call_native") {
+					natives[arg1](this);
+				} else if (code === "init_generator") {
+					// stack is:
+					//   arg1              sp - nbParam - 1
+					//   ...
+					//   argN
+					//   nbParam           sp - 1
+					let nbParam = this.stack[this.sp - 1];
+					let refId = this.refMan.createFrame(nbParam + 2);
+					let ptr = this.refMan.framePtr(refId);
+					let mapPtr = this.refMan.frameMapPtr(refId);
+					ptr[0] = arg1;
+					ptr[1] = 0;
+					for (let i = 0; i < nbParam; i++) {
+						ptr[i + 2] = this.stack[this.sp - nbParam - 1 + i];
+						mapPtr[i + 2] = this.stackMap[this.sp - nbParam - 1 + i];
+					}
+					this.stack[this.sp - nbParam - 1] = refId;
+					this.stackMap[this.sp - nbParam - 1] = true;
+					this.sp -= nbParam;
+				} else {
+					return "Unknown op " + code;
+				}
+			}
+		}
+		return "ok";
+	}
+
+}
+
+class NativeFunctionManager {
+	constructor() {
+		this.functions = [];
+		this.functionCount = 0;
+	}
+	
+	addFunction(f) {
+		let i = this.functionCount;
+		this.functions[i] = f;
+		this.functionCount++;
+		return i;
+	}
+}
+
+let nativeFunctionManager = new NativeFunctionManager();
+let compilerContext = new CompilerContext();
+let stackMachine = new StackMachine();
+
+compilerContext.addProcedure(EvalResultProcedure.fromNative(
+	"debug",
+	new EvalResultParameterList(0, []),
+	nativeFunctionManager.addFunction(function(sm) {
+		console.log(sm);
+	})
+));
+
+
+compilerContext.addProcedure(EvalResultProcedure.fromNative(
+	"print",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+	nativeFunctionManager.addFunction(function(sm) {
+		let t = sm.stack[sm.sp - 2];
+		printTextOut(String.fromCharCode(...sm.refMan.objectPtr(t)));
+		sm.refMan.decRefCount(t);
+		sm.sp -= 2;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"print",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		let t = sm.stack[sm.sp - 2];
+		printTextOut(String.fromCharCode(...sm.refMan.objectPtr(t)));
+		sm.sp -= 1;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"text",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_INTEGER)]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		sm.stack[sm.sp - 2] = sm.refMan.createObjectFromString("" + sm.stack[sm.sp - 2]);
+		sm.stackMap[sm.sp - 2] = true;
+		sm.sp -= 1;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"text",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_BOOLEAN)]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		sm.stack[sm.sp - 2] = sm.refMan.createObjectFromString(sm.stack[sm.sp - 2] === 1 ? "true" : "false");
+		sp.stackMap[sm.sp - 2] = true;
+		sm.sp -= 1;
+	})
+));
+
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"text",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_INTEGER)))]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		let refId = sm.stack[sm.sp - 2];
+		let ptr = sm.refMan.objectPtr(refId);
+		let resultId = sm.refMan.createObjectFromString("[" + ptr + "]");
+		sm.refMan.decRefCount(refId);
+		sm.stack[sm.sp - 2] = resultId;
+		sm.stackMap[sm.sp - 2] = true;
+		sm.sp -= 1;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"array",
+	new EvalResultParameterList(2, [
+		new EvalResultParameter("val", EVAL_TYPE_INTEGER),
+		new EvalResultParameter("count", EVAL_TYPE_INTEGER)
+	]),
+	compilerContext.addType(new EvalTypeArray(EVAL_TYPE_INTEGER)),
+	nativeFunctionManager.addFunction(function(sm) {
+		let val = sm.stack[sm.sp - 3];
+		let count = sm.stack[sm.sp - 2]; 
+		let r = sm.refMan.createObject(0, count);
+		for (let i = 0; i < count; i++) {
+			sm.refMan.objectPtr(r)[i] = val;
+		}
+		sm.stack[sm.sp - 3] = r;
+		sm.stackMap[sm.sp - 3] = true;
+		sm.sp -= 2;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"concat",
+	new EvalResultParameterList(2, [
+		new EvalResultParameter("t1", EVAL_TYPE_TEXT),
+		new EvalResultParameter("t2", EVAL_TYPE_TEXT)
+	]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		let t1 = sm.stack[sm.sp - 3];
+		let t2 = sm.stack[sm.sp - 2];
+		let s1 = sm.refMan.objectSize(t1);
+		let s2 = sm.refMan.objectSize(t2);
+		let r = sm.refMan.createObject(0, s1 + s2);
+		sm.refMan.copyObject(t1, 0, s1, r, 0);
+		sm.refMan.copyObject(t2, 0, s2, r, s1);
+		sm.refMan.decRefCount(t1);
+		sm.refMan.decRefCount(t2);
+		sm.stack[sm.sp - 3] = r;
+		sm.stackMap[sm.sp - 3] = true;
+		sm.sp -= 2;
+	})
+));	
+
+
+function printTextOut(text) {
+	let textout = document.getElementById("textout");
+	textout.value += text + "\n";
+	textout.scrollTop = textout.scrollHeight;
+}
+
+function printTextOutObject(obj) {
+	let textout = document.getElementById("textout");
+	textout.value += JSON.stringify(obj, null, 2) + "\n";
+	textout.scrollTop = textout.scrollHeight;
+}
+
+function clearDebugText() {
+	document.getElementById("debug").value = "";
+}
+
+function printDebugText(text) {
+	let textout = document.getElementById("debug");
+	textout.value += text + "\n";
+	textout.scrollTop = textout.scrollHeight;
+}
+
+function printDebugObject(obj) {
+	let textout = document.getElementById("debug");
+	textout.value += JSON.stringify(obj, null, 2) + "\n";
+	textout.scrollTop = textout.scrollHeight;
+}
+
+function getTextIn() {
+	let textIn = document.getElementById("textin");
+	let beginPos = textIn.selectionStart;
+	let endPos = textIn.selectionEnd;
+	return beginPos === endPos ? textIn.value : textIn.value.substring(beginPos, endPos);
+}
+
+function onExecClick() {
+	try {
+		clearDebugText();
+		let tokenReader = new TokenReader(getTextIn(), 1, 1);
+		let parser = new Parser(tokenReader);
+		let compiler = new Compiler(compilerContext);
+		while (parser.peekToken() !== "") {
+			let expr = parser.readStatement();
+			if (Parser.isError(expr)) {
+				printTextOutObject(expr);
+				break;
+			}
+			printDebugText("=== AST =================================");
+			printDebugObject(expr);
+			compiler.resetCode();
+			let result = compiler.eval(expr);
+			printDebugText("=== Compiler ============================");
+			printDebugObject(compiler);
+			if (result.isError()) {
+				printTextOutObject(result);
+				break;
+			} else {
+				let smRet = stackMachine.execute(compiler.codes, compilerContext.codeBlocks, nativeFunctionManager.functions);
+				printDebugText("=== StackMaching ========================");
+				printDebugObject(stackMachine);
+				printTextOut(smRet);
+			}
+		}
+	} catch (error) {
+		console.log(error);
+		printTextOut(error.message);
+		printTextOut(error.stack);
+	}
+}
+
+
+function onEvalClick() {
+	try {
+		document.getElementById("debug").value = "";
+		let tokenReader = new TokenReader(getTextIn(), 1, 1);
+		let parser = new Parser(tokenReader);
+		let compiler = new Compiler(compilerContext);
+		while (parser.peekToken() !== "") {
+			let expr = parser.readExpression();
+			if (Parser.isError(expr)) {
+				printTextOutObject(expr);
+				break;
+			}
+			document.getElementById("debug").value += JSON.stringify(expr, null, 2);
+			compiler.resetCode();
+			let result = compiler.eval(expr);
+			// printTextOutObject(result);
+			// printTextOutObject(compiler.codes);
+			if (!result.isError()) {
+				let smRet = stackMachine.execute(compiler.codes, compilerContext.codeBlocks, nativeFunctionManager.functions);
+				if (smRet === "ok") {
+					if (result.tag !== "res-ok") {
+						printTextOutObject(stackMachine.popResult());
+					}
+				} else {
+					printTextOut(smRet);
+				}
+				// printTextOutObject(stackMachine);
+			}
+			if (result.isError()) {
+				break;
+			}
+		}
+	} catch (error) {
+		console.log(error);
+		printTextOut(error.message);
+		printTextOut(error.stack);
+	}
+}
+
+function onDisplayContextClick() {
+	printTextOutObject(compilerContext);
+}
+
+function onResetContextClick() {
+	// TODO fixme, natives function must be added again in the compiler context
+	compilerContext = new CompilerContext();
+	stackMachine = new StackMachine();
+}
+
+function onClearMessageClick() {
+	document.getElementById("textout").value = "";
+}
+
+
+</script>
+
+<input type="button" value="exec" onclick="onExecClick()">
+<input type="button" value="eval" onclick="onEvalClick()"><br>
+<textarea id="textin" rows="10" cols="100">
+</textarea><br>
+<input type="button" value="clear messages" onclick="onClearMessageClick()">
+<input type="button" value="display context" onclick="onDisplayContextClick()">
+<input type="button" value="reset context" onclick="onResetContextClick()"><br>
+<textarea id="textout" rows="10" cols="100"></textarea><br>
+<textarea id="debug" rows="100" cols="100"></textarea>
+
+<p>Basic function</p>
+<pre>
+var toto integer := 42
+function f(a integer) integer begin
+	toto := toto + a
+	return toto + 1
+end f
+print('f(toto): ' || text(f(toto)))
+print('expected: 85')
+</pre>
+
+<p>Nested functions</p>
+<pre>
+function add(a integer, b integer) integer begin
+  return a + b
+end add
+function double(a integer) integer begin
+  var sum integer := add(a, a)
+  return sum
+end double
+print('double(3): ' || text(double(3)))
+print('expected: 6')
+</pre>
+
+<p>First 100 Primes</p>
+<pre>
+var primes_count integer := 100
+
+function isprime(n integer) boolean
+begin
+  for i in 2 .. n - 1 loop
+    if n / i * i = n then
+      return false
+    end if
+  end loop
+  return true
+end isprime
+
+var first_primes integer[] := array(0, primes_count)
+
+begin
+  var i integer := 1
+  var index integer := 0
+  while index < primes_count loop
+    if isprime(i) then
+      first_primes[index] := i
+      index := index + 1
+    end if
+    i := i + 1
+  end loop
+end
+
+print('first_primes: ' || text(first_primes))
+</pre>
+
+<p>Recursive Facto</p>
+<pre>
+function facto(a integer) integer begin
+  if a = 0 then
+    return 1
+  else
+    return a * facto(a - 1)
+  end if 
+end facto
+
+print(text(facto(5)))
+</pre>
+
+<p>Fibonacci</p>
+<pre>
+function fibo(n integer) integer begin
+  if n = 0 or n = 1 then
+    return n
+  else
+    return fibo(n - 1) + fibo(n - 2)
+  end if
+end fibo
+
+print(text(fibo(10)))
+</pre>
+
+<p>Bubble Sort</p>
+<pre>
+function bubble_sort(nums integer[]) integer[] begin
+  for i in reverse 0 .. length(nums) - 2 loop
+    for j in 0 .. i loop
+      if nums[j] > nums[j + 1] then
+    	var tmp integer := nums[j]
+        nums[j] := nums[j + 1]
+        nums[j + 1] := tmp
+      end if
+    end loop
+  end loop
+  return nums
+end bubble_sort
+
+print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])))
+</pre>
+
+<p>Assign record</p>
+<pre>
+procedure init_record(r { a integer, b integer[] }, a integer, b integer[]) begin
+  r.a := a
+  r.b := b
+end init_record
+
+var v { a integer, b integer[] } := { a integer := 0, b integer[] := [0] }
+
+init_record(v, 42, [51])
+
+print('a = ' || text(v.a) || ', b = ' || text(v.b))
+</pre>
+
+<p>Type Definition</p>
+<pre>
+
+
+var employees employee[] := [
+  employee('John', 'Doe', [ 'Java', 'PL/SQL' ]),
+  employee('
+]
+</pre>
+
+<p>Simple Generator</p>
+<pre>
+generator gen_range_step(first integer, last integer, step integer) integer begin
+  var current integer := first
+  while current <= last loop
+    yield current
+    current := current + step
+  end loop
+end gen_range_step
+
+for i in gen_range_step(42, 51, 3) loop
+  print(text(i))
+end loop
+</pre>
+
+<p>Simple Generator With refs</p>
+<pre>
+generator gen_concat(words text[], final_int integer) text begin
+  var word_count integer := length(words)
+  var phrase text := ''
+  yield text(word_count)
+  for i in 0..word_count loop
+    phrase := phrase || words[i]
+    yield phrase
+  end loop
+  yield text(final_int)
+end gen_concat
+
+for i in gen_concat(['hello', ' the', ' world'], 42) loop
+  print(i)
+end loop
+</pre>
+
+
+
+<p>Generator Html</p>
+<pre>
+
+type employee record (
+  first_name text,
+  last_name text,
+  skills text[]
+)
+
+generator fetch_employees() employee begin
+  yield employee('John', 'Backer', [ 'C++', 'SQL' ])
+  yield employee('Jane', 'Smith', [ 'Java', 'HTML' ])
+  yield employee('Alan', 'Carpenter', [ 'Ksh', 'Scrum' ])
+end fetch_employees
+
+generator employee_table(with_header boolean, employees sequence(empl)) text begin
+  yield '<table>'
+  for employee in employees loop
+    yield '<tr><td>' || employee.first_name || '</td><td>' || employee.last_name || '</td><td>' || employee.skills || </td><tr>
+  end loop
+  yield '</table>'
+end titi
+
+for str in employee_table(false, fetch_employees()) loop
+	print(s)
+end loop
+</pre>
+
+</body>
+</html>
