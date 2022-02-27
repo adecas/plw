@@ -547,6 +547,14 @@ class AstProcedure extends AstNode {
 	}
 }
 
+class AstTypeDeclaration extends AstNode {
+	constructor(typeName, typeExpr) {
+		super("ast-type-declaration");
+		this.typeName = typeName;
+		this.typeExpr = typeExpr;
+	}
+}
+
 
 /******************************************************************************************************************************************
 
@@ -606,6 +614,9 @@ class Parser {
 		}
 		if (this.peekToken() === "procedure") {
 			return this.readProcedureDeclaration();
+		}
+		if (this.peekToken() === "type") {
+			return this.readTypeDeclaration();
 		}
 		if (this.peekToken() === "return") {
 			return this.readReturn();
@@ -1030,6 +1041,22 @@ class Parser {
 		return new AstTypeRecord(fieldIndex, fields).fromToken(openToken);		
 	}
 	
+	readTypeDeclaration() {
+		let typeToken = this.readToken();
+		if (typeToken.text !== "type") {
+			return ParserError.unexpectedToken(varToken, "type");
+		}
+		let typeName = this.readToken();
+		if (!TokenReader.isIdentifier(typeName.text)) {
+			return ParserError.unexpectedToken(typeName, "identifier")
+		}
+		let typeExpr = this.readType();
+		if (Parser.isError(typeExpr)) {
+			return typeExpr;
+		}
+		return new AstTypeDeclaration(typeName.text, typeExpr).fromToken(typeToken);
+	}
+	
 	readVariableDeclaration() {
 		let varToken = this.readToken();
 		if (varToken.text !== "var") {
@@ -1441,6 +1468,18 @@ class EvalTypeSequence extends EvalResultType {
 	}
 }
 
+class EvalTypeName extends EvalResultType {
+	constructor(typeName, underlyingType) {
+		super("res-type-name", underlyingType.isRef);
+		this.typeName = typeName;
+		this.underlyingType = underlyingType;
+	}
+	
+	typeKey() {
+		return this.typeName;
+	}
+}
+
 class EvalResultParameter extends EvalResult {
 	constructor(parameterName, parameterType) {
 		super("res-parameter");
@@ -1595,6 +1634,10 @@ class EvalError extends EvalResult {
 	
 	static procedureAlreadyExists(procName) {
 		return new EvalError("Procedure " + procName + " already exists");
+	}
+
+	static typeAlreadyExists(typeName) {
+		return new EvalError("Type " + typeName + " already exists");
 	}
 
 	static unknownVariable(varName) {
@@ -2229,6 +2272,16 @@ class Compiler {
 				return EVAL_TYPE_BOOLEAN;
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
+		}
+		if (expr.tag === "ast-type-declaration") {
+			if (this.context.getType(expr.typeName) !== null) {
+				return EvalError.typeAlreadyExists(expr.typeName).fromExpr(expr);
+			}
+			let underlyingType = this.eval(expr.typeExpr);
+			if (underlyingType.isError()) {
+				return underlyingType;
+			}
+			return this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
 		}
 		if (expr.tag === "ast-variable-declaration") {
 			if (this.scope.getLocalVariable(expr.varName) !== null) {
