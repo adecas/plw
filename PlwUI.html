@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<html><head><title>PL/W</title></head><body>
+
+<script src="PlwTokenReader.js"></script>
+<script src="PlwAst.js"></script>
+<script src="PlwParser.js"></script>
+<script src="PlwCompiler.js"></script>
+<script src="PlwRefManager.js"></script>
+<script src="PlwStackMachine.js"></script>
+<script src="PlwNativeFunctionManager.js"></script>
+<script src="PlwUI.js"></script>
+
+<input type="button" value="exec" onclick="onExecClick()">
+<input type="button" value="eval" onclick="onEvalClick()"><br>
+<textarea id="textin" rows="10" cols="100"></textarea><br>
+<input type="button" value="clear messages" onclick="onClearMessageClick()">
+<input type="button" value="display context" onclick="onDisplayContextClick()">
+<input type="button" value="reset context" onclick="onResetContextClick()"><br>
+<textarea id="textout" rows="10" cols="100"></textarea><br>
+<textarea id="debug" rows="100" cols="100"></textarea>
+
+<p>Basic function</p>
+<pre>
+var toto integer := 42
+function f(a integer) integer begin
+	toto := toto + a
+	return toto + 1
+end f
+print('f(toto): ' || text(f(toto)))
+print('expected: 85')
+</pre>
+
+<p>Nested functions</p>
+<pre>
+function add(a integer, b integer) integer begin
+  return a + b
+end add
+function double(a integer) integer begin
+  var sum integer := add(a, a)
+  return sum
+end double
+print('double(3): ' || text(double(3)))
+print('expected: 6')
+</pre>
+
+<p>First 100 Primes</p>
+<pre>
+var primes_count integer := 100
+
+function isprime(n integer) boolean
+begin
+  for i in 2 .. n - 1 loop
+	if n / i * i = n then
+	  return false
+	end if
+  end loop
+  return true
+end isprime
+
+var first_primes integer[] := array(0, primes_count)
+
+begin
+  var i integer := 1
+  var index integer := 0
+  while index < primes_count loop
+	if isprime(i) then
+	  first_primes[index] := i
+	  index := index + 1
+	end if
+	i := i + 1
+  end loop
+end
+
+print('first_primes: ' || text(first_primes))
+</pre>
+
+<p>Recursive Facto</p>
+<pre>
+function facto(a integer) integer begin
+  if a = 0 then
+	return 1
+  else
+	return a * facto(a - 1)
+  end if 
+end facto
+
+print(text(facto(5)))
+</pre>
+
+<p>Fibonacci</p>
+<pre>
+function fibo(n integer) integer begin
+  if n = 0 or n = 1 then
+	return n
+  else
+	return fibo(n - 1) + fibo(n - 2)
+  end if
+end fibo
+
+print(text(fibo(10)))
+</pre>
+
+<p>Bubble Sort</p>
+<pre>
+function bubble_sort(nums integer[]) integer[] begin
+  for i in reverse 0 .. length(nums) - 2 loop
+	for j in 0 .. i loop
+	  if nums[j] > nums[j + 1] then
+		var tmp integer := nums[j]
+		nums[j] := nums[j + 1]
+		nums[j + 1] := tmp
+	  end if
+	end loop
+  end loop
+  return nums
+end bubble_sort
+
+print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])))
+</pre>
+
+<p>Assign record</p>
+<pre>
+procedure init_record(r { a integer, b integer[] }, a integer, b integer[]) begin
+  r.a := a
+  r.b := b
+end init_record
+
+var v { a integer, b integer[] } := { a integer := 0, b integer[] := [0] }
+
+init_record(v, 42, [51])
+
+print('a = ' || text(v.a) || ', b = ' || text(v.b))
+</pre>
+
+<p>Simple Generator</p>
+<pre>
+generator gen_range_step(first integer, last integer, step integer) integer begin
+  var current integer := first
+  while current <= last loop
+	yield current
+	current := current + step
+  end loop
+end gen_range_step
+
+for i in gen_range_step(42, 51, 3) loop
+  print(text(i))
+end loop
+</pre>
+
+<p>Simple Generator With refs</p>
+<pre>
+generator gen_concat(words text[], final_int integer) text begin
+  var word_count integer := length(words)
+  var phrase text := ''
+  yield text(word_count)
+  for i in 0 .. word_count - 1 loop
+	phrase := phrase || words[i]
+	yield phrase
+  end loop
+  yield text(final_int)
+end gen_concat
+
+for i in gen_concat(['hello', ' the', ' world'], 42) loop
+  print(i)
+end loop
+</pre>
+
+
+
+<p>Generator Html</p>
+<pre>
+type employee {
+  first_name text,
+  last_name text,
+  skills text[]
+}
+
+function employee(first_name text, last_name text, skills text[]) employee begin
+  var e employee := { first_name text := first_name, last_name text := last_name, skills text[] := skills }
+  return e
+end employee
+
+generator fetch_employees() employee begin
+  yield employee('John', 'Backer', [ 'C++', 'SQL' ])
+  yield employee('Jane', 'Smith', [ 'Java', 'HTML' ])
+  yield employee('Alan', 'Carpenter', [ 'Ksh', 'Scrum' ])
+end fetch_employees
+
+generator employee_table(with_header boolean, employees sequence(employee)) text begin
+  yield '&lt;table&gt;'
+  for employee in employees loop
+	yield '&lt;tr&gt;&lt;td&gt;' || employee.first_name
+	   || '&lt;/td&gt;&lt;td&gt;' || employee.last_name
+	   || '&lt;/td&gt;&lt;td&gt;' || text(employee.skills) || '&lt;/td&gt;&lt;tr&gt;'
+  end loop
+  yield '&lt;/table&gt;'
+end employee_table
+
+for html_frag in employee_table(false, fetch_employees()) loop
+  print(html_frag)
+end loop
+</pre>
+
+
+</body></html>
