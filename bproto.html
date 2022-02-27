@@ -2302,7 +2302,16 @@ class Compiler {
 			) {
 				initValueType = varType;
 			} else if (initValueType !== varType) {
-				return EvalError.wrongType(initValue.valueType, varType.typeKey()).fromExpr(expr.valueExpr);
+				if (varType.tag === "res-type-name") {
+					if (initValueType !== varType.underlyingType) {
+						return EvalError.wrongType(
+							initValueType,
+							varType.typeKey() + " or " + varType.underlyingType.typeKey()
+						).fromExpr(expr.valueExpr);
+					}
+				} else {
+					return EvalError.wrongType(initValueType, varType.typeKey()).fromExpr(expr.valueExpr);
+				}
 			}
 			this.scope.addVariable(expr.varName, varType);
 			return new EvalResultOk("Variable created");
@@ -2325,6 +2334,9 @@ class Compiler {
 			if (indexedType.isError()) {
 				return indexedType;
 			}
+			while (indexedType.tag === "res-type-name") {
+				indexedType = indexedType.underlyingType;
+			}
 			if (indexedType.tag !== "res-type-array") {
 				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
 			}
@@ -2344,6 +2356,9 @@ class Compiler {
 			let recordType = this.eval(expr.expr);
 			if (recordType.isError()) {
 				return recordType;
+			}
+			while (recordType.tag === "res-type-name") {
+				recordType = recordType.underlyingType;
 			}
 			if (recordType.tag != "res-type-record") {
 				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
@@ -2387,6 +2402,9 @@ class Compiler {
 				if (indexedType.isError()) {
 					return indexed;
 				}
+				while (indexType.tag === "res-type-name") {
+					indexType = indexType.underlyingType;
+				}
 				if (indexedType.tag !== "res-type-array") {
 					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
 				}
@@ -2416,6 +2434,9 @@ class Compiler {
 				let recordType = this.eval(fieldExpr.expr);
 				if (recordType.isError()) {
 					return recordType;
+				}
+				while (recordType.tag === "res-type-name") {
+					recordType = recordType.underlyingType;
 				}
 				if (recordType.tag != "res-type-record") {
 					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
@@ -3269,7 +3290,7 @@ class StackMachine {
 				let refId = this.stack[this.bp - 4];
 				this.refMan.resizeFrame(refId, 2);
 				let ptr = this.refMan.framePtr(refId);
-				ptr[1] = i - 1;
+				ptr[1] = i;
 				let previousBp = this.stack[this.bp - 1];
 				let previousIp = this.stack[this.bp - 2];
 				let previousCodeBlockId = this.stack[this.bp - 3];
@@ -3319,7 +3340,7 @@ class StackMachine {
 			} else if (code === "ended") {
 				let refId = this.stack[this.sp - 1];
 				let objPtr = this.refMan.objectPtr(refId);
-				let ended = objPtr[1] >= codeBlocks[objPtr[0]].length - 1 ? 1 : 0;
+				let ended = objPtr[1] >= codeBlocks[objPtr[0]].length ? 1 : 0;
 				this.refMan.decRefCount(this.stack[this.sp - 1]);
 				this.stack[this.sp - 1] = ended;
 			} else if (code === "alloc") {
@@ -3528,6 +3549,27 @@ compilerContext.addFunction(EvalResultFunction.fromNative(
 		let refId = sm.stack[sm.sp - 2];
 		let ptr = sm.refMan.objectPtr(refId);
 		let resultId = sm.refMan.createObjectFromString("[" + ptr + "]");
+		sm.refMan.decRefCount(refId);
+		sm.stack[sm.sp - 2] = resultId;
+		sm.stackMap[sm.sp - 2] = true;
+		sm.sp -= 1;
+	})
+));
+
+compilerContext.addFunction(EvalResultFunction.fromNative(
+	"text",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_TEXT)))]),
+	EVAL_TYPE_TEXT,
+	nativeFunctionManager.addFunction(function(sm) {
+		let refId = sm.stack[sm.sp - 2];
+		let ptr = sm.refMan.objectPtr(refId);
+		let len = sm.refMan.objectSize(refId);
+		let str = "[";
+		for (let i = 0; i < len; i++) {
+			str += (i > 0 ? ", " : "") + String.fromCharCode(...sm.refMan.objectPtr(ptr[i]));
+		}
+		str += "]";
+		let resultId = sm.refMan.createObjectFromString(str);
 		sm.refMan.decRefCount(refId);
 		sm.stack[sm.sp - 2] = resultId;
 		sm.stackMap[sm.sp - 2] = true;
@@ -3829,16 +3871,6 @@ init_record(v, 42, [51])
 print('a = ' || text(v.a) || ', b = ' || text(v.b))
 </pre>
 
-<p>Type Definition</p>
-<pre>
-
-
-var employees employee[] := [
-  employee('John', 'Doe', [ 'Java', 'PL/SQL' ]),
-  employee('
-]
-</pre>
-
 <p>Simple Generator</p>
 <pre>
 generator gen_range_step(first integer, last integer, step integer) integer begin
@@ -3860,7 +3892,7 @@ generator gen_concat(words text[], final_int integer) text begin
   var word_count integer := length(words)
   var phrase text := ''
   yield text(word_count)
-  for i in 0..word_count loop
+  for i in 0 .. word_count - 1 loop
     phrase := phrase || words[i]
     yield phrase
   end loop
@@ -3876,12 +3908,16 @@ end loop
 
 <p>Generator Html</p>
 <pre>
-
-type employee record (
+type employee {
   first_name text,
   last_name text,
   skills text[]
-)
+}
+
+function employee(first_name text, last_name text, skills text[]) employee begin
+  var e employee := { first_name text := first_name, last_name text := last_name, skills text[] := skills }
+  return e
+end employee
 
 generator fetch_employees() employee begin
   yield employee('John', 'Backer', [ 'C++', 'SQL' ])
@@ -3889,16 +3925,18 @@ generator fetch_employees() employee begin
   yield employee('Alan', 'Carpenter', [ 'Ksh', 'Scrum' ])
 end fetch_employees
 
-generator employee_table(with_header boolean, employees sequence(empl)) text begin
-  yield '<table>'
+generator employee_table(with_header boolean, employees sequence(employee)) text begin
+  yield '&lt;table&gt;'
   for employee in employees loop
-    yield '<tr><td>' || employee.first_name || '</td><td>' || employee.last_name || '</td><td>' || employee.skills || </td><tr>
+    yield '&lt;tr&gt;&lt;td&gt;' || employee.first_name
+       || '&lt;/td&gt;&lt;td&gt;' || employee.last_name
+       || '&lt;/td&gt;&lt;td&gt;' || text(employee.skills) || '&lt;/td&gt;&lt;tr&gt;'
   end loop
-  yield '</table>'
-end titi
+  yield '&lt;/table&gt;'
+end employee_table
 
-for str in employee_table(false, fetch_employees()) loop
-	print(s)
+for html_frag in employee_table(false, fetch_employees()) loop
+  print(html_frag)
 end loop
 </pre>
 
