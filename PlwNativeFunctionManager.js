@@ -62,7 +62,7 @@ class NativeFunctionManager {
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				sm.stack[sm.sp - 2] = sm.refMan.createObjectFromString(sm.stack[sm.sp - 2] === 1 ? "true" : "false");
-				sp.stackMap[sm.sp - 2] = true;
+				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 			})
 		));

@@ -42,36 +42,41 @@ class Parser {
 	}
 	
 	readStatement() {
+		let stmt = null;
 		if (this.peekToken() === "var") {
-			return this.readVariableDeclaration();
+			stmt = this.readVariableDeclaration();
+		} else if (this.peekToken() === "if") {
+			stmt = this.readIf();
+		} else if (this.peekToken() === "while") {
+			stmt = this.readWhile();
+		} else if (this.peekToken() === "function" || this.peekToken() === "generator") {
+			stmt = this.readFunctionDeclaration();
+		} else if (this.peekToken() === "procedure") {
+			stmt = this.readProcedureDeclaration();
+		} else if (this.peekToken() === "type") {
+			stmt = this.readTypeDeclaration();
+		} else if (this.peekToken() === "return") {
+			stmt = this.readReturn();
+		} else if (this.peekToken() === "yield") {
+			stmt = this.readYield();
+		} else if (this.peekToken() == "for") {
+			stmt = this.readFor();
+		} else if (this.peekToken() == "begin") {
+			stmt = this.readBlock("begin", "end", null);
+		} else {
+			stmt = this.readAssign();
 		}
-		if (this.peekToken() === "if") {
-			return this.readIf();
+		if (Parser.isError(stmt)) {
+			return stmt;
 		}
-		if (this.peekToken() === "while") {
-			return this.readWhile();
+		let smToken = this.readToken();
+		if (smToken.text !== ";") {
+			return ParserError.unexpectedToken(smToken, ";");					
 		}
-		if (this.peekToken() === "function" || this.peekToken() === "generator") {
-			return this.readFunctionDeclaration();
-		}
-		if (this.peekToken() === "procedure") {
-			return this.readProcedureDeclaration();
-		}
-		if (this.peekToken() === "type") {
-			return this.readTypeDeclaration();
-		}
-		if (this.peekToken() === "return") {
-			return this.readReturn();
-		}
-		if (this.peekToken() === "yield") {
-			return this.readYield();
-		}
-		if (this.peekToken() == "for") {
-			return this.readFor();
-		}
-		if (this.peekToken() == "begin") {
-			return this.readBlock("begin", "end", null);
-		}
+		return stmt;
+	}
+	
+	readAssign() {
 		let expr = this.readExpression();
 		if (Parser.isError(expr)) {
 			return expr;
