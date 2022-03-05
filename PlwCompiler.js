@@ -486,10 +486,6 @@ class Compiler {
 		this.code2("push_global", offset);
 	}
 	
-	codePushGlobalRef(offset) {
-		this.code2("push_global_ref", offset);
-	}
-	
 	codePushLocal(offset) {
 		this.code2("push_local", offset);
 	}
@@ -502,8 +498,8 @@ class Compiler {
 		this.code1("push_ptr_offset");
 	}
 	
-	codeAlloc() {
-		this.code1("alloc");
+	codeCreateObject(itemCount) {
+		this.code2("create_object", itemCount);
 	}
 	
 	codeAllocInit() {
@@ -708,14 +704,7 @@ class Compiler {
 			if (firstItemType.isError()) {
 				return firstItemType;
 			}
-			// Allocate the array
-			this.codePush(firstItemType.isRef ? expr.itemCount : 0);
-			this.codePush(expr.itemCount);
-			this.codeAlloc();
-			// Swap the array, and the first item, and pop the first item in the array
-			this.codeSwap();
-			this.codePopPtr(0);
-			// Evalute the next items, and pop them in the array
+			// Evalute the next items
 			for (let i = 1; i < expr.itemCount; i++) {
 				let itemType = this.eval(expr.items[i]);
 				if (itemType.isError()) {
@@ -724,34 +713,34 @@ class Compiler {
 				if (itemType !== firstItemType) {
 					return EvalError.wrongType(itemType, firstItemType.typeKey()).fromExpr(expr.items[i]);
 				}
-				this.codePopPtr(i);
 			}
+			// Allocate the array
+			this.codeCreateObject(expr.itemCount);
 			return this.context.addType(new EvalTypeArray(firstItemType));
 		}
 		if (expr.tag === "ast-value-record") {
 			let fields = [];
 			for (let i = 0; i < expr.fieldCount; i++) {
-				let fieldType = this.eval(expr.fields[i].fieldType);
-				if (fieldType.isError()) {
-					return fieldType;
-				}
-				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
-			}
-			let recordType = this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
-			this.codePush(recordType.refFieldCount);
-			this.codePush(expr.fieldCount);
-			this.codeAlloc();
-			for (let i = 0; i < expr.fieldCount; i++) {
 				let fieldValueType = this.eval(expr.fields[i].valueExpr);
 				if (fieldValueType.isError()) {
 					return fieldValueType;
 				}
-				if (fieldValueType !== fields[i].fieldType) {
-					return EvalError.wrongType(fieldValueType, fieldType.typeKey()).fromExpr(expr.fields[i].valueExpr);
+				let fieldType = null;
+				if (expr.fields[i].fieldType === null) {
+					fieldType = fieldValueType;
+				} else {
+					fieldType = this.eval(expr.fields[i].fieldType);
+					if (fieldType.isError()) {
+						return fieldType;
+					}
+					if (fieldValueType !== fieldType) {
+						return EvalError.wrongType(fieldValueType, fieldType.typeKey()).fromExpr(expr.fields[i].valueExpr);
+					}
 				}
-				this.codePopPtr(fields[i].offset);
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
-			return recordType;
+			this.codeCreateObject(expr.fieldCount);
+			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-operator-binary") {
 			if (expr.operator === "and" || expr.operator === "or") {
@@ -928,7 +917,7 @@ class Compiler {
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			let varType = this.eval(expr.varType);
+			let varType = expr.varType === null ? initValueType : this.eval(expr.varType);
 			if (varType.isError()) {
 				return varType;
 			}

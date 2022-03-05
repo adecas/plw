@@ -132,11 +132,17 @@ class StackMachine {
 					return "not on ref not allowed";
 				}
 				this.stack[this.sp - 1] = this.stack[this.sp - 1] === 0 ? 1 : 0;
-			} else if (code === "eq" || code === "eq_str") {
-				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
-					return "eq on ref not allowed";
-				}
+			} else if (code === "eq") {
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "eq_str") {
+				if (this.stackMap[this.sp - 2] !== true || this.stackMap[this.sp - 1] !== true) {
+					return "eq_str allowed on ref only";
+				}
+				let result = this.refMan.compareObjects(this.stack[this.sp - 2], this.stack[this.sp - 1]);
+				this.refMan.decRefCount(this.stack[this.sp - 2]);
+				this.refMan.decRefCount(this.stack[this.sp - 1]);
+				this.stack[this.sp - 2] = result ? 1 : 0;
 				this.sp--;
 			} else if (code === "ne") {
 				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
@@ -302,12 +308,6 @@ class StackMachine {
 				let ended = objPtr[1] >= codeBlocks[objPtr[0]].length ? 1 : 0;
 				this.refMan.decRefCount(this.stack[this.sp - 1]);
 				this.stack[this.sp - 1] = ended;
-			} else if (code === "alloc") {
-				let refSize = this.stack[this.sp - 2];
-				let totalSize = this.stack[this.sp - 1];
-				this.stack[this.sp - 2] = this.refMan.createObject(refSize, totalSize);
-				this.stackMap[this.sp - 2] = true;
-				this.sp--;
 			} else if (code === "alloc_init") {
 				let refSize = this.stack[this.sp - 2];
 				let totalSize = this.stack[this.sp - 1];
@@ -383,6 +383,31 @@ class StackMachine {
 						}
 					}
 					this.sp -= arg1;
+				} else if (code === "create_object") {
+					if (this.sp < arg1) {
+						return "create_object: not enough value on the stack";
+					}
+					let ptr = [];
+					let offset = 0;
+					for (let i = 0; i < arg1; i++) {
+						if (this.stackMap[this.sp - arg1 + i] === true) {
+							ptr[offset] = this.stack[this.sp - arg1 + i];
+							offset++;
+						}
+					}
+					let refSize = offset;
+					if (refSize !== arg1) {
+						for (let i = 0; i < arg1; i++) {
+							if (this.stackMap[this.sp - arg1 + i] !== true) {
+								ptr[offset] = this.stack[this.sp - arg1 + i];
+								offset++;
+							}
+						}
+					}
+					let refId = this.refMan.createObjectWithPtr(refSize, arg1, ptr);
+					this.sp = this.sp - arg1 + 1;
+					this.stack[this.sp - 1] = refId; 
+					this.stackMap[this.sp - 1] = true;
 				} else if (code === "call") {
 					this.stack[this.sp] = currentCodeBlockId;
 					this.stackMap[this.sp] = false;

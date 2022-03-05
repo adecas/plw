@@ -361,9 +361,12 @@ class Parser {
 		if (!TokenReader.isIdentifier(fieldName.text)) {
 			return ParserError.unexpectedToken(fieldName, "identifier")
 		}
-		let fieldType = this.readType();
-		if (Parser.isError(fieldType)) {
-			return fieldType;
+		let fieldType = null;
+		if (this.peekToken() !== ":=") {
+			fieldType = this.readType();
+			if (Parser.isError(fieldType)) {
+				return fieldType;
+			}
 		}
 		let assign = this.readToken();
 		if (assign.text !== ":=") {
@@ -417,7 +420,7 @@ class Parser {
 			return ParserError.unexpectedToken(typeName, "identifier");
 		}
 		let typeExpr = new AstTypeNamed(typeName.text).fromToken(typeName);
-		while (this.peekToken() == "[") {
+		while (this.peekToken() === "[") {
 			let openToken = this.readToken();
 			let closeToken = this.readToken();
 			if (closeToken.text !== "]") {
@@ -513,9 +516,12 @@ class Parser {
 		if (!TokenReader.isIdentifier(varName.text)) {
 			return ParserError.unexpectedToken(varName, "identifier")
 		}
-		let varType = this.readType();
-		if (Parser.isError(varType)) {
-			return varType;
+		let varType = null;
+		if (this.peekToken() !== ":=") {
+			varType = this.readType();
+			if (Parser.isError(varType)) {
+				return varType;
+			}
 		}
 		let assign = this.readToken();
 		if (assign.text !== ":=") {

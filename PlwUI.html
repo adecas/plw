@@ -192,6 +192,23 @@ end bubble_sort;
 print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
+<p>Records</p>
+<pre>
+var r1 { i integer, b boolean } := { i integer := 42, b boolean := true };
+if r1.i = 42 and r1.b then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
+r1.i := 51;
+r1.b := false;
+if r1.i = 51 and not r1.b then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
+</pre>
+
 <p>Assign record</p>
 <pre>
 procedure init_record(r { a integer, b integer[] }, a integer, b integer[]) begin
@@ -201,6 +218,24 @@ end init_record;
 var v { a integer, b integer[] } := { a integer := 0, b integer[] := [0] };
 init_record(v, 42, [51]);
 print('a = ' || text(v.a) || ', b = ' || text(v.b));
+</pre>
+
+<p>Type inference</p>
+<pre>
+var i := 42;
+var b := true;
+var v := [42, 51];
+var t := 'Hello';
+var r := { i := 42, b := true, v := [42, 51], t := 'Hello' };
+if     i - r.i = 0
+   and ((b and r.b) or (not b and not r.b))
+   and v[0] - r.v[0] = 0 and v[1] - r.v[1] = 0
+   and t || r.t = 'HelloHello'
+then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
 </pre>
 
 <p>Simple Generator</p>
