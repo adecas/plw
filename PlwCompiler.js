@@ -323,6 +323,192 @@ const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
 const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
 
+class CodeBlock {
+
+	constructor() {
+		this.codes = [];
+		this.codeSize = 0;
+		this.strConsts = [];
+		this.strConstSize = 0;
+	}
+	
+	setLoc(offset) {
+		this.codes[offset] = this.codeSize;
+	}
+	
+	code1(inst) {
+		this.codes[this.codeSize] = inst;
+		this.codeSize++;
+	}
+	
+	code2(inst, arg) {
+		this.codes[this.codeSize] = inst;
+		this.codeSize++;
+		this.codes[this.codeSize] = arg;
+		this.codeSize++;
+	}
+	
+	codePush(val) {
+		this.code2("push", val);
+	}
+		
+	codePushGlobal(offset) {
+		this.code2("push_global", offset);
+	}
+	
+	codePushLocal(offset) {
+		this.code2("push_local", offset);
+	}
+	
+	codePushPtrOffset() {
+		this.code1("push_ptr_offset");
+	}
+	
+	codeCreateObject(itemCount) {
+		this.code2("create_object", itemCount);
+	}
+	
+	codeAllocInit() {
+		this.code1("alloc_init");
+	}
+	
+	codePopGlobal(offset) {
+		this.code2("pop_global", offset);
+	}
+	
+	codePopLocal(offset) {
+		this.code2("pop_local", offset);
+	}
+	
+	codePopPtr(offset) {
+		this.code2("pop_ptr", offset);
+	}
+	
+	codePopPtrOffset() {
+		this.code1("pop_ptr_offset");
+	}
+		
+	codePopVoid(count) {
+		this.code2("pop_void", count);
+	}
+	
+	codeAdd() {
+		this.code1("add");
+	}
+	
+	codeSub() {
+		this.code1("sub");
+	}
+
+	codeDiv() {
+		this.code1("div");
+	}
+
+	codeMul() {
+		this.code1("mul");
+	}
+	
+	codeNeg() {
+		this.code1("neg");
+	}
+	
+	codeGt() {
+		this.code1("gt");
+	}
+
+	codeGte() {
+		this.code1("gte");
+	}
+
+	codeLt() {
+		this.code1("lt");
+	}
+
+	codeLte() {
+		this.code1("lte");
+	}
+	
+	codeEq() {
+		this.code1("eq");
+	}
+	
+	codeNe() {
+		this.code1("ne");
+	}
+
+	codeAnd() {
+		this.code1("and");
+	}
+	
+	codeOr() {
+		this.code1("or");
+	}
+	
+	codeNot() {
+		this.code1("not");
+	}
+		
+	codeLength() {
+		this.code1("length");
+	}
+	
+	codeNext() {
+		this.code1("next");
+	}
+	
+	codeEnded() {
+		this.code1("ended");
+	}
+	
+	codeEqObject() {
+		this.code1("eq_object");
+	}
+	
+	codeJz(offset) {
+		this.code2("jz", offset);
+		return this.codeSize - 1;
+	}
+	
+	codeJnz(offset) {
+		this.code2("jnz", offset);
+		return this.codeSize - 1;
+	}
+	
+	codeJmp(offset) {
+		this.code2("jmp", offset);
+		return this.codeSize - 1;
+	}
+			
+	codeRet() {
+		this.code1("ret");
+	}
+
+	codeRetVal() {
+		this.code1("ret_val");
+	}
+	
+	codeYield() {
+		this.code1("yield");
+	}
+	
+	codeYieldDone() {
+		this.code1("yield_done");
+	}
+	
+	codeCall(ptr) {
+		this.code2("call", ptr);
+	}
+		
+	codeCallNative(ptr) {
+		this.code2("call_native", ptr);
+	}
+	
+	codeInitGenerator(ptr) {
+		this.code2("init_generator", ptr);
+	}
+	
+}
+
 
 class CompilerContext {
 	
@@ -372,7 +558,7 @@ class CompilerContext {
 	
 	addCodeBlock() {
 		let i = this.codeBlocks.length;
-		this.codeBlocks[i] = [];
+		this.codeBlocks[i] = new CodeBlock();
 		return i;
 	}
 			
@@ -453,196 +639,11 @@ class Compiler {
 	constructor(context) {
 		this.context = context;
 		this.scope = this.context.globalScope;
-		this.codes = [];
-		this.codeSize = 0;
+		this.codeBlock = new CodeBlock();
 	}
 	
 	resetCode() {
-		this.codes = [];
-		this.codeSize = 0;
-	}
-	
-	setLoc(offset) {
-		this.codes[offset] = this.codeSize;
-	}
-	
-	code1(inst) {
-		this.codes[this.codeSize] = inst;
-		this.codeSize++;
-	}
-	
-	code2(inst, arg) {
-		this.codes[this.codeSize] = inst;
-		this.codeSize++;
-		this.codes[this.codeSize] = arg;
-		this.codeSize++;
-	}
-	
-	codePush(val) {
-		this.code2("push", val);
-	}
-		
-	codePushGlobal(offset) {
-		this.code2("push_global", offset);
-	}
-	
-	codePushLocal(offset) {
-		this.code2("push_local", offset);
-	}
-	
-	codePushOffset(offset) {
-		this.code2("push_offset", offset);
-	}
-	
-	codePushPtrOffset() {
-		this.code1("push_ptr_offset");
-	}
-	
-	codeCreateObject(itemCount) {
-		this.code2("create_object", itemCount);
-	}
-	
-	codeAllocInit() {
-		this.code1("alloc_init");
-	}
-	
-	codePopGlobal(offset) {
-		this.code2("pop_global", offset);
-	}
-	
-	codePopLocal(offset) {
-		this.code2("pop_local", offset);
-	}
-	
-	codePopPtr(offset) {
-		this.code2("pop_ptr", offset);
-	}
-	
-	codePopPtrOffset() {
-		this.code1("pop_ptr_offset");
-	}
-		
-	codePopVoid(count) {
-		this.code2("pop_void", count);
-	}
-	
-	codeSwap() {
-		this.code1("swap");
-	}
-	
-	codeAdd() {
-		this.code1("add");
-	}
-	
-	codeSub() {
-		this.code1("sub");
-	}
-
-	codeDiv() {
-		this.code1("div");
-	}
-
-	codeMul() {
-		this.code1("mul");
-	}
-	
-	codeNeg() {
-		this.code1("neg");
-	}
-	
-	codeGt() {
-		this.code1("gt");
-	}
-
-	codeGte() {
-		this.code1("gte");
-	}
-
-	codeLt() {
-		this.code1("lt");
-	}
-
-	codeLte() {
-		this.code1("lte");
-	}
-	
-	codeEq() {
-		this.code1("eq");
-	}
-	
-	codeNe() {
-		this.code1("ne");
-	}
-
-	codeAnd() {
-		this.code1("and");
-	}
-	
-	codeOr() {
-		this.code1("or");
-	}
-	
-	codeNot() {
-		this.code1("not");
-	}
-		
-	codeLength() {
-		this.code1("length");
-	}
-	
-	codeNext() {
-		this.code1("next");
-	}
-	
-	codeEnded() {
-		this.code1("ended");
-	}
-	
-	codeEqStr() {
-		this.code1("eq_str");
-	}
-	
-	codeJz(offset) {
-		this.code2("jz", offset);
-		return this.codeSize - 1;
-	}
-	
-	codeJnz(offset) {
-		this.code2("jnz", offset);
-		return this.codeSize - 1;
-	}
-	
-	codeJmp(offset) {
-		this.code2("jmp", offset);
-		return this.codeSize - 1;
-	}
-			
-	codeRet() {
-		this.code1("ret");
-	}
-
-	codeRetVal() {
-		this.code1("ret_val");
-	}
-	
-	codeYield() {
-		this.code1("yield");
-	}
-	
-	codeYieldDone() {
-		this.code1("yield_done");
-	}
-	
-	codeCall(ptr) {
-		this.code2("call", ptr);
-	}
-		
-	codeCallNative(ptr) {
-		this.code2("call_native", ptr);
-	}
-	
-	codeInitGenerator(ptr) {
-		this.code2("init_generator", ptr);
+		this.codeBlock = new CodeBlock();
 	}
 	
 	eval(expr) {
@@ -679,19 +680,19 @@ class Compiler {
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-value-boolean") {
-			this.codePush(expr.boolValue ? 1 : 0);
+			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
 			return EVAL_TYPE_BOOLEAN;
 		}
 		if (expr.tag === "ast-value-integer") {
-			this.codePush(expr.intValue);
+			this.codeBlock.codePush(expr.intValue);
 			return EVAL_TYPE_INTEGER;
 		}
 		if (expr.tag === "ast-value-text") {
-			this.codePush(0);
-			this.codePush(expr.textValue.length);
-			this.codeAllocInit();
+			this.codeBlock.codePush(0);
+			this.codeBlock.codePush(expr.textValue.length);
+			this.codeBlock.codeAllocInit();
 			for (let i = 0; i < expr.textValue.length; i++) {
-				this.code1(expr.textValue.charCodeAt(i));
+				this.codeBlock.code1(expr.textValue.charCodeAt(i));
 			}
 			return EVAL_TYPE_TEXT;
 		}
@@ -715,7 +716,7 @@ class Compiler {
 				}
 			}
 			// Allocate the array
-			this.codeCreateObject(expr.itemCount);
+			this.codeBlock.codeCreateObject(expr.itemCount);
 			return this.context.addType(new EvalTypeArray(firstItemType));
 		}
 		if (expr.tag === "ast-value-record") {
@@ -739,7 +740,7 @@ class Compiler {
 				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
-			this.codeCreateObject(expr.fieldCount);
+			this.codeBlock.codeCreateObject(expr.fieldCount);
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-operator-binary") {
@@ -751,7 +752,7 @@ class Compiler {
 				if (leftType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(leftType, "boolean").fromExpr(expr.left);
 				}
-				let skipLoc = expr.operator === "and" ? this.codeJz(0) : this.codeJnz(0);
+				let skipLoc = expr.operator === "and" ? this.codeBlock.codeJz(0) : this.codeBlock.codeJnz(0);
 				let rightType = this.eval(expr.right);
 				if (rightType.isError()) {
 					return rightType;
@@ -759,10 +760,10 @@ class Compiler {
 				if (rightType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(rightType, "boolean").fromExpr(expr.right);
 				}
-				let endLoc = this.codeJmp(0);
-				this.setLoc(skipLoc);
-				this.codePush(expr.operator === "and" ? 0 : 1);
-				this.setLoc(endLoc);
+				let endLoc = this.codeBlock.codeJmp(0);
+				this.codeBlock.setLoc(skipLoc);
+				this.codeBlock.codePush(expr.operator === "and" ? 0 : 1);
+				this.codeBlock.setLoc(endLoc);
 				return EVAL_TYPE_BOOLEAN;
 			}
 			if (expr.operator === "||") {
@@ -780,8 +781,8 @@ class Compiler {
 				if (rightType !== EVAL_TYPE_TEXT) {
 					return EvalError.wrongType(rightType, "text").fromExpr(expr.right);
 				}
-				this.codePush(2);
-				this.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
+				this.codeBlock.codePush(2);
+				this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
 				return EVAL_TYPE_TEXT;
 			}
 			if (
@@ -805,21 +806,21 @@ class Compiler {
 					return EvalError.wrongType(rightType, "integer").fromExpr(expr.right);
 				}
 				if (expr.operator === "+") {
-					this.codeAdd();
+					this.codeBlock.codeAdd();
 				} else if (expr.operator === "-") {
-					this.codeSub();
+					this.codeBlock.codeSub();
 				} else if (expr.operator === "/") {
-					this.codeDiv();
+					this.codeBlock.codeDiv();
 				} else if (expr.operator === "*") {
-					this.codeMul();
+					this.codeBlock.codeMul();
 				} else if (expr.operator === ">") {
-					this.codeGt();
+					this.codeBlock.codeGt();
 				} else if (expr.operator === "<") {
-					this.codeLt();
+					this.codeBlock.codeLt();
 				} else if (expr.operator === ">=") {
-					this.codeGte();
+					this.codeBlock.codeGte();
 				} else {
-					this.codeLte();
+					this.codeBlock.codeLte();
 				}
 				if (
 					expr.operator === "+" || expr.operator === "-" ||
@@ -839,18 +840,20 @@ class Compiler {
 					return rightType;
 				}
 				if (rightType !== leftType) {
-					return EvalError.wrongType(rightType, leftType).fromExpr(expr.right);
+					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
-				if (rightType === EVAL_TYPE_TEXT) {
-					this.codeEqStr();
+				if (rightType.tag === "res-type-array" || rightType.tag === "res-type-record" || rightType === EVAL_TYPE_TEXT) {
+					this.codeBlock.codeEqObject();
 					if (expr.operator === "<>") {
-						this.codeNot();
+						this.codeBlock.codeNot();
 					}
+				} else if (rightType.isRef) {
+					return EvalError.wrongType(rightType, "comparabe type").fromExpr(expr.right);
 				} else {
 					if (expr.operator === "=") {
-						this.codeEq();
+						this.codeBlock.codeEq();
 					} else {
-						this.codeNe();
+						this.codeBlock.codeNe();
 					}
 				}
 				return EVAL_TYPE_BOOLEAN;
@@ -866,35 +869,35 @@ class Compiler {
 				if (operandType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(operandType, "boolean").fromExpr(expr.operand);
 				}
-				this.codeNot();
+				this.codeBlock.codeNot();
 				return EVAL_TYPE_BOOLEAN;
 			}
 			if (expr.operator === "-") {
 				if (operandType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(operandType, "integer").fromExpr(expr.operand);
 				}
-				this.codeNeg();
+				this.codeBlock.codeNeg();
 				return EVAL_TYPE_INTEGER;
 			}
 			if (expr.operator === "length") {
 				if (!operandType.isRef) {
 					return EvalError.wrongType(operandType, "reference type").fromExpr(expr.operand);
 				}
-				this.codeLength();
+				this.codeBlock.codeLength();
 				return EVAL_TYPE_INTEGER;
 			}
 			if (expr.operator === "next") {
 				if (operandType.tag !== "res-type-sequence") {
 					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
 				}
-				this.codeNext();
+				this.codeBlock.codeNext();
 				return operandType.underlyingType;
 			}
 			if (expr.operator === "ended") {
 				if (operandType.tag !== "res-type-sequence") {
 					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
 				}
-				this.codeEnded();
+				this.codeBlock.codeEnded();
 				return EVAL_TYPE_BOOLEAN;
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
@@ -948,9 +951,9 @@ class Compiler {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
 			}
 			if (v.isGlobal) {
-				this.codePushGlobal(v.offset);
+				this.codeBlock.codePushGlobal(v.offset);
 			} else {
-				this.codePushLocal(v.offset);
+				this.codeBlock.codePushLocal(v.offset);
 			}
 			return v.varType;
 		}
@@ -975,7 +978,7 @@ class Compiler {
 				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
 			}
 			// push the result on the stack
-			this.codePushPtrOffset();
+			this.codeBlock.codePushPtrOffset();
 			return indexedType.underlyingType;
 		}		
 		if (expr.tag === "ast-field") {
@@ -991,8 +994,8 @@ class Compiler {
 			}
 			for (let i = 0; i < recordType.fieldCount; i++) {
 				if (recordType.fields[i].fieldName === expr.fieldName) {
-					this.codePush(recordType.fields[i].offset);
-					this.codePushPtrOffset();
+					this.codeBlock.codePush(recordType.fields[i].offset);
+					this.codeBlock.codePushPtrOffset();
 					return recordType.fields[i].fieldType;
 				}
 			}
@@ -1015,9 +1018,9 @@ class Compiler {
 				}
 				// assign the value
 				if (variable.isGlobal) {
-					this.codePopGlobal(variable.offset);
+					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
-					this.codePopLocal(variable.offset);
+					this.codeBlock.codePopLocal(variable.offset);
 				}
 				return new EvalResultOk("assigned");
 			}
@@ -1051,7 +1054,7 @@ class Compiler {
 					return EvalError.wrongType(valueType, indexedType.underlyingType.typeKey()).fromExpr(expr.right);
 				}
 				// Assigne the value
-				this.codePopPtrOffset();
+				this.codeBlock.codePopPtrOffset();
 				return new EvalResultOk("assigned");
 			}
 			if (expr.left.tag === "ast-field") {
@@ -1078,7 +1081,7 @@ class Compiler {
 				if (fieldIndex === -1) {
 					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
 				}
-				this.codePush(recordType.fields[fieldIndex].offset);
+				this.codeBlock.codePush(recordType.fields[fieldIndex].offset);
 				// Evaluate the value to assign
 				let valueType = this.eval(expr.right);
 				if (valueType.isError()) {
@@ -1088,7 +1091,7 @@ class Compiler {
 					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
 				}
 				// Assigne the value
-				this.codePopPtrOffset();
+				this.codeBlock.codePopPtrOffset();
 				return new EvalResultOk("assigned");
 			}
 			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
@@ -1116,7 +1119,7 @@ class Compiler {
 			}
 			if (ret === null) {
 				if (this.scope.variableCount > 0) {
-					this.codePopVoid(this.scope.variableCount);
+					this.codeBlock.codePopVoid(this.scope.variableCount);
 				}
 			}
 			this.scope = this.scope.parent;
@@ -1130,7 +1133,7 @@ class Compiler {
 			if (condType !== EVAL_TYPE_BOOLEAN) {
 				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
 			}
-			let falseLoc = this.codeJz(0);
+			let falseLoc = this.codeBlock.codeJz(0);
 			let trueRet =  this.eval(expr.trueStatement);
 			if (trueRet.isError()) {
 				return trueRet;
@@ -1138,8 +1141,8 @@ class Compiler {
 			if (trueRet.tag !== "res-ok" && trueRet.tag !== "res-return") {
 				return EvalError.wrongType(trueRet, "statement").fromExpr(expr.trueStatement);	
 			}
-			let endLoc = expr.falseStatement === null ? 0 : this.codeJmp(0);
-			this.setLoc(falseLoc);
+			let endLoc = expr.falseStatement === null ? 0 : this.codeBlock.codeJmp(0);
+			this.codeBlock.setLoc(falseLoc);
 			if (expr.falseStatement === null) {
 				return new EvalResultOk("if");
 			}
@@ -1150,7 +1153,7 @@ class Compiler {
 			if (falseRet.tag !== "res-ok" && falseRet.tag !== "res-return") {
 				return EvalError.wrongType(falseRet, "statement").fromExpr(expr.falseStatement);	
 			}
-			this.setLoc(endLoc);
+			this.codeBlock.setLoc(endLoc);
 			if (falseRet.tag === "res-return" && trueRet.tag === "res-return") {
 				if (falseRet.returnType !== trueRet.returnType) {
 					return EvalError.wrongType(falseRet.returnType, trueRet.returnType.typeKey()).fromExpr(expr.falseStatement);	
@@ -1160,7 +1163,7 @@ class Compiler {
 			return new EvalResultOk("if");
 		}
 		if (expr.tag === "ast-while") {
-			let testLoc = this.codeSize;
+			let testLoc = this.codeBlock.codeSize;
 			let conditionType = this.eval(expr.condition);
 			if (conditionType.isError()) {
 				return condition;
@@ -1168,7 +1171,7 @@ class Compiler {
 			if (conditionType !== EVAL_TYPE_BOOLEAN) {
 				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
 			}
-			let endLoc = this.codeJz(0);
+			let endLoc = this.codeBlock.codeJz(0);
 			let stmtRet = this.eval(expr.statement);
 			if (stmtRet.isError()) {
 				return stmtRet;
@@ -1176,8 +1179,8 @@ class Compiler {
 			if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
 				return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
 			}
-			this.codeJmp(testLoc);
-			this.setLoc(endLoc);
+			this.codeBlock.codeJmp(testLoc);
+			this.codeBlock.setLoc(endLoc);
 			return new EvalResultOk("while");
 		}
 		if (expr.tag === "ast-for") {
@@ -1201,15 +1204,15 @@ class Compiler {
 					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
 				}
 				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER);
-				let testLoc = this.codeSize;
-				this.codePushLocal(indexVar.offset);
-				this.codePushLocal(endBoundVar.offset);
+				let testLoc = this.codeBlock.codeSize;
+				this.codeBlock.codePushLocal(indexVar.offset);
+				this.codeBlock.codePushLocal(endBoundVar.offset);
 				if (expr.isReverse) {
-					this.codeGte();
+					this.codeBlock.codeGte();
 				} else {
-					this.codeLte();
+					this.codeBlock.codeLte();
 				}
-				let endLoc = this.codeJz(0);
+				let endLoc = this.codeBlock.codeJz(0);
 				let stmtRet = this.eval(expr.statement);
 				if (stmtRet.isError()) {
 					return stmtRet;
@@ -1217,15 +1220,15 @@ class Compiler {
 				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
 					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
 				}
-				this.codePush(1);
+				this.codeBlock.codePush(1);
 				if (expr.isReverse) {
-					this.codeSub();
+					this.codeBlock.codeSub();
 				} else {
-					this.codeAdd();
+					this.codeBlock.codeAdd();
 				}
-				this.codeJmp(testLoc);
-				this.setLoc(endLoc);
-				this.codePopVoid(this.scope.variableCount);
+				this.codeBlock.codeJmp(testLoc);
+				this.codeBlock.setLoc(endLoc);
+				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.scope = this.scope.parent;
 				return new EvalResultOk("for");
 			} else {
@@ -1238,13 +1241,13 @@ class Compiler {
 					return EvalError.wrongType(stmt, "sequence").fromExpr(expr.sequence);
 				}
 				let sequenceVar = this.scope.addVariable("_for_sequence", sequence);
-				this.codePushLocal(sequenceVar.offset);
-				this.codeNext();
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeNext();
 				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType);
-				let testLoc = this.codeSize;
-				this.codePushLocal(sequenceVar.offset);
-				this.codeEnded();
-				let endLoc = this.codeJnz(0);
+				let testLoc = this.codeBlock.codeSize;
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeEnded();
+				let endLoc = this.codeBlock.codeJnz(0);
 				let stmtRet = this.eval(expr.statement);
 				if (stmtRet.isError()) {
 					return stmtRet;
@@ -1252,12 +1255,12 @@ class Compiler {
 				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
 					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
 				}
-				this.codePushLocal(sequenceVar.offset);
-				this.codeNext();
-				this.codePopLocal(indexVar.offset);
-				this.codeJmp(testLoc);
-				this.setLoc(endLoc);
-				this.codePopVoid(this.scope.variableCount);
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeNext();
+				this.codeBlock.codePopLocal(indexVar.offset);
+				this.codeBlock.codeJmp(testLoc);
+				this.codeBlock.setLoc(endLoc);
+				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.scope = this.scope.parent;
 				return new EvalResultOk("for");
 			}
@@ -1307,7 +1310,7 @@ class Compiler {
 			if (retType !== currentScope.returnType) {
 				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			this.codeRetVal();
+			this.codeBlock.codeRetVal();
 			return new EvalResultReturn(retType);
 		}
 		if (expr.tag === "ast-yield") {
@@ -1328,7 +1331,7 @@ class Compiler {
 			if (retType !== frameScope.returnType) {
 				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			this.codeYield();
+			this.codeBlock.codeYield();
 			return new EvalResultYield(retType);
 		}
 		if (expr.tag === "ast-function-declaration") {
@@ -1346,11 +1349,9 @@ class Compiler {
 			}
 			this.context.addFunction(evalFunc);
 			{ // begin Compile function
-				let oldCodes = this.codes;
-				let oldCodeSize = this.codeSize;
+				let oldCodeBlock = this.codeBlock;
 				let codeBlockIndex = this.context.addCodeBlock();
-				this.codes = this.context.codeBlocks[codeBlockIndex];
-				this.codeSize = 0;
+				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
 				evalFunc.codeBlockIndex = codeBlockIndex;
 				this.scope = new CompilerScope(this.scope, true, evalFunc.isGenerator, returnType);
 				for (let i = 0; i < parameterList.parameterCount; i++) {
@@ -1372,13 +1373,12 @@ class Compiler {
 					return ret;
 				}
 				if (evalFunc.isGenerator === true) {
-					this.codeYieldDone();
+					this.codeBlock.codeYieldDone();
 				} else if (ret.tag !== "res-return") {
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
 				}
 				this.scope = this.scope.parent;
-				this.codes = oldCodes;
-				this.codeSize = oldCodeSize;
+				this.codeBlock = oldCodeBlock;
 			} // End Compile function
 			return new EvalResultOk("Function created");
 		}
@@ -1393,11 +1393,9 @@ class Compiler {
 			}
 			this.context.addProcedure(evalProc);
 			{ // begin Compile procedure
-				let oldCodes = this.codes;
-				let oldCodeSize = this.codeSize;
+				let oldCodeBlock = this.codeBlock;
 				let codeBlockIndex = this.context.addCodeBlock();
-				this.codes = this.context.codeBlocks[codeBlockIndex];
-				this.codeSize = 0;
+				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
 				evalProc.codeBlockIndex = codeBlockIndex;
 				this.scope = new CompilerScope(this.scope, true, false, null);
 				for (let i = 0; i < parameterList.parameterCount; i++) {
@@ -1414,10 +1412,9 @@ class Compiler {
 				if (ret.tag !== "res-ok") {
 					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
 				}
-				this.codeRet();
+				this.codeBlock.codeRet();
 				this.scope = this.scope.parent;
-				this.codes = oldCodes;
-				this.codeSize = oldCodeSize;
+				this.codeBlock = oldCodeBlock;
 			} // End Compile procedure
 			return new EvalResultOk("Procedure created");
 		}
@@ -1439,13 +1436,13 @@ class Compiler {
 			if (func === null) {
 				return EvalError.unknownFunction(funcKey).fromExpr(expr);
 			}
-			this.codePush(expr.argList.argCount);
+			this.codeBlock.codePush(expr.argList.argCount);
 			if (func.nativeIndex !== -1) {
-				this.codeCallNative(func.nativeIndex);
+				this.codeBlock.codeCallNative(func.nativeIndex);
 			} else if (func.isGenerator === true) {
-				this.codeInitGenerator(func.codeBlockIndex);
+				this.codeBlock.codeInitGenerator(func.codeBlockIndex);
 			} else {
-				this.codeCall(func.codeBlockIndex);
+				this.codeBlock.codeCall(func.codeBlockIndex);
 			}
 			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
 		}
@@ -1467,11 +1464,11 @@ class Compiler {
 			if (proc === null) {
 				return EvalError.unknownProcedure(procKey).fromExpr(expr);
 			}
-			this.codePush(expr.argList.argCount);
+			this.codeBlock.codePush(expr.argList.argCount);
 			if (proc.nativeIndex !== -1) {
-				this.codeCallNative(proc.nativeIndex);
+				this.codeBlock.codeCallNative(proc.nativeIndex);
 			} else {
-				this.codeCall(proc.codeBlockIndex);
+				this.codeBlock.codeCall(proc.codeBlockIndex);
 			}
 			return new EvalResultOk("procedure");;
 		}

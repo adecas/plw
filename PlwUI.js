@@ -59,7 +59,7 @@ function onExecClick() {
 				printTextOutObject(result);
 				break;
 			} else {
-				let smRet = stackMachine.execute(compiler.codes, compilerContext.codeBlocks, nativeFunctionManager.functions);
+				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
 				printDebugText("=== StackMaching ========================");
 				printDebugObject(stackMachine);
 				printTextOut(smRet);
@@ -89,9 +89,9 @@ function onEvalClick() {
 			compiler.resetCode();
 			let result = compiler.eval(expr);
 			// printTextOutObject(result);
-			// printTextOutObject(compiler.codes);
+			// printTextOutObject(compiler.codeBlock);
 			if (!result.isError()) {
-				let smRet = stackMachine.execute(compiler.codes, compilerContext.codeBlocks, nativeFunctionManager.functions);
+				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
 				if (smRet === "ok") {
 					if (result.tag !== "res-ok") {
 						printTextOutObject(stackMachine.popResult());

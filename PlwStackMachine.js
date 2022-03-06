@@ -1,4 +1,3 @@
-
 /******************************************************************************************************************************************
 
 	StackMachine
@@ -42,22 +41,15 @@ class StackMachine {
 		return this.stack[this.sp];
 	}
 	
-	execute(codes, codeBlocks, natives) {
-		let currentCodeBlock = codes;
+	execute(codeBlock, codeBlocks, natives) {
+		let currentCodeBlock = codeBlock;
 		let currentCodeBlockId = -1;
 		let i = 0;
-		while (i < currentCodeBlock.length) {
-			let code = currentCodeBlock[i];
+		while (i < currentCodeBlock.codeSize) {
+			let code = currentCodeBlock.codes[i];
 			i++;
 			if (code === "debug") {
 				console.log(this);
-			} else if (code === "swap") {
-				let tmp = this.stack[this.sp - 2];
-				this.stack[this.sp - 2] = this.stack[this.sp - 1];
-				this.stack[this.sp - 1] = tmp;
-				let tmpMap = this.stackMap[this.sp - 2];
-				this.stackMap[this.sp - 2] = this.stackMap[this.sp - 1];
-				this.stackMap[this.sp - 1] = tmpMap;
 			} else if (code === "add") {
 				if (this.stackMap[this.sp - 2] === true || this.stackMap[this.sp - 1] === true) {
 					return "add on ref not allowed";
@@ -135,7 +127,7 @@ class StackMachine {
 			} else if (code === "eq") {
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
 				this.sp--;
-			} else if (code === "eq_str") {
+			} else if (code === "eq_object") {
 				if (this.stackMap[this.sp - 2] !== true || this.stackMap[this.sp - 1] !== true) {
 					return "eq_str allowed on ref only";
 				}
@@ -211,7 +203,7 @@ class StackMachine {
 				this.stackMap[this.sp - 1] = retValIsRef;
 				this.bp = previousBp;
 				currentCodeBlockId = previousCodeBlockId;
-				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 				i = previousIp;
 			} else if (code === "ret") {
 				let previousBp = this.stack[this.bp - 1];
@@ -226,7 +218,7 @@ class StackMachine {
 				this.sp = this.bp - 4 - argCount;
 				this.bp = previousBp;
 				currentCodeBlockId = previousCodeBlockId;
-				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 				i = previousIp;
 			} else if (code === "yield") {
 				let refId = this.stack[this.bp - 4];
@@ -248,7 +240,7 @@ class StackMachine {
 				this.stackMap[this.sp - 1] = retValIsRef;
 				this.bp = previousBp;
 				currentCodeBlockId = previousCodeBlockId;
-				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 				i = previousIp;
 				this.refMan.decRefCount(refId);		
 			} else if (code === "yield_done") {
@@ -269,7 +261,7 @@ class StackMachine {
 				this.stackMap[this.sp - 1] = false;
 				this.bp = previousBp;
 				currentCodeBlockId = previousCodeBlockId;
-				currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+				currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 				i = previousIp;
 			} else if (code === "length") {
 			 	let l = this.refMan.objectSize(this.stack[this.sp - 1]);
@@ -305,7 +297,7 @@ class StackMachine {
 			} else if (code === "ended") {
 				let refId = this.stack[this.sp - 1];
 				let objPtr = this.refMan.objectPtr(refId);
-				let ended = objPtr[1] >= codeBlocks[objPtr[0]].length ? 1 : 0;
+				let ended = objPtr[1] >= codeBlocks[objPtr[0]].codeSize ? 1 : 0;
 				this.refMan.decRefCount(this.stack[this.sp - 1]);
 				this.stack[this.sp - 1] = ended;
 			} else if (code === "alloc_init") {
@@ -313,7 +305,7 @@ class StackMachine {
 				let totalSize = this.stack[this.sp - 1];
 				let refId = this.refMan.createObject(refSize, totalSize);
 				for (let j = 0; j < totalSize; j++) {
-					this.refMan.objectPtr(refId)[j] = currentCodeBlock[i];
+					this.refMan.objectPtr(refId)[j] = currentCodeBlock.codes[i];
 					i++;
 				}
 				this.stack[this.sp - 2] = refId;
@@ -323,7 +315,7 @@ class StackMachine {
 				//
 				// 1 operand (in arg1)
 				//
-				let arg1 = currentCodeBlock[i];
+				let arg1 = currentCodeBlock.codes[i];
 				i++;
 				if (code === "jz") {
 					this.sp--;
@@ -354,10 +346,6 @@ class StackMachine {
 					if (this.stackMap[this.sp] === true) {
 						this.refMan.incRefCount(this.stack[this.sp]);
 					}
-					this.sp++;
-				} else if (code === "push_offset") {
-					this.stack[this.sp] = this.stack[this.sp + arg1];
-					this.stackMap[this.sp] = this.stackMap[this.sp + arg1];
 					this.sp++;
 				} else if (code === "pop_global") {
 					this.sp--;
@@ -420,7 +408,7 @@ class StackMachine {
 					this.sp++;
 					this.bp = this.sp;
 					currentCodeBlockId = arg1;
-					currentCodeBlock = currentCodeBlockId === -1 ? codes : codeBlocks[currentCodeBlockId];
+					currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 					i = 0;
 				} else if (code === "call_native") {
 					natives[arg1](this);
