@@ -37,7 +37,7 @@ function getTextIn() {
 	return beginPos === endPos ? textIn.value : textIn.value.substring(beginPos, endPos);
 }
 
-function onExecClick() {
+function onExecClick(isDebug) {
 	try {
 		clearDebugText();
 		let tokenReader = new TokenReader(getTextIn(), 1, 1);
@@ -49,19 +49,25 @@ function onExecClick() {
 				printTextOutObject(expr);
 				break;
 			}
-			printDebugText("=== AST =================================");
-			printDebugObject(expr);
+			if (isDebug) {
+				printDebugText("=== AST =================================");
+				printDebugObject(expr);
+			}
 			compiler.resetCode();
 			let result = compiler.eval(expr);
-			printDebugText("=== Compiler ============================");
-			printDebugObject(compiler);
+			if (isDebug) {
+				printDebugText("=== Compiler ============================");
+				printDebugObject(compiler);
+			}
 			if (result.isError()) {
 				printTextOutObject(result);
 				break;
 			} else {
 				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-				printDebugText("=== StackMaching ========================");
-				printDebugObject(stackMachine);
+				if (isDebug) {
+					printDebugText("=== StackMaching ========================");
+					printDebugObject(stackMachine);
+				}
 				printTextOut(smRet);
 			}
 		}

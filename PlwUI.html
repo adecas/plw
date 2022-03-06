@@ -11,14 +11,15 @@
 <script src="PlwNativeFunctionManager.js"></script>
 <script src="PlwUI.js"></script>
 
-<input type="button" value="exec" onclick="onExecClick()">
+<input type="button" value="exec" onclick="onExecClick(false)">
+<input type="button" value="debug" onclick="onExecClick(true)">
 <input type="button" value="eval" onclick="onEvalClick()"><br>
 <textarea id="textin" rows="10" cols="100"></textarea><br>
 <input type="button" value="clear messages" onclick="onClearMessageClick()">
 <input type="button" value="display context" onclick="onDisplayContextClick()">
 <input type="button" value="reset context" onclick="onResetContextClick()"><br>
 <textarea id="textout" rows="10" cols="100"></textarea><br>
-<textarea id="debug" rows="100" cols="100"></textarea>
+<textarea id="debug" rows="10" cols="100"></textarea>
 
 <p>Variable</p>
 <pre>

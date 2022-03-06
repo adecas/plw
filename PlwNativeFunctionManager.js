@@ -28,7 +28,7 @@ class NativeFunctionManager {
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			nativeFunctionManager.addFunction(function(sm) {
 				let t = sm.stack[sm.sp - 2];
-				printTextOut(String.fromCharCode(...sm.refMan.objectPtr(t)));
+				printTextOut(sm.refMan.stringStr(t));
 				sm.refMan.decRefCount(t);
 				sm.sp -= 2;
 			})
@@ -40,7 +40,7 @@ class NativeFunctionManager {
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				let t = sm.stack[sm.sp - 2];
-				printTextOut(String.fromCharCode(...sm.refMan.objectPtr(t)));
+				printTextOut(sm.refMan.stringStr(t));
 				sm.sp -= 1;
 			})
 		));
@@ -50,7 +50,7 @@ class NativeFunctionManager {
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_INTEGER)]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
-				sm.stack[sm.sp - 2] = sm.refMan.createObjectFromString("" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = sm.refMan.createString("" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 			})
@@ -61,7 +61,7 @@ class NativeFunctionManager {
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_BOOLEAN)]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
-				sm.stack[sm.sp - 2] = sm.refMan.createObjectFromString(sm.stack[sm.sp - 2] === 1 ? "true" : "false");
+				sm.stack[sm.sp - 2] = sm.refMan.createString(sm.stack[sm.sp - 2] === 1 ? "true" : "false");
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 			})
@@ -75,7 +75,7 @@ class NativeFunctionManager {
 			nativeFunctionManager.addFunction(function(sm) {
 				let refId = sm.stack[sm.sp - 2];
 				let ptr = sm.refMan.objectPtr(refId);
-				let resultId = sm.refMan.createObjectFromString("[" + ptr + "]");
+				let resultId = sm.refMan.createString("[" + ptr + "]");
 				sm.refMan.decRefCount(refId);
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -93,10 +93,10 @@ class NativeFunctionManager {
 				let len = sm.refMan.objectSize(refId);
 				let str = "[";
 				for (let i = 0; i < len; i++) {
-					str += (i > 0 ? ", " : "") + String.fromCharCode(...sm.refMan.objectPtr(ptr[i]));
+					str += (i > 0 ? ", " : "") + sm.refMan.stringStr(ptr[i]);
 				}
 				str += "]";
-				let resultId = sm.refMan.createObjectFromString(str);
+				let resultId = sm.refMan.createString(str);
 				sm.refMan.decRefCount(refId);
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -134,11 +134,7 @@ class NativeFunctionManager {
 			nativeFunctionManager.addFunction(function(sm) {
 				let t1 = sm.stack[sm.sp - 3];
 				let t2 = sm.stack[sm.sp - 2];
-				let s1 = sm.refMan.objectSize(t1);
-				let s2 = sm.refMan.objectSize(t2);
-				let r = sm.refMan.createObject(0, s1 + s2);
-				sm.refMan.copyObject(t1, 0, s1, r, 0);
-				sm.refMan.copyObject(t2, 0, s2, r, s1);
+				let r = sm.refMan.createString(sm.refMan.stringStr(t1) + sm.refMan.stringStr(t2));
 				sm.refMan.decRefCount(t1);
 				sm.refMan.decRefCount(t2);
 				sm.stack[sm.sp - 3] = r;

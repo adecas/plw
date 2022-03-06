@@ -332,6 +332,13 @@ class CodeBlock {
 		this.strConstSize = 0;
 	}
 	
+	addStrConst(str) {
+		let strId = this.strConstSize;
+		this.strConsts[strId] = str;
+		this.strConstSize++;
+		return strId;
+	}
+	
 	setLoc(offset) {
 		this.codes[offset] = this.codeSize;
 	}
@@ -367,9 +374,9 @@ class CodeBlock {
 	codeCreateObject(itemCount) {
 		this.code2("create_object", itemCount);
 	}
-	
-	codeAllocInit() {
-		this.code1("alloc_init");
+
+	codeCreateString(strId) {
+		this.code2("create_string", strId);
 	}
 	
 	codePopGlobal(offset) {
@@ -460,8 +467,8 @@ class CodeBlock {
 		this.code1("ended");
 	}
 	
-	codeEqObject() {
-		this.code1("eq_object");
+	codeEqRef() {
+		this.code1("eq_ref");
 	}
 	
 	codeJz(offset) {
@@ -688,12 +695,8 @@ class Compiler {
 			return EVAL_TYPE_INTEGER;
 		}
 		if (expr.tag === "ast-value-text") {
-			this.codeBlock.codePush(0);
-			this.codeBlock.codePush(expr.textValue.length);
-			this.codeBlock.codeAllocInit();
-			for (let i = 0; i < expr.textValue.length; i++) {
-				this.codeBlock.code1(expr.textValue.charCodeAt(i));
-			}
+			let strId = this.codeBlock.addStrConst(expr.textValue);
+			this.codeBlock.codeCreateString(strId);
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-array") {
@@ -842,8 +845,8 @@ class Compiler {
 				if (rightType !== leftType) {
 					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
-				if (rightType.tag === "res-type-array" || rightType.tag === "res-type-record" || rightType === EVAL_TYPE_TEXT) {
-					this.codeBlock.codeEqObject();
+				if (rightType.isRef) {
+					this.codeBlock.codeEqRef();
 					if (expr.operator === "<>") {
 						this.codeBlock.codeNot();
 					}

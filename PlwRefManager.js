@@ -43,6 +43,13 @@ class CountedRefFrame extends CountedRef {
 	}
 }
 
+class CountedRefString extends CountedRef {
+	constructor(str) {
+		super("ref-string");
+		this.str = str;
+	}
+}
+
 class RefManager {
 
 	constructor() {
@@ -64,6 +71,16 @@ class RefManager {
 		return refId;
 	}
 	
+	createString(str) {
+		let refId = this.createRefId();
+		this.refs[refId] = new CountedRefString(str);
+		return refId;
+	}
+	
+	stringStr(refId) {
+		return this.refs[refId].str;
+	}
+	
 	createObjectWithPtr(refSize, totalSize, ptr) {
 		let refId = this.createRefId();
 		this.refs[refId] = new CountedRefObject(refSize, totalSize, ptr);
@@ -83,14 +100,6 @@ class RefManager {
 		this.refs[refId] = new CountedRefFrame(totalSize);
 		return refId;
 	}		
-
-	createObjectFromString(str) {
-		let refId = this.createObject(0, str.length);
-		for (let i = 0; i < str.length; i++) {
-			this.refs[refId].ptr[i] = str.charCodeAt(i);
-		}
-		return refId;
-	}
 	
 	resizeObject(refId, newSize) {
 		let ref = this.refs[refId];
@@ -130,11 +139,17 @@ class RefManager {
 		ref.ptr = null;
 	}
 	
+	destroyString(ref) {
+		ref.str = null;
+	}
+	
 	destroyRef(ref) {
 		if (ref.tag === "ref-object") { 
 			this.destroyObject(ref);
 		} else if (ref.tag === "ref-frame") {
 			this.destroyFrame(ref);
+		} else if (ref.tag === "ref-string") {
+			this.destroyString(ref);
 		}
 	}
 	
@@ -180,30 +195,36 @@ class RefManager {
 		return this.refs[refId].mapPtr;
 	}
 	
-	compareObjects(refId1, refId2) {
+	compareRefs(refId1, refId2) {
 		if (refId1 === refId2) {
 			return true;
 		}
 		let ref1 = this.refs[refId1];
 		let ref2 = this.refs[refId2];
-		if (ref1.tag !== "ref-object" || ref2.tag !== "ref-object") {
+		if (ref1.tag !== ref2.tag) {
 			return false;
 		}
-		if (ref1.totalSize !== ref2.totalSize || ref1.refSize != ref2.refSize) {
-			return false;
+		if (ref1.tag === "ref-string") {
+			return ref1.str === ref2.str;
 		}
-		for (let i = 0; i < ref1.totalSize; i++) {
-			if (i < ref1.refSize) {
-				if (!this.compareObjects(ref1.ptr[i], ref2.ptr[i])) {
-					return false;
-				}
-			} else {
-				if (ref1.ptr[i] !== ref2.ptr[i]) {
-					return false;
+		if (ref1.tag === "ref-object") {
+			if (ref1.totalSize !== ref2.totalSize || ref1.refSize != ref2.refSize) {
+				return false;
+			}
+			for (let i = 0; i < ref1.totalSize; i++) {
+				if (i < ref1.refSize) {
+					if (!this.compareObjects(ref1.ptr[i], ref2.ptr[i])) {
+						return false;
+					}
+				} else {
+					if (ref1.ptr[i] !== ref2.ptr[i]) {
+						return false;
+					}
 				}
 			}
+			return true;
 		}
-		return true;
+		return false;
 	}
 	
 	copyObject(srcIndex, srcOffset, srcLength, dstIndex, dstOffset) {
