@@ -261,6 +261,10 @@ class EvalError extends EvalResult {
 		return new EvalError("Unknown type " + exprType);
 	}
 	
+	static noTypeArray() {
+		return new EvalError("Array has no type");
+	}
+	
 	static variableAlreadyExists(varName) {
 		return new EvalError("Variable " + varName + " already exists");
 	}
@@ -700,27 +704,31 @@ class Compiler {
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-array") {
-			if (expr.itemCount === 0) {
-				return EvalError.wrongType(null, "wtf to do with empty array").fromExpr(expr);
-			}
-			// Evaluate first item to get the type
-			let firstItemType = this.eval(expr.items[0]);
-			if (firstItemType.isError()) {
-				return firstItemType;
-			}
-			// Evalute the next items
-			for (let i = 1; i < expr.itemCount; i++) {
-				let itemType = this.eval(expr.items[i]);
+			let itemType = null;
+			if (expr.itemType !== null) {
+				itemType = this.eval(expr.itemType);
 				if (itemType.isError()) {
 					return itemType;
 				}
-				if (itemType !== firstItemType) {
-					return EvalError.wrongType(itemType, firstItemType.typeKey()).fromExpr(expr.items[i]);
+			}
+			// Evalute the next items
+			for (let i = 0; i < expr.itemCount; i++) {
+				let currentItemType = this.eval(expr.items[i]);
+				if (currentItemType.isError()) {
+					return currentItemType;
 				}
+				if (itemType === null) {
+					itemType = currentItemType;
+				} else if (currentItemType !== itemType) {
+					return EvalError.wrongType(currentItemType, itemType.typeKey()).fromExpr(expr.items[i]);
+				}
+			}
+			if (itemType === null) {
+				return EvalError.noTypeArray().fromExpr(expr);
 			}
 			// Allocate the array
 			this.codeBlock.codeCreateObject(expr.itemCount);
-			return this.context.addType(new EvalTypeArray(firstItemType));
+			return this.context.addType(new EvalTypeArray(itemType));
 		}
 		if (expr.tag === "ast-value-record") {
 			let fields = [];

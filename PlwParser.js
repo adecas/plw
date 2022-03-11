@@ -332,6 +332,17 @@ class Parser {
 		if (openToken.text !== "[") {
 			return ParserError.unexpectedToken(openToken, "[");
 		}
+		let itemType = null;
+		if (this.peekToken() !== ":=") {
+			itemType = this.readType();
+			if (Parser.isError(itemType)) {
+				return itemType;
+			}
+		}
+		let assignToken = this.readToken();
+		if (assignToken.text !== ":=") {
+			return ParserError.unexpectedToken(assignToken, ":=");
+		}
 		let itemValues = [];
 		let itemIndex = 0;
 		while (this.peekToken() !== "]") {
@@ -353,7 +364,7 @@ class Parser {
 		if (closeToken.text !== "]") {
 			return ParserError.unexpectedToken(closeToken, "]");
 		}
-		return new AstValueArray(itemIndex, itemValues).fromToken(openToken);
+		return new AstValueArray(itemType, itemIndex, itemValues).fromToken(openToken);
 	}
 	
 	readRecordValueField() {
@@ -415,20 +426,30 @@ class Parser {
 		if (this.peekToken() === "{") {
 			return this.readTypeRecord();
 		}
+		if (this.peekToken() === "[") {
+			return this.readTypeArray();
+		}
 		let typeName = this.readToken();
 		if (!TokenReader.isIdentifier(typeName.text)) {
 			return ParserError.unexpectedToken(typeName, "identifier");
 		}
-		let typeExpr = new AstTypeNamed(typeName.text).fromToken(typeName);
-		while (this.peekToken() === "[") {
-			let openToken = this.readToken();
-			let closeToken = this.readToken();
-			if (closeToken.text !== "]") {
-				return ParserError.unexpectedToken(closeToken, "]");
-			}
-			typeExpr = new AstTypeArray(typeExpr).fromToken(openToken);
+		return new AstTypeNamed(typeName.text).fromToken(typeName);
+	}
+	
+	readTypeArray() {
+		let openToken = this.readToken();
+		if (openToken.text !== "[") {
+			return ParserError.unexpectedToken(openToken, "]");
 		}
-		return typeExpr;
+		let itemType = this.readType();
+		if (Parser.isError(itemType)) {
+			return itemType;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.text !== "]") {
+			return ParserError.unexpectedToken(closeToken, "]");
+		}
+		return new AstTypeArray(itemType).fromToken(openToken);
 	}
 	
 	readTypeSequence() {

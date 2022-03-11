@@ -137,7 +137,7 @@ function isprime(n integer) boolean begin
   end loop;
   return true;
 end isprime;
-var first_primes integer[] := array(0, primes_count);
+var first_primes [integer] := array(0, primes_count);
 begin
   var i integer := 1;
   var index integer := 0;
@@ -178,7 +178,7 @@ print(text(fibo(10)));
 
 <p>Bubble Sort</p>
 <pre>
-function bubble_sort(nums integer[]) integer[] begin
+function bubble_sort(nums [integer]) [integer] begin
   for i in reverse 0 .. length(nums) - 2 loop
     for j in 0 .. i loop
       if nums[j] > nums[j + 1] then
@@ -190,7 +190,7 @@ function bubble_sort(nums integer[]) integer[] begin
   end loop;
   return nums;
 end bubble_sort;
-print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
+print(text(bubble_sort([integer := 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
 <p>Records</p>
@@ -212,12 +212,12 @@ end if;
 
 <p>Assign record</p>
 <pre>
-procedure init_record(r { a integer, b integer[] }, a integer, b integer[]) begin
+procedure init_record(r { a integer, b [integer] }, a integer, b [integer]) begin
   r.a := a;
   r.b := b;
 end init_record;
-var v { a integer, b integer[] } := { a integer := 0, b integer[] := [0] };
-init_record(v, 42, [51]);
+var v { a integer, b [integer] } := { a integer := 0, b [integer] := [integer := 0] };
+init_record(v, 42, [integer := 51]);
 print('a = ' || text(v.a) || ', b = ' || text(v.b));
 </pre>
 
@@ -225,9 +225,9 @@ print('a = ' || text(v.a) || ', b = ' || text(v.b));
 <pre>
 var i := 42;
 var b := true;
-var v := [42, 51];
+var v := [:= 42, 51];
 var t := 'Hello';
-var r := { i := 42, b := true, v := [42, 51], t := 'Hello' };
+var r := { i := 42, b := true, v := [:= 42, 51], t := 'Hello' };
 if     i - r.i = 0
    and ((b and r.b) or (not b and not r.b))
    and v[0] - r.v[0] = 0 and v[1] - r.v[1] = 0
@@ -255,7 +255,7 @@ end loop;
 
 <p>Simple Generator With refs</p>
 <pre>
-generator gen_concat(words text[], final_int integer) text begin
+generator gen_concat(words [text], final_int integer) text begin
   var word_count integer := length(words);
   var phrase text := '';
   yield text(word_count);
@@ -265,7 +265,7 @@ generator gen_concat(words text[], final_int integer) text begin
   end loop;
   yield text(final_int);
 end gen_concat;
-for i in gen_concat(['hello', ' the', ' world'], 42) loop
+for i in gen_concat([text := 'hello', ' the', ' world'], 42) loop
   print(i);
 end loop;
 </pre>
@@ -275,16 +275,16 @@ end loop;
 type employee {
   first_name text,
   last_name text,
-  skills text[]
+  skills [text]
 };
-function employee(first_name text, last_name text, skills text[]) employee begin
-  var e employee := { first_name text := first_name, last_name text := last_name, skills text[] := skills };
+function employee(first_name text, last_name text, skills [text]) employee begin
+  var e employee := { first_name text := first_name, last_name text := last_name, skills [text] := skills };
   return e;
 end employee;
 generator fetch_employees() employee begin
-  yield employee('John', 'Backer', [ 'C++', 'SQL' ]);
-  yield employee('Jane', 'Smith', [ 'Java', 'HTML' ]);
-  yield employee('Alan', 'Carpenter', [ 'Ksh', 'Scrum' ]);
+  yield employee('John', 'Backer', [text := 'C++', 'SQL']);
+  yield employee('Jane', 'Smith', [text := 'Java', 'HTML']);
+  yield employee('Alan', 'Carpenter', [text := 'Ksh', 'Scrum']);
 end fetch_employees;
 generator employee_table(with_header boolean, employees sequence(employee)) text begin
   yield '&lt;table&gt;';

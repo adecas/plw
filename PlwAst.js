@@ -43,8 +43,9 @@ class AstValueText extends AstNode {
 }
 
 class AstValueArray extends AstNode {
-	constructor(itemCount, items) {
+	constructor(itemType, itemCount, items) {
 		super("ast-value-array");
+		this.itemType = itemType;
 		this.itemCount = itemCount;
 		this.items = items;
 	}
