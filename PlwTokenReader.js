@@ -6,8 +6,63 @@
 
 ******************************************************************************************************************************************/
 
+const TOK_IDENTIFIER = "tok-identifier";
+const TOK_STRING = "tok-string";
+const TOK_INTEGER = "tok-integer";
+const TOK_ASSIGN = "tok-assign";
+const TOK_LTE = "tok-lte";
+const TOK_GTE = "tok-gte";
+const TOK_NE = "tok-ne";
+const TOK_TO = "tok-to";
+const TOK_CONCAT = "tok-concat";
+const TOK_VAR = "tok-var";
+const TOK_TYPE = "tok-type";
+const TOK_IF = "tok-if";
+const TOK_THEN = "tok-then";
+const TOK_ELSIF = "tok-elsif";
+const TOK_ELSE = "tok-else";
+const TOK_BEGIN = "tok-begin";
+const TOK_END = "tok-end";
+const TOK_WHILE = "tok-while";
+const TOK_LOOP = "tok-loop";
+const TOK_FOR = "tok-for";
+const TOK_IN = "tok-in";
+const TOK_REVERSE = "tok-reverse";
+const TOK_FUNCTION = "tok-function";
+const TOK_GENERATOR = "tok-generator";
+const TOK_PROCEDURE = "tok-procedure";
+const TOK_RETURN = "tok-return";
+const TOK_YIELD = "tok-yield";
+const TOK_AND = "tok-and";
+const TOK_OR = "tok-or";
+const TOK_NOT = "tok-not";
+const TOK_TRUE = "tok-true";
+const TOK_LENGTH = "tok-length";
+const TOK_FALSE = "tok-false";
+const TOK_ADD = "tok-add";
+const TOK_SUB = "tok-sub";
+const TOK_DIV = "tok-div";
+const TOK_MUL = "tok-mul";
+const TOK_LT = "tok-lt";
+const TOK_GT = "tok-gt";
+const TOK_EQ = "tok-eq";
+const TOK_BEGIN_GROUP = "tok-begin-group";
+const TOK_END_GROUP = "tok-end-group";
+const TOK_BEGIN_ARRAY = "tok-begin-array";
+const TOK_END_ARRAY = "tok-end-array";
+const TOK_BEGIN_AGG = "tok-begin-agg";
+const TOK_END_AGG = "tok-end-agg";
+const TOK_SEQUENCE = "tok-sequence";
+const TOK_SEL = "tok-sel";
+const TOK_SEP = "tok-sep";
+const TOK_TERM = "tok-term";
+const TOK_EOF = "tok-eof";
+const TOK_UNKOWN = "tok-unknown";
+
+
 class Token {
-	constructor(text, line, col) {
+	constructor(tag, text, line, col) {
+		this.tag = tag;
 		this.text = text;
 		this.line = line;
 		this.col = col;
@@ -37,61 +92,6 @@ class TokenReader {
 		return TokenReader.isAlphaChar(c) || TokenReader.isDigitChar(c) || c === "_";
 	}
 	
-	static isInteger(token) {
-		if (token.length === 0) {
-			return false;
-		}
-		for (let i = 0; i < token.length; i++) {
-			if (i == 0) {
-				if (!TokenReader.isDigitChar(token.charAt(i)) && token.charAt(i) != "-") {
-					return false;
-				}
-			} else {
-				if (!TokenReader.isDigitChar(token.charAt(i))) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-	
-	static isIdentifier(token) {
-		if (token.length === 0) {
-			return false;
-		}
-		for (let i = 0; i < token.length; i++) {
-			if (!TokenReader.isIdentifierChar(token.charAt(i))) {
-				return false;
-			}
-			if (i == 0 && TokenReader.isDigitChar(token.charAt(i))) {
-				return false
-			}
-		}
-		return true;
-	}
-	
-	static isString(token) {
-		if (token.length < 2) {
-			return false;
-		}
-		if (token.charAt(0) !== "'" || token.charAt(token.length - 1) !== "'") {
-			return false;
-		}
-		for (let i = 1; i < token.length - 1; i++) {
-			if (token.charAt(i) === "'") {
-				i++;
-				if (i === token.length - 1 || token.charAt(i) !== "'") {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-	
-	static unescapeString(str) {
-		return str.substr(1, str.length - 2).replace("''", "'");
-	}
-	
 	skipBlank() {
 		while (this.pos < this.exprStr.length) {
 			let c = this.exprStr.charAt(this.pos);
@@ -112,7 +112,7 @@ class TokenReader {
 		let col = this.col;
 		let beginPos = this.pos;
 		let state = 0;
-		while (this.pos < this.exprStr.length ) {
+		while (this.pos < this.exprStr.length) {
 			let c = this.exprStr.charAt(this.pos);
 			if (state === 0) {
 				if (c !== "'") break;
@@ -130,10 +130,10 @@ class TokenReader {
 			}
 			this.pos++;
 		}
-		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+		return new Token(TOK_STRING, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("''", "'"), line, col);
 	}
 	
-	readIdentifier() {
+	readKeywordOrIdentifier() {
 		let line = this.line;
 		let col = this.col;
 		let beginPos = this.pos;
@@ -146,7 +146,83 @@ class TokenReader {
 			this.col++;
 		}
 		this.allowSignedInteger = false;
-		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+		let token = this.exprStr.substr(beginPos, this.pos - beginPos);
+		if (token === "var") {
+			return new Token(TOK_VAR, token, line, col);
+		}
+		if (token === "type") {
+			return new Token(TOK_TYPE, token, line, col);
+		}
+		if (token === "if") {
+			return new Token(TOK_IF, token, line, col);
+		}
+		if (token === "then") {
+			return new Token(TOK_THEN, token, line, col);
+		}
+		if (token === "elsif") {
+			return new Token(TOK_ELSIF, token, line, col);
+		}
+		if (token === "else") {
+			return new Token(TOK_ELSE, token, line, col);
+		}
+		if (token === "begin") {
+			return new Token(TOK_BEGIN, token, line, col);
+		}
+		if (token === "end") {
+			return new Token(TOK_END, token, line, col);
+		}
+		if (token === "while") {
+			return new Token(TOK_WHILE, token, line, col);
+		}
+		if (token === "loop") {
+			return new Token(TOK_LOOP, token, line, col);
+		}
+		if (token === "for") {
+			return new Token(TOK_FOR, token, line, col);
+		}
+		if (token === "in") {
+			return new Token(TOK_IN, token, line, col);
+		}
+		if (token === "reverse") {
+			return new Token(TOK_REVERSE, token, line, col);
+		}
+		if (token === "function") {
+			return new Token(TOK_FUNCTION, token, line, col);
+		}
+		if (token === "generator") {
+			return new Token(TOK_GENERATOR, token, line, col);
+		}
+		if (token === "procedure") {
+			return new Token(TOK_PROCEDURE, token, line, col);
+		}
+		if (token === "return") {
+			return new Token(TOK_RETURN, token, line, col);
+		}
+		if (token === "yield") {
+			return new Token(TOK_YIELD, token, line, col);
+		}
+		if (token === "and") {
+			return new Token(TOK_AND, token, line, col);
+		}
+		if (token === "or") {
+			return new Token(TOK_OR, token, line, col);
+		}
+		if (token === "not") {
+			return new Token(TOK_NOT, token, line, col);
+		}
+		if (token === "true") {
+			return new Token(TOK_TRUE, token, line, col);
+		}
+		if (token === "false") {
+			return new Token(TOK_FALSE, token, line, col);
+		}
+		if (token === "length") {
+			return new Token(TOK_LENGTH, token, line, col);
+		}
+		if (token === "sequence") {
+			return new Token(TOK_SEQUENCE, token, line, col);
+		}
+		return new Token(TOK_IDENTIFIER, token, line, col);
 	}
 	
 	readInteger() {
@@ -169,14 +245,14 @@ class TokenReader {
 			}
 		}
 		this.allowSignedInteger = false;
-		return new Token(this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+		return new Token(TOK_INTEGER, this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
 	}
 		
 	readToken() {
 		this.skipBlank();
 		
 		if (this.pos === this.exprStr.length) {
-			return new Token("", this.line, this.col);
+			return new Token(TOK_EOF, "", this.line, this.col);
 		}
 		let c = this.exprStr.charAt(this.pos);
 		
@@ -184,8 +260,8 @@ class TokenReader {
 			return this.readInteger();
 		}
 
-		if (TokenReader.isIdentifierChar(c)) {
-			return this.readIdentifier();
+		if (TokenReader.isAlphaChar(c)) {
+			return this.readKeywordOrIdentifier();
 		}
 		
 		if (c === "'") {
@@ -207,37 +283,37 @@ class TokenReader {
 		if (c === ":" && nc !== null && nc === "=") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token(":=", line, col);
+			return new Token(TOK_ASSIGN, ":=", line, col);
 		}
 		
 		if (c === "<" && nc !== null && nc === "=") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token("<=", line, col);
+			return new Token(TOK_LTE, "<=", line, col);
 		}
 		
 		if (c === ">" && nc !== null && nc === "=") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token(">=", line, col);
+			return new Token(TOK_GTE, ">=", line, col);
 		}
 
 		if (c === "<" && nc !== null && nc === ">") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token("<>", line, col);
+			return new Token(TOK_NE, "<>", line, col);
 		}
 		
 		if (c === "." && nc !== null && nc === ".") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token("..", line, col);
+			return new Token(TOK_TO, "..", line, col);
 		}
 		
 		if (c === "|" && nc !== null && nc === "|") {
 			this.pos += 2;
 			this.col += 2;
-			return new Token("||", line, col);
+			return new Token(TOK_CONCAT, "||", line, col);
 		}
 		
 		if (c === ")") {
@@ -246,7 +322,57 @@ class TokenReader {
 				
 		this.pos += 1;
 		this.col += 1;
-		return new Token(c, line, col);
+		
+		if (c === "+") {
+			return new Token(TOK_ADD, "+", line, col);
+		}
+		if (c === "-") {
+			return new Token(TOK_SUB, "-", line, col);
+		}
+		if (c === "/") {
+			return new Token(TOK_DIV, "/", line, col);
+		}
+		if (c === "*") {
+			return new Token(TOK_MUL, "*", line, col);
+		}
+		if (c === "<") {
+			return new Token(TOK_LT, "<", line, col);
+		}
+		if (c === ">") {
+			return new Token(TOK_GT, ">", line, col);
+		}
+		if (c === "=") {
+			return new Token(TOK_EQ, "=", line, col);
+		}
+		if (c === "(") {
+			return new Token(TOK_BEGIN_GROUP, "(", line, col);
+		}
+		if (c === ")") {
+			return new Token(TOK_END_GROUP, ")", line, col);
+		}
+		if (c === "[") {
+			return new Token(TOK_BEGIN_ARRAY, "[", line, col);
+		}
+		if (c === "]") {
+			return new Token(TOK_END_ARRAY, "]", line, col);
+		}
+		if (c === "{") {
+			return new Token(TOK_BEGIN_AGG, "{", line, col);
+		}
+		if (c === "}") {
+			return new Token(TOK_END_AGG, "}", line, col);
+		}
+		if (c === ".") {
+			return new Token(TOK_SEL, ".", line, col);
+		}
+		if (c === ",") {
+			return new Token(TOK_SEP, ",", line, col);
+		}
+		if (c === ";") {
+			return new Token(TOK_TERM, ";", line, col);
+		}
+				
+		return new Token(TOK_UNKOWN, c, line, col);
 	}
 }
 

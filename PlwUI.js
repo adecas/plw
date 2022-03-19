@@ -43,7 +43,7 @@ function onExecClick(isDebug) {
 		let tokenReader = new TokenReader(getTextIn(), 1, 1);
 		let parser = new Parser(tokenReader);
 		let compiler = new Compiler(compilerContext);
-		while (parser.peekToken() !== "") {
+		while (parser.peekToken() !== TOK_EOF) {
 			let expr = parser.readStatement();
 			if (Parser.isError(expr)) {
 				printTextOutObject(expr);
@@ -85,7 +85,7 @@ function onEvalClick() {
 		let tokenReader = new TokenReader(getTextIn(), 1, 1);
 		let parser = new Parser(tokenReader);
 		let compiler = new Compiler(compilerContext);
-		while (parser.peekToken() !== "") {
+		while (parser.peekToken() !== TOK_EOF) {
 			let expr = parser.readExpression();
 			if (Parser.isError(expr)) {
 				printTextOutObject(expr);
