@@ -95,6 +95,70 @@ class RefManager {
 		return this.createObjectWithPtr(refSize, totalSize, ptr);
 	}
 	
+	createObjectFromConcat(refId1, refId2) {
+		if (refId1 <= 0 || refId1 > this.refCount || refId2 <= 0 || refId2 > this.refCount) {
+			return 0;
+		}
+		let ref1 = this.refs[refId1];
+		let ref2 = this.refs[refId2];
+		if (ref1 === null || ref1.tag !== "ref-object" || ref2 === null || ref2.tag !== "ref-object") {
+			return 0;
+		}
+		let totalSize = ref1.totalSize + ref2.totalSize;
+		let refSize = ref1.refSize + ref2.refSize;
+		let ptr = [];
+		for (let i = 0; i < ref1.refSize; i++) {
+			ptr[i] = ref1.ptr[i];
+		}
+		for (let i = 0; i < ref2.refSize; i++) {
+			ptr[ref1.refSize + i] = ref2.ptr[i];
+		}
+		for (let i = 0; i < ref1.totalSize - ref1.refSize; i++) {
+			ptr[refSize + i] = ref1.ptr[ref1.refSize + i];
+		}
+		for (let i = 0; i < ref2.totalSize - ref2.refSize; i++) {
+			ptr[refSize + ref1.totalSize - ref1.refSize + i] = ref2.ptr[ref2.refSize + i];
+		}
+		for (let i = 0; i < refSize; i++) {
+			this.incRefCount(ptr[i]);
+		}
+		return this.createObjectWithPtr(refSize, totalSize, ptr);
+	}
+	
+	createObjectFromSubObject(refId, beginIndex, endIndex) {
+		if (refId <= 0 || refId > this.refCount) {
+			return 0;
+		}
+		let ref = this.refs[refId];
+		if (ref === null || ref.tag !== "ref-object") {
+			return 0;
+		}
+		if (beginIndex < 0) {
+			beginIndex = 0;
+		}
+		if (endIndex > ref.totalSize) {
+			endIndex = ref.totalSize;
+		}
+		let totalSize = endIndex - beginIndex;
+		if (totalSize < 0) {
+			totalSize = 0;
+		}
+		let refSize = ref.refSize - beginIndex;
+		if (refSize < 0) {
+			refSize = 0;
+		} else if (refSize > totalSize) {
+			refSize = totalSize;
+		}
+		let ptr = [];
+		for (let i = 0; i < totalSize; i++) {
+			ptr[i] = ref.ptr[beginIndex + i];
+		}
+		for (let i = 0; i < refSize; i++) {
+			this.incRefCount(ptr[i]);
+		}
+		return this.createObjectWithPtr(refSize, totalSize, ptr);
+	}
+	
 	createFrame(totalSize) {
 		let refId = this.createRefId();
 		this.refs[refId] = new CountedRefFrame(totalSize);

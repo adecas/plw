@@ -122,6 +122,10 @@ function onDisplayContextClick() {
 	printTextOutObject(compilerContext);
 }
 
+function onDisplayStackMachineClick() {
+	printTextOutObject(stackMachine);
+}
+
 function onResetContextClick() {
 	compilerContext = new CompilerContext();
 	nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
@@ -132,3 +136,22 @@ function onClearMessageClick() {
 	document.getElementById("textout").value = "";
 }
 
+function fillSnippetSelect() {
+	let snipSelect = document.getElementById("snippets");
+	let snips = document.getElementsByClassName("snippet");
+	for (let i = 0; i < snips.length; i++) {
+		let option = document.createElement("option");
+		option.value = snips[i].id;
+		option.text = snips[i].innerText;
+		snipSelect.add(option);
+	}
+}
+
+function onSnippetChange() {
+	let snip = document.getElementById("snippets").value;
+	if (snip === "" || !snip.endsWith("-title")) {
+		return;
+	}
+	snip = snip.substring(0, snip.length - 6);
+	document.getElementById("textin").value = document.getElementById(snip).innerText;
+}

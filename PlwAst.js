@@ -155,10 +155,11 @@ class AstTypeSequence extends AstNode {
 }
 
 class AstIndex extends AstNode {
-	constructor(indexed, index) {
+	constructor(indexed, index, indexTo) {
 		super("ast-index");
 		this.indexed = indexed;
 		this.index = index;
+		this.indexTo = indexTo;
 	}
 }
 

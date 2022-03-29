@@ -118,7 +118,7 @@ class Parser {
 				return right;
 			}
 			
-			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
 		}
 		
 		return left;
@@ -138,7 +138,7 @@ class Parser {
 				return right;
 			}
 			
-			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
 		}
 		
 		return left;
@@ -163,7 +163,7 @@ class Parser {
 			if (Parser.isError(right)) {
 				return right;
 			}
-			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
 		}
 		
 		return left;
@@ -183,7 +183,7 @@ class Parser {
 				return right;
 			}
 			
-			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
 		}
 		
 		return left;
@@ -203,7 +203,7 @@ class Parser {
 				return right;
 			}
 			
-			left = new AstOperatorBinary(operator.text, left, right).fromToken(operator);
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
 		}
 		
 		return left;
@@ -222,7 +222,15 @@ class Parser {
 				if (Parser.isError(index)) {
 					return index;
 				}
-				expr = new AstIndex(expr, index).fromToken(token);
+				let indexTo = null;
+				if (this.peekToken() == TOK_TO) {
+					this.readToken();
+					indexTo = this.readExpression();
+					if (Parser.isError(indexTo)) {
+						return indexTo;
+					}
+				}
+				expr = new AstIndex(expr, index, indexTo).fromToken(token);
 				let closeToken = this.readToken();
 				if (closeToken.tag !== TOK_END_ARRAY) {
 					return ParserError.unexpectedToken(closeToken, [TOK_END_ARRAY]);					
@@ -257,12 +265,12 @@ class Parser {
 					
 		let token = this.readToken();
 
-		if (token.tag === TOK_SUB || token.tag === TOK_NOT || token.tag === TOK_LENGTH) {
+		if (token.tag === TOK_SUB || token.tag === TOK_NOT) {
 			let operand = this.readExpr1();
 			if (Parser.isError(operand)) {
 				return operand;
 			}
-			return new AstOperatorUnary(token.text, operand).fromToken(token);
+			return new AstOperatorUnary(token.tag, operand).fromToken(token);
 		}
 		
 		if (token.tag === TOK_TRUE || token.tag === TOK_FALSE) {
@@ -291,8 +299,7 @@ class Parser {
 		
 		return ParserError.unexpectedToken(token, [
 			TOK_IDENTIFIER, TOK_STRING, TOK_INTEGER, TOK_TRUE, TOK_FALSE,
-			TOK_SUB, TOK_NOT, TOK_LENGTH,
-			TOK_BEGIN_AGG, TOK_BEGIN_ARRAY, TOK_BEGIN_GROUP
+			TOK_SUB, TOK_NOT, TOK_BEGIN_AGG, TOK_BEGIN_ARRAY, TOK_BEGIN_GROUP
 		]);
 	}
 	

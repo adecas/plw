@@ -66,7 +66,34 @@ class NativeFunctionManager {
 				sm.sp -= 1;
 			})
 		));
-
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"length",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				let refId = sm.stack[sm.sp - 2];
+				let len = sm.refMan.objectSize(refId);
+				sm.refMan.decRefCount(refId);
+				sm.stack[sm.sp - 2] = len;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"length",
+			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				let refId = sm.stack[sm.sp - 2];
+				let len = sm.refMan.stringStr(refId).length;
+				sm.refMan.decRefCount(refId);
+				sm.stack[sm.sp - 2] = len;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+			})
+		));
 
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"text",
@@ -141,7 +168,26 @@ class NativeFunctionManager {
 				sm.stackMap[sm.sp - 3] = true;
 				sm.sp -= 2;
 			})
-		));	
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"concat_array",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("a1", EVAL_TYPE_REF),
+				new EvalResultParameter("a2", EVAL_TYPE_REF)
+			]),
+			EVAL_TYPE_REF,
+			nativeFunctionManager.addFunction(function(sm) {
+				let a1 = sm.stack[sm.sp - 3];
+				let a2 = sm.stack[sm.sp - 2];
+				let r = sm.refMan.createObjectFromConcat(a1, a2);
+				sm.refMan.decRefCount(a1);
+				sm.refMan.decRefCount(a2);
+				sm.stack[sm.sp - 3] = r;
+				sm.stackMap[sm.sp - 3] = true;
+				sm.sp -= 2;
+			})
+		));
 		
 		return nativeFunctionManager;
 	}

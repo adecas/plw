@@ -37,7 +37,6 @@ const TOK_AND = "tok-and";
 const TOK_OR = "tok-or";
 const TOK_NOT = "tok-not";
 const TOK_TRUE = "tok-true";
-const TOK_LENGTH = "tok-length";
 const TOK_FALSE = "tok-false";
 const TOK_ADD = "tok-add";
 const TOK_SUB = "tok-sub";
@@ -215,9 +214,6 @@ class TokenReader {
 		}
 		if (token === "false") {
 			return new Token(TOK_FALSE, token, line, col);
-		}
-		if (token === "length") {
-			return new Token(TOK_LENGTH, token, line, col);
 		}
 		if (token === "sequence") {
 			return new Token(TOK_SEQUENCE, token, line, col);

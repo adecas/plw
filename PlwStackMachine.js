@@ -263,11 +263,6 @@ class StackMachine {
 				currentCodeBlockId = previousCodeBlockId;
 				currentCodeBlock = currentCodeBlockId === -1 ? codeBlock : codeBlocks[currentCodeBlockId];
 				i = previousIp;
-			} else if (code === "length") {
-			 	let l = this.refMan.objectSize(this.stack[this.sp - 1]);
-			 	this.refMan.decRefCount(this.stack[this.sp - 1]);
-				this.stack[this.sp - 1] = l;
-				this.stackMap[this.sp - 1] = false;
 			} else if (code === "next") {
 				let refId = this.stack[this.sp - 1];
 				let ptr = this.refMan.framePtr(refId);
@@ -300,6 +295,17 @@ class StackMachine {
 				let ended = objPtr[1] >= codeBlocks[objPtr[0]].codeSize ? 1 : 0;
 				this.refMan.decRefCount(this.stack[this.sp - 1]);
 				this.stack[this.sp - 1] = ended;
+			} else if (code === "subobject") {
+				let refId = this.stack[this.sp - 3];
+				let beginIndex = this.stack[this.sp - 2];
+				let endIndex = this.stack[this.sp - 1];
+				let newRefId = this.refMan.createObjectFromSubObject(refId, beginIndex, endIndex);
+				if (newRefId === 0) {
+					return "subobject failed";
+				}
+				this.refMan.decRefCount(refId);
+				this.stack[this.sp - 3] = newRefId;
+				this.sp -= 2;
 			} else {
 				//
 				// 1 operand (in arg1)

@@ -13,16 +13,18 @@
 
 <input type="button" value="exec" onclick="onExecClick(false)">
 <input type="button" value="debug" onclick="onExecClick(true)">
-<input type="button" value="eval" onclick="onEvalClick()"><br>
+<input type="button" value="eval" onclick="onEvalClick()">
+<label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select><br>
 <textarea id="textin" rows="10" cols="100"></textarea><br>
 <input type="button" value="clear messages" onclick="onClearMessageClick()">
 <input type="button" value="display context" onclick="onDisplayContextClick()">
+<input type="button" value="display stack machine" onclick="onDisplayStackMachineClick()">
 <input type="button" value="reset context" onclick="onResetContextClick()"><br>
 <textarea id="textout" rows="10" cols="100"></textarea><br>
 <textarea id="debug" rows="10" cols="100"></textarea>
 
-<p>Variable</p>
-<pre>
+<p id="snippet-variable-title" class="snippet">Variable</p>
+<pre id="snippet-variable">
 var i integer := 2 + 3 * 4;
 i := i / 2;
 print('i = ' || text(i) || ', expected 7');
@@ -61,8 +63,8 @@ t := t || 'World';
 print('t = ' || t || ', expected Hello World');
 </pre>
 
-<p>Flow Control</p>
-<pre>
+<p id="snippet-flow-control-title" class="snippet">Flow Control</p>
+<pre id="snippet-flow-control">
 if 2 = 1 + 1 then
   print('Good');
 else
@@ -102,8 +104,21 @@ end loop;
 print('Done while'); 
 </pre>
 
-<p>Basic function</p>
-<pre>
+<p id="snippet-arrays-title" class="snippet">Arrays</p>
+<pre id="snippet-arrays">
+var a [integer] := [integer := 11, 22, 33, 44, 55];
+var b integer := a[1];
+var c [integer] := a[2..4];
+var d [integer] := c || [integer := 66, 77];
+if b = 22 and c = [integer := 33, 44] and d = [integer := 33, 44, 66, 77] then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
+</pre>
+
+<p id="snippet-basic-function-title" class="snippet">Basic function</p>
+<pre id="snippet-basic-function">
 var toto integer := 42;
 function f(a integer) integer begin
   toto := toto + a;
@@ -113,8 +128,8 @@ print('f(toto): ' || text(f(toto)));
 print('expected: 85');
 </pre>
 
-<p>Nested functions</p>
-<pre>
+<p id="snippet-nested-functions-title" class="snippet">Nested functions</p>
+<pre id="snippet-nested-functions">
 function add(a integer, b integer) integer begin
   return a + b;
 end add;
@@ -126,8 +141,8 @@ print('double(3): ' || text(double(3)));
 print('expected: 6');
 </pre>
 
-<p>First 100 Primes</p>
-<pre>
+<p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>
+<pre id="snippet-first-100-primes">
 var primes_count integer := 100;
 function isprime(n integer) boolean begin
   for i in 2 .. n - 1 loop
@@ -152,8 +167,8 @@ end;
 print('first_primes: ' || text(first_primes));
 </pre>
 
-<p>Recursive Facto</p>
-<pre>
+<p id="snippet-recursive-facto-title" class="snippet">Recursive Facto</p>
+<pre id="snippet-recursive-facto">
 function facto(a integer) integer begin
   if a = 0 then
     return 1;
@@ -164,8 +179,8 @@ end facto;
 print(text(facto(5)));
 </pre>
 
-<p>Fibonacci</p>
-<pre>
+<p id="snippet-fibonacci-title" class="snippet">Fibonacci</p>
+<pre id="snippet-fibonacci">
 function fibo(n integer) integer begin
   if n = 0 or n = 1 then
     return n;
@@ -176,8 +191,8 @@ end fibo;
 print(text(fibo(10)));
 </pre>
 
-<p>Bubble Sort</p>
-<pre>
+<p id="snippet-bubble-sort-title" class="snippet">Bubble Sort</p>
+<pre id="snippet-bubble-sort">
 function bubble_sort(nums [integer]) [integer] begin
   for i in reverse 0 .. length(nums) - 2 loop
     for j in 0 .. i loop
@@ -193,8 +208,8 @@ end bubble_sort;
 print(text(bubble_sort([integer := 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
-<p>Records</p>
-<pre>
+<p id="snippet-records-title" class="snippet">Records</p>
+<pre id="snippet-records">
 var r1 { i integer, b boolean } := { i integer := 42, b boolean := true };
 if r1.i = 42 and r1.b then
   print('Good');
@@ -210,8 +225,8 @@ else
 end if;
 </pre>
 
-<p>Assign record</p>
-<pre>
+<p id="snippet-assign-records-title" class="snippet">Assign record</p>
+<pre id="snippet-assign-records">
 procedure init_record(r { a integer, b [integer] }, a integer, b [integer]) begin
   r.a := a;
   r.b := b;
@@ -221,8 +236,8 @@ init_record(v, 42, [integer := 51]);
 print('a = ' || text(v.a) || ', b = ' || text(v.b));
 </pre>
 
-<p>Type inference</p>
-<pre>
+<p id="snippet-type-inference-title" class="snippet">Type inference</p>
+<pre id="snippet-type-inference">
 var i := 42;
 var b := true;
 var v := [:= 42, 51];
@@ -239,8 +254,8 @@ else
 end if;
 </pre>
 
-<p>Simple Generator</p>
-<pre>
+<p id="snippet-simple-generator-title" class="snippet">Simple Generator</p>
+<pre id="snippet-simple-generator">
 generator gen_range_step(first integer, last integer, step integer) integer begin
   var current integer := first;
   while current <= last loop
@@ -253,8 +268,8 @@ for i in gen_range_step(42, 51, 3) loop
 end loop;
 </pre>
 
-<p>Simple Generator With refs</p>
-<pre>
+<p id="snippet-simple-generator-with-refs-title" class="snippet">Simple Generator With refs</p>
+<pre id="snippet-simple-generator-with-refs">
 generator gen_concat(words [text], final_int integer) text begin
   var word_count integer := length(words);
   var phrase text := '';
@@ -270,8 +285,8 @@ for i in gen_concat([text := 'hello', ' the', ' world'], 42) loop
 end loop;
 </pre>
 
-<p>Generator Html</p>
-<pre>
+<p id="snippet-generator-html-title" class="snippet">Generator Html</p>
+<pre id="snippet-generator-html">
 type employee {
   first_name text,
   last_name text,
@@ -300,4 +315,5 @@ for html_frag in employee_table(false, fetch_employees()) loop
 end loop;
 </pre>
 
+<script>fillSnippetSelect()</script>
 </body></html>

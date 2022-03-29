@@ -323,6 +323,7 @@ class EvalError extends EvalResult {
 	
 }
 
+const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
 const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
@@ -377,6 +378,10 @@ class CodeBlock {
 	
 	codeCreateObject(itemCount) {
 		this.code2("create_object", itemCount);
+	}
+	
+	codeSubobject() {
+		this.code1("subobject");
 	}
 
 	codeCreateString(strId) {
@@ -459,10 +464,6 @@ class CodeBlock {
 		this.code1("not");
 	}
 		
-	codeLength() {
-		this.code1("length");
-	}
-	
 	codeNext() {
 		this.code1("next");
 	}
@@ -562,6 +563,17 @@ class CompilerContext {
 		let uniqueType = this.types[evalType.typeKey()];
 		if (uniqueType === undefined) {
 			this.types[evalType.typeKey()] = evalType;
+			// TODO: if array types, we add the related functions
+			if (evalType.tag === "res-type-array") {
+				var lengthFunc = new EvalResultFunction(
+					"length",
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
+					EVAL_TYPE_INTEGER, 
+					false
+				);
+				lengthFunc.nativeIndex = this.getFunction("length(ref)").nativeIndex;
+				this.addFunction(lengthFunc);
+			}
 			return evalType;
 		}
 		return uniqueType;
@@ -755,7 +767,7 @@ class Compiler {
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-operator-binary") {
-			if (expr.operator === "and" || expr.operator === "or") {
+			if (expr.operator === TOK_AND || expr.operator === TOK_OR) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
 					return leftType;
@@ -763,7 +775,7 @@ class Compiler {
 				if (leftType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(leftType, "boolean").fromExpr(expr.left);
 				}
-				let skipLoc = expr.operator === "and" ? this.codeBlock.codeJz(0) : this.codeBlock.codeJnz(0);
+				let skipLoc = expr.operator === TOK_AND ? this.codeBlock.codeJz(0) : this.codeBlock.codeJnz(0);
 				let rightType = this.eval(expr.right);
 				if (rightType.isError()) {
 					return rightType;
@@ -773,34 +785,38 @@ class Compiler {
 				}
 				let endLoc = this.codeBlock.codeJmp(0);
 				this.codeBlock.setLoc(skipLoc);
-				this.codeBlock.codePush(expr.operator === "and" ? 0 : 1);
+				this.codeBlock.codePush(expr.operator === TOK_AND ? 0 : 1);
 				this.codeBlock.setLoc(endLoc);
 				return EVAL_TYPE_BOOLEAN;
 			}
-			if (expr.operator === "||") {
+			if (expr.operator === TOK_CONCAT) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
 					return leftType;
 				}
-				if (leftType !== EVAL_TYPE_TEXT) {
-					return EvalError.wrongType(leftType, "text").fromExpr(expr.left);
+				if (leftType !== EVAL_TYPE_TEXT && leftType.tag !== "res-type-array") {
+					return EvalError.wrongType(leftType, "text or array").fromExpr(expr.left);
 				}
 				let rightType = this.eval(expr.right);
 				if (rightType.isError()) {
 					return rightType;
 				}
-				if (rightType !== EVAL_TYPE_TEXT) {
-					return EvalError.wrongType(rightType, "text").fromExpr(expr.right);
+				if (rightType.typeKey() !== leftType.typeKey()) {
+					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
 				this.codeBlock.codePush(2);
-				this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
-				return EVAL_TYPE_TEXT;
+				if (leftType === EVAL_TYPE_TEXT) {
+					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
+				} else {
+					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
+				}
+				return leftType;
 			}
 			if (
-				expr.operator === "+" || expr.operator === "-" ||
-				expr.operator === "/" || expr.operator === "*" ||
-				expr.operator === ">" || expr.operator === "<" ||
-				expr.operator === ">=" || expr.operator === "<="
+				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
+				expr.operator === TOK_DIV || expr.operator === TOK_MUL ||
+				expr.operator === TOK_GT || expr.operator === TOK_LT ||
+				expr.operator === TOK_GTE || expr.operator === TOK_LTE
 			) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
@@ -816,32 +832,32 @@ class Compiler {
 				if (rightType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(rightType, "integer").fromExpr(expr.right);
 				}
-				if (expr.operator === "+") {
+				if (expr.operator === TOK_ADD) {
 					this.codeBlock.codeAdd();
-				} else if (expr.operator === "-") {
+				} else if (expr.operator === TOK_SUB) {
 					this.codeBlock.codeSub();
-				} else if (expr.operator === "/") {
+				} else if (expr.operator === TOK_DIV) {
 					this.codeBlock.codeDiv();
-				} else if (expr.operator === "*") {
+				} else if (expr.operator === TOK_MUL) {
 					this.codeBlock.codeMul();
-				} else if (expr.operator === ">") {
+				} else if (expr.operator === TOK_GT) {
 					this.codeBlock.codeGt();
-				} else if (expr.operator === "<") {
+				} else if (expr.operator === TOK_LT) {
 					this.codeBlock.codeLt();
-				} else if (expr.operator === ">=") {
+				} else if (expr.operator === TOK_GTE) {
 					this.codeBlock.codeGte();
 				} else {
 					this.codeBlock.codeLte();
 				}
 				if (
-					expr.operator === "+" || expr.operator === "-" ||
-					expr.operator === "/" || expr.operator === "*"
+					expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
+					expr.operator === TOK_DIV || expr.operator === TOK_MUL
 				) {
 					return EVAL_TYPE_INTEGER;
 				}
 				return EVAL_TYPE_BOOLEAN;
 			}
-			if (expr.operator === "=" || expr.operator === "<>") {
+			if (expr.operator === TOK_EQ || expr.operator === TOK_NE) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
 					return leftType;
@@ -855,13 +871,13 @@ class Compiler {
 				}
 				if (rightType.isRef) {
 					this.codeBlock.codeEqRef();
-					if (expr.operator === "<>") {
+					if (expr.operator === TOK_NE) {
 						this.codeBlock.codeNot();
 					}
 				} else if (rightType.isRef) {
-					return EvalError.wrongType(rightType, "comparabe type").fromExpr(expr.right);
+					return EvalError.wrongType(rightType, "comparable type").fromExpr(expr.right);
 				} else {
-					if (expr.operator === "=") {
+					if (expr.operator === TOK_EQ) {
 						this.codeBlock.codeEq();
 					} else {
 						this.codeBlock.codeNe();
@@ -876,40 +892,19 @@ class Compiler {
 			if (operandType.isError()) {
 				return operand;
 			}
-			if (expr.operator === "not") {
+			if (expr.operator === TOK_NOT) {
 				if (operandType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(operandType, "boolean").fromExpr(expr.operand);
 				}
 				this.codeBlock.codeNot();
 				return EVAL_TYPE_BOOLEAN;
 			}
-			if (expr.operator === "-") {
+			if (expr.operator === TOK_SUB) {
 				if (operandType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(operandType, "integer").fromExpr(expr.operand);
 				}
 				this.codeBlock.codeNeg();
 				return EVAL_TYPE_INTEGER;
-			}
-			if (expr.operator === "length") {
-				if (!operandType.isRef) {
-					return EvalError.wrongType(operandType, "reference type").fromExpr(expr.operand);
-				}
-				this.codeBlock.codeLength();
-				return EVAL_TYPE_INTEGER;
-			}
-			if (expr.operator === "next") {
-				if (operandType.tag !== "res-type-sequence") {
-					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
-				}
-				this.codeBlock.codeNext();
-				return operandType.underlyingType;
-			}
-			if (expr.operator === "ended") {
-				if (operandType.tag !== "res-type-sequence") {
-					return EvalError.wrongType(operandType, "sequence").fromExpr(expr.operand);
-				}
-				this.codeBlock.codeEnded();
-				return EVAL_TYPE_BOOLEAN;
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
 		}
@@ -988,9 +983,18 @@ class Compiler {
 			if (indexType !== EVAL_TYPE_INTEGER) {
 				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
 			}
-			// push the result on the stack
-			this.codeBlock.codePushPtrOffset();
-			return indexedType.underlyingType;
+			if (expr.indexTo === null) {
+				// push the result on the stack
+				this.codeBlock.codePushPtrOffset();
+				return indexedType.underlyingType;
+			}
+			// indexTo is not null, we have a range index
+			let indexToType = this.eval(expr.indexTo);
+			if (indexToType.isError()) {
+				return indexToType;
+			}
+			this.codeBlock.codeSubobject();
+			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {
 			let recordType = this.eval(expr.expr);
