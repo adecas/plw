@@ -28,18 +28,26 @@ class CountedRefObject extends CountedRef {
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 	}
+	
+	isOffsetRef(offset) {
+		return offset < this.refSize;
+	}
 }
 
 class CountedRefFrame extends CountedRef {
-	constructor(totalSize) {
+	constructor(totalSize, ptr, mapPtr) {
 		super("ref-frame");
 		this.totalSize = totalSize;
-		this.ptr = [];
-		this.mapPtr = [];
-		for (let i = 0; i < this.totalSize; i++) {
+		this.ptr = ptr;
+		this.mapPtr = mapPtr;
+	}
+	
+	resizeFrame(newSize) {
+		for (let i = this.totalSize; i < newSize; i++) {
 			this.ptr[i] = 0;
 			this.mapPtr[i] = false;
-		}		
+		}
+		this.totalSize = newSize;
 	}
 }
 
@@ -50,13 +58,58 @@ class CountedRefString extends CountedRef {
 	}
 }
 
+class RefManagerError {
+	constructor() {
+		this.refId = -1;
+		this.errorMsg = null;
+	}
+	
+	invalidRefId(refId) {
+		this.refId = refId;
+		this.errorMsg = "invalid refId";
+	}
+	
+	invalidRefType(refId) {
+		this.refId = refId;
+		this.errorMsg = "invalid ref type";
+	}
+	
+	hasError() {
+		return this.errorMsg !== null;
+	}
+}
+
 class RefManager {
 
 	constructor() {
-		this.refs = [ null ];
-		this.refCount = 1;
+		this.refs = [];
+		this.refCount = 0;
 		this.freeRefIds = [];
 		this.freeRefIdCount = 0;
+	}
+	
+	isValidRefId(refId) {
+		return refId >= 0 && refId < this.refCount && this.refs[refId] !== null;
+	}
+	
+	getRef(refId, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return null;	
+		}
+		return this.refs[refId];
+	}
+	
+	getRefOfType(refId, refType, refManError) {
+		let ref = this.getRef(refId, refManError);
+		if (refManError.hasError()) {
+			return null;
+		}
+		if (ref.tag !== refType) {
+			refManError.invalidRefType(refId);
+			return null;
+		}
+		return ref;
 	}
 	
 	createRefId() {
@@ -71,67 +124,28 @@ class RefManager {
 		return refId;
 	}
 	
+	addRef(ref) {
+		let refId = this.createRefId();
+		this.refs[refId] = ref;
+		return refId;
+	}
+	
 	createString(str) {
-		let refId = this.createRefId();
-		this.refs[refId] = new CountedRefString(str);
-		return refId;
+		return this.addRef(new CountedRefString(str));
 	}
 	
-	stringStr(refId) {
-		return this.refs[refId].str;
+	createObject(refSize, totalSize, ptr) {
+		return this.addRef(new CountedRefObject(refSize, totalSize, ptr));
 	}
 	
-	createObjectWithPtr(refSize, totalSize, ptr) {
-		let refId = this.createRefId();
-		this.refs[refId] = new CountedRefObject(refSize, totalSize, ptr);
-		return refId;
-	}
-	
-	createObject(refSize, totalSize) {
-		let ptr = [];
-		for (let i = 0; i < this.totalSize; i++) {
-			this.ptr[i] = 0;
-		}
-		return this.createObjectWithPtr(refSize, totalSize, ptr);
-	}
-	
-	createObjectFromConcat(refId1, refId2) {
-		if (refId1 <= 0 || refId1 > this.refCount || refId2 <= 0 || refId2 > this.refCount) {
-			return 0;
-		}
-		let ref1 = this.refs[refId1];
-		let ref2 = this.refs[refId2];
-		if (ref1 === null || ref1.tag !== "ref-object" || ref2 === null || ref2.tag !== "ref-object") {
-			return 0;
-		}
-		let totalSize = ref1.totalSize + ref2.totalSize;
-		let refSize = ref1.refSize + ref2.refSize;
-		let ptr = [];
-		for (let i = 0; i < ref1.refSize; i++) {
-			ptr[i] = ref1.ptr[i];
-		}
-		for (let i = 0; i < ref2.refSize; i++) {
-			ptr[ref1.refSize + i] = ref2.ptr[i];
-		}
-		for (let i = 0; i < ref1.totalSize - ref1.refSize; i++) {
-			ptr[refSize + i] = ref1.ptr[ref1.refSize + i];
-		}
-		for (let i = 0; i < ref2.totalSize - ref2.refSize; i++) {
-			ptr[refSize + ref1.totalSize - ref1.refSize + i] = ref2.ptr[ref2.refSize + i];
-		}
-		for (let i = 0; i < refSize; i++) {
-			this.incRefCount(ptr[i]);
-		}
-		return this.createObjectWithPtr(refSize, totalSize, ptr);
-	}
-	
-	createObjectFromSubObject(refId, beginIndex, endIndex) {
-		if (refId <= 0 || refId > this.refCount) {
-			return 0;
-		}
-		let ref = this.refs[refId];
-		if (ref === null || ref.tag !== "ref-object") {
-			return 0;
+	createFrame(totalSize, ptr, mapPtr) {
+		return this.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
+	}		
+		
+	createObjectFromSubObject(refId, beginIndex, endIndex, refManError) {
+		let ref = this.getRefOfType(refId, "ref-object", refManError);
+		if (refManError.hasError()) {
+			return -1;
 		}
 		if (beginIndex < 0) {
 			beginIndex = 0;
@@ -154,50 +168,32 @@ class RefManager {
 			ptr[i] = ref.ptr[beginIndex + i];
 		}
 		for (let i = 0; i < refSize; i++) {
-			this.incRefCount(ptr[i]);
+			this.incRefCount(ptr[i], refManError);
+			if (refManError.hasError()) {
+				return -1;
+			}
 		}
-		return this.createObjectWithPtr(refSize, totalSize, ptr);
+		return this.createObject(refSize, totalSize, ptr);
 	}
 	
-	createFrame(totalSize) {
-		let refId = this.createRefId();
-		this.refs[refId] = new CountedRefFrame(totalSize);
-		return refId;
-	}		
-	
-	resizeObject(refId, newSize) {
-		let ref = this.refs[refId];
-		if (newSize < ref.refSize) {
-			newSize = ref.refSize;
-		}
-		for (let i = ref.totalSize; i < newSize; i++) {
-			ref.ptr[i] = 0;
-		}
-		ref.totalSize = newSize;
-	}
-	
-	resizeFrame(refId, newSize) {
-		let ref = this.refs[refId];
-		for (let i = ref.totalSize; i < newSize; i++) {
-			ref.ptr[i] = 0;
-			ref.mapPtr[i] = false;
-		}
-		ref.totalSize = newSize;
-	}
-	
-	destroyObject(ref) {
+		
+	destroyObject(ref, refManError) {
 		for (let i = 0; i < ref.refSize; i++) {
-			if (ref.ptr[i] !== 0) {
-				this.decRefCount(ref.ptr[i]);
+			this.decRefCount(ref.ptr[i], refManError);
+			if (refManError.hasError()) {
+				return;
 			}
 		}
 		ref.ptr = null
 	}
 	
-	destroyFrame(ref) {
+	destroyFrame(ref, refManError) {
 		for (let i = ref.totalSize - 1; i >= 0; i--) {
 			if (ref.mapPtr[i] === true) {
-				this.decRefCount(ref.ptr[i]);
+				this.decRefCount(ref.ptr[i], refManError);
+				if (refManError.hasError()) {
+					return;
+				}
 			}
 		}
 		ref.ptr = null;
@@ -207,59 +203,52 @@ class RefManager {
 		ref.str = null;
 	}
 	
-	destroyRef(ref) {
+	destroyRef(ref, refManError) {
 		if (ref.tag === "ref-object") { 
-			this.destroyObject(ref);
+			this.destroyObject(ref, refManError);
 		} else if (ref.tag === "ref-frame") {
-			this.destroyFrame(ref);
+			this.destroyFrame(ref, refManError);
 		} else if (ref.tag === "ref-string") {
 			this.destroyString(ref);
 		}
 	}
 	
-	incRefCount(refId) {
+	incRefCount(refId, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return;	
+		}
 		this.refs[refId].refCount++;
 	}
 	
-	decRefCount(refId) {
-		let ref = this.refs[refId];
-		if (ref === null) {
-			console.log("illegal decRefCount on refId " + refId);
+	decRefCount(refId, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return;	
 		}
+		let ref = this.refs[refId];
 		ref.refCount--;
 		if (ref.refCount === 0) {
-			this.destroyRef(ref);
+			this.destroyRef(ref, refManError);
+			if (refManError.hasError()) {
+				return;
+			}
 			this.refs[refId] = null;
 			this.freeRefIds[this.freeRefIdCount] = refId;
 			this.freeRefIdCount++;
 		}
+		return;
 	}
 	
-	objectSize(refId) {
-		return this.refs[refId].totalSize;
-	}
-	
-	objectIsOffsetRef(refId, offset) {
-		return offset < this.refs[refId].refSize;
-	}
-	
-	frameSize(refId) {
-		return this.refs[refId].totalSize;
-	}
-
-	objectPtr(refId) {
-		return this.refs[refId].ptr;
-	}
-	
-	framePtr(refId) {
-		return this.refs[refId].ptr;
-	}
-	
-	frameMapPtr(refId) {
-		return this.refs[refId].mapPtr;
-	}
-	
-	compareRefs(refId1, refId2) {
+	compareRefs(refId1, refId2, refManError) {
+		if (!this.isValidRefId(refId1)) {
+			refManError.invalidRefId(refId1);
+			return false;
+		}
+		if (!this.isValidRefId(refId2)) {
+			refManError.invalidRefId(refId2);
+			return false;
+		}
 		if (refId1 === refId2) {
 			return true;
 		}
@@ -277,7 +266,10 @@ class RefManager {
 			}
 			for (let i = 0; i < ref1.totalSize; i++) {
 				if (i < ref1.refSize) {
-					if (!this.compareObjects(ref1.ptr[i], ref2.ptr[i])) {
+					if (!this.compareRefs(ref1.ptr[i], ref2.ptr[i], refManError)) {
+						return false;
+					}
+					if (refManError.hasError()) {
 						return false;
 					}
 				} else {
@@ -291,13 +283,5 @@ class RefManager {
 		return false;
 	}
 	
-	copyObject(srcIndex, srcOffset, srcLength, dstIndex, dstOffset) {
-		let dstPtr = this.objectPtr(dstIndex);
-		let srcPtr = this.objectPtr(srcIndex);
-		for(let i = 0; i < srcLength; i++) {
-			dstPtr[dstOffset + i] = srcPtr[srcOffset + i];
-		}
-	}
-
 }
 

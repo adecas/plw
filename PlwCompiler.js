@@ -90,7 +90,7 @@ class EvalTypeArray extends EvalResultType {
 	}
 	
 	typeKey() {
-		return (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "[]";
+		return "[" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "]";
 	}
 }
 
@@ -394,10 +394,6 @@ class CodeBlock {
 	
 	codePopLocal(offset) {
 		this.code2("pop_local", offset);
-	}
-	
-	codePopPtr(offset) {
-		this.code2("pop_ptr", offset);
 	}
 	
 	codePopPtrOffset() {

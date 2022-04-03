@@ -68,7 +68,7 @@ function onExecClick(isDebug) {
 					printDebugText("=== StackMaching ========================");
 					printDebugObject(stackMachine);
 				}
-				printTextOut(smRet);
+				printTextOut(smRet === null ? "ok" : JSON.stringify(smRet));
 			}
 		}
 	} catch (error) {
@@ -98,12 +98,12 @@ function onEvalClick() {
 			// printTextOutObject(compiler.codeBlock);
 			if (!result.isError()) {
 				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-				if (smRet === "ok") {
+				if (smRet === null) {
 					if (result.tag !== "res-ok") {
 						printTextOutObject(stackMachine.popResult());
 					}
 				} else {
-					printTextOut(smRet);
+					printTextOutObject(smRet);
 				}
 				// printTextOutObject(stackMachine);
 			}
