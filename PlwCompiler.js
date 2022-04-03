@@ -1,4 +1,3 @@
-
 /******************************************************************************************************************************************
 
 	Compiler
@@ -380,10 +379,6 @@ class CodeBlock {
 		this.code2("create_object", itemCount);
 	}
 	
-	codeSubobject() {
-		this.code1("subobject");
-	}
-
 	codeCreateString(strId) {
 		this.code2("create_string", strId);
 	}
@@ -989,7 +984,8 @@ class Compiler {
 			if (indexToType.isError()) {
 				return indexToType;
 			}
-			this.codeBlock.codeSubobject();
+			this.codeBlock.codePush(3);
+			this.codeBlock.codeCallNative(this.context.getFunction("subarray(ref,integer,integer)").nativeIndex);
 			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {

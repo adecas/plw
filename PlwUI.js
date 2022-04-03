@@ -154,4 +154,7 @@ function onSnippetChange() {
 	}
 	snip = snip.substring(0, snip.length - 6);
 	document.getElementById("textin").value = document.getElementById(snip).innerText;
+	onResetContextClick();
+	onClearMessageClick();
+	onExecClick(false);
 }

@@ -142,41 +142,6 @@ class RefManager {
 		return this.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
 	}		
 		
-	createObjectFromSubObject(refId, beginIndex, endIndex, refManError) {
-		let ref = this.getRefOfType(refId, "ref-object", refManError);
-		if (refManError.hasError()) {
-			return -1;
-		}
-		if (beginIndex < 0) {
-			beginIndex = 0;
-		}
-		if (endIndex > ref.totalSize) {
-			endIndex = ref.totalSize;
-		}
-		let totalSize = endIndex - beginIndex;
-		if (totalSize < 0) {
-			totalSize = 0;
-		}
-		let refSize = ref.refSize - beginIndex;
-		if (refSize < 0) {
-			refSize = 0;
-		} else if (refSize > totalSize) {
-			refSize = totalSize;
-		}
-		let ptr = [];
-		for (let i = 0; i < totalSize; i++) {
-			ptr[i] = ref.ptr[beginIndex + i];
-		}
-		for (let i = 0; i < refSize; i++) {
-			this.incRefCount(ptr[i], refManError);
-			if (refManError.hasError()) {
-				return -1;
-			}
-		}
-		return this.createObject(refSize, totalSize, ptr);
-	}
-	
-		
 	destroyObject(ref, refManError) {
 		for (let i = 0; i < ref.refSize; i++) {
 			this.decRefCount(ref.ptr[i], refManError);

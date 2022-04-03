@@ -82,6 +82,11 @@ class StackMachineError {
 		this.errorMsg = "unknown op";
 		return this;
 	}
+	
+	nativeArgCountMismatch() {
+		this.errorMsg = "wrong number of arguments provided to a native call";
+		return this;
+	}
 }
 
 class StackMachine {
@@ -422,23 +427,6 @@ class StackMachine {
 					return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
 				}
 				this.stack[this.sp - 1] = ended;
-			} else if (code === "subobject") {
-				if (this.sp < 3) {
-					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
-				}
-				let refId = this.stack[this.sp - 3];
-				let beginIndex = this.stack[this.sp - 2];
-				let endIndex = this.stack[this.sp - 1];
-				let newRefId = this.refMan.createObjectFromSubObject(refId, beginIndex, endIndex, refManError);
-				if (refManError.hasError()) {
-					return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
-				}
-				this.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
-				}
-				this.stack[this.sp - 3] = newRefId;
-				this.sp -= 2;
 			} else {
 				//
 				// 1 operand (in arg1)
@@ -588,6 +576,13 @@ class StackMachine {
 				} else if (code === "call_native") {
 					if (arg1 < 0 || arg1 >= natives.length) {
 						return smError.codeAccessOutOfBound().fromCode(currentCodeBlockId, i);
+					}
+					if (this.sp < 1) {
+						return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+					}
+					let argCount = this.stack[this.sp - 1];
+					if (this.sp < 1 + argCount) {
+						return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 					}
 					let result = natives[arg1](this);
 					if (result !== null) {
