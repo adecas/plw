@@ -272,6 +272,49 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+
+
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"subtext",
+			new EvalResultParameterList(3, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT),
+				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
+				new EvalResultParameter("endIndex", EVAL_TYPE_INTEGER),
+			]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 3) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				let refManError = new RefManagerError();
+				let refId = sm.stack[sm.sp - 4];
+				let beginIndex = sm.stack[sm.sp - 3];
+				let endIndex = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, "ref-string", refManError);
+				if (refManError.hasError()) {
+					return new StackMachineError().referenceManagerError(refManError);
+				}
+				if (beginIndex < 0) {
+					beginIndex = 0;
+				}
+				if (endIndex > ref.str.length) {
+					endIndex = ref.str.length;
+				}
+				let size = endIndex - beginIndex;
+				if (size < 0) {
+					size = 0;
+				}
+				let resultRefId = sm.refMan.createString(size === 0 ? "" : ref.str.substr(beginIndex, size));
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return new StackMachineError().referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 4] = resultRefId;
+				sm.stackMap[sm.sp - 4] = true;
+				sm.sp -= 3;
+				return null;
+			})
+		));	
 		
 		
 		

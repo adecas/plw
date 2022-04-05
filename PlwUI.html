@@ -61,6 +61,8 @@ print('b = ' || text(b) || ', expected false');
 var t text := 'Hello' || ' ';
 t := t || 'World';
 print('t = ' || t || ', expected Hello World');
+t := subtext(t, 3, 8);
+print('t = ' || t || ', expected lo Wo');
 </pre>
 
 <p id="snippet-flow-control-title" class="snippet">Flow Control</p>
