@@ -411,6 +411,10 @@ class CodeBlock {
 		this.code1("div");
 	}
 
+	codeRem() {
+		this.code1("rem");
+	}
+
 	codeMul() {
 		this.code1("mul");
 	}
@@ -805,7 +809,7 @@ class Compiler {
 			}
 			if (
 				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
-				expr.operator === TOK_DIV || expr.operator === TOK_MUL ||
+				expr.operator === TOK_DIV || expr.operator === TOK_MUL || expr.operator === TOK_REM ||
 				expr.operator === TOK_GT || expr.operator === TOK_LT ||
 				expr.operator === TOK_GTE || expr.operator === TOK_LTE
 			) {
@@ -829,6 +833,8 @@ class Compiler {
 					this.codeBlock.codeSub();
 				} else if (expr.operator === TOK_DIV) {
 					this.codeBlock.codeDiv();
+				} else if (expr.operator === TOK_REM) {
+					this.codeBlock.codeRem();
 				} else if (expr.operator === TOK_MUL) {
 					this.codeBlock.codeMul();
 				} else if (expr.operator === TOK_GT) {
@@ -842,7 +848,7 @@ class Compiler {
 				}
 				if (
 					expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
-					expr.operator === TOK_DIV || expr.operator === TOK_MUL
+					expr.operator === TOK_DIV || expr.operator === TOK_MUL || expr.operator === TOK_REM
 				) {
 					return EVAL_TYPE_INTEGER;
 				}

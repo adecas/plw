@@ -137,6 +137,16 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] = Math.trunc(this.stack[this.sp - 2] / divisor);
 				this.sp--;
+			} else if (code === "rem") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				let divisor = this.stack[this.sp - 1];
+				if (divisor === 0) {
+					return smError.divByZero().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = this.stack[this.sp - 2] % divisor;
+				this.sp--;
 			} else if (code === "mul") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);

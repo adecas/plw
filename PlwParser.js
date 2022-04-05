@@ -195,7 +195,7 @@ class Parser {
 			return left;
 		}
 			
-		while (this.peekToken() === TOK_MUL || this.peekToken() === TOK_DIV) {
+		while (this.peekToken() === TOK_MUL || this.peekToken() === TOK_DIV || this.peekToken() === TOK_REM) {
 			let operator = this.readToken();
 			
 			let right = this.readExpr1();

@@ -41,6 +41,7 @@ const TOK_FALSE = "tok-false";
 const TOK_ADD = "tok-add";
 const TOK_SUB = "tok-sub";
 const TOK_DIV = "tok-div";
+const TOK_REM = "tok-rem";
 const TOK_MUL = "tok-mul";
 const TOK_LT = "tok-lt";
 const TOK_GT = "tok-gt";
@@ -327,6 +328,9 @@ class TokenReader {
 		}
 		if (c === "/") {
 			return new Token(TOK_DIV, "/", line, col);
+		}
+		if (c === "%") {
+			return new Token(TOK_REM, "%", line, col);
 		}
 		if (c === "*") {
 			return new Token(TOK_MUL, "*", line, col);

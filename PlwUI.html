@@ -28,6 +28,8 @@
 var i integer := 2 + 3 * 4;
 i := i / 2;
 print('i = ' || text(i) || ', expected 7');
+i := 8 % 3;
+print('i = ' || text(i) || ', expected 2');
 i := (2 + 3) * 4;
 print('i = ' || text(i) || ', expected 20');
 var b boolean := true or true and false;
@@ -171,7 +173,7 @@ print('expected: 6');
 var primes_count integer := 100;
 function isprime(n integer) boolean begin
   for i in 2 .. n - 1 loop
-    if n / i * i = n then
+    if n % i = 0 then
       return false;
     end if;
   end loop;
