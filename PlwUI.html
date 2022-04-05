@@ -61,7 +61,7 @@ print('b = ' || text(b) || ', expected false');
 var t text := 'Hello' || ' ';
 t := t || 'World';
 print('t = ' || t || ', expected Hello World');
-t := subtext(t, 3, 8);
+t := subtext(t, 3, 5);
 print('t = ' || t || ', expected lo Wo');
 </pre>
 
@@ -112,7 +112,7 @@ var a [integer] := [integer := 11, 22, 33, 44, 55];
 var b integer := a[1];
 var c [integer] := a[2..4];
 var d [integer] := c || [integer := 66, 77];
-if b = 22 and c = [integer := 33, 44] and d = [integer := 33, 44, 66, 77] then
+if b = 22 and c = [integer := 33, 44, 55] and d = [integer := 33, 44, 55, 66, 77] then
   print('Good');
 else
   print('Error: alternate reality');
@@ -120,12 +120,12 @@ end if;
 var aa [[integer]] := [[integer] := [integer := 11, 12], [integer := 22, 23],
   [integer := 33, 34], [integer := 44], [integer := 55, 56, 57]];
 var bb [integer] := aa[1];
-var cc [[integer]] := aa[2..4];
+var cc [[integer]] := aa[1..2];
 var dd [[integer]] := cc || [[integer] := [integer := 66, 67, 68], [integer :=]];
 if
   bb = [integer := 22, 23] and
-  cc = [[integer] := [integer := 33, 34], [integer := 44]] and
-  dd = [[integer] := [integer := 33, 34], [integer := 44], [integer := 66, 67, 68], [integer :=]]
+  cc = [[integer] := [integer := 22, 23], [integer := 33, 34]] and
+  dd = [[integer] := [integer := 22, 23], [integer := 33, 34], [integer := 66, 67, 68], [integer :=]]
 then
   print('Good');
 else
@@ -133,7 +133,7 @@ else
 end if;
 var at [text] := [text := '11', '22', '33', '44', '55'];
 var bt text := at[1];
-var ct [text] := at[2..4];
+var ct [text] := at[2..3];
 var dt [text] := ct || [text := '66', '77'];
 if bt = '22' and ct = [text := '33', '44'] and dt = [text := '33', '44', '66', '77'] then
   print('Good');
@@ -231,6 +231,29 @@ function bubble_sort(nums [integer]) [integer] begin
   return nums;
 end bubble_sort;
 print(text(bubble_sort([integer := 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
+</pre>
+
+<p id="snippet-html-escape-title" class="snippet">Html Escape</p>
+<pre id="snippet-html-escape">
+function html_escape(t text) text begin
+  var esc := '';
+  for i in 0..length(t) - 1 loop
+    var c := subtext(t, i, 1);
+    if c = '&gt;' then
+      esc := esc || '&amp;gt;';
+    elsif c = '&lt;' then
+      esc := esc || '&amp;lt';
+    elsif c = '&amp;' then
+      esc := esc || '&amp;amp;';
+    elsif c = '&quot;' then
+      esc := esc || '&amp;quot;';
+    else
+      esc := esc || c;
+    end if; 
+  end loop;
+  return esc;
+end html_escape;
+print(html_escape('in C bitwise op is & and shift is << or >> (ex: "(a & 0xFF00) >> 8")'));  
 </pre>
 
 <p id="snippet-records-title" class="snippet">Records</p>

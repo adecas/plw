@@ -133,7 +133,7 @@ class NativeFunctionManager {
 				}
 				let refId = sm.stack[sm.sp - 2];
 				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, "ref-object", refManError);
+				let ref = sm.refMan.getRefOfType(refId, "ref-string", refManError);
 				if (refManError.hasError()) {
 					return new StackMachineError().referenceManagerError(refManError);
 				}
@@ -279,7 +279,7 @@ class NativeFunctionManager {
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
 				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
-				new EvalResultParameter("endIndex", EVAL_TYPE_INTEGER),
+				new EvalResultParameter("length", EVAL_TYPE_INTEGER),
 			]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
@@ -289,22 +289,21 @@ class NativeFunctionManager {
 				let refManError = new RefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
-				let endIndex = sm.stack[sm.sp - 2];
+				let length = sm.stack[sm.sp - 2];
 				let ref = sm.refMan.getRefOfType(refId, "ref-string", refManError);
 				if (refManError.hasError()) {
 					return new StackMachineError().referenceManagerError(refManError);
 				}
 				if (beginIndex < 0) {
-					beginIndex = 0;
+					return new StackMachineError().refAccessOutOfBound();
 				}
-				if (endIndex > ref.str.length) {
-					endIndex = ref.str.length;
+				if (length < 0) {
+					length = 0;
 				}
-				let size = endIndex - beginIndex;
-				if (size < 0) {
-					size = 0;
+				if (beginIndex + length > ref.str.length) {
+					return new StackMachineError().refAccessOutOfBound();
 				}
-				let resultRefId = sm.refMan.createString(size === 0 ? "" : ref.str.substr(beginIndex, size));
+				let resultRefId = sm.refMan.createString(length === 0 ? "" : ref.str.substr(beginIndex, length));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return new StackMachineError().referenceManagerError(refManError);
@@ -319,7 +318,7 @@ class NativeFunctionManager {
 		
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"subarray",
+			"slice_array",
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("array", EVAL_TYPE_REF),
 				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
@@ -339,12 +338,12 @@ class NativeFunctionManager {
 					return new StackMachineError().referenceManagerError(refManError);
 				}
 				if (beginIndex < 0) {
-					beginIndex = 0;
+					return new StackMachineError().refAccessOutOfBound();
 				}
-				if (endIndex > ref.totalSize) {
-					endIndex = ref.totalSize;
+				if (endIndex >= ref.totalSize) {
+					return new StackMachineError().refAccessOutOfBound();
 				}
-				let totalSize = endIndex - beginIndex;
+				let totalSize = endIndex - beginIndex + 1;
 				if (totalSize < 0) {
 					totalSize = 0;
 				}

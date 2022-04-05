@@ -985,7 +985,7 @@ class Compiler {
 				return indexToType;
 			}
 			this.codeBlock.codePush(3);
-			this.codeBlock.codeCallNative(this.context.getFunction("subarray(ref,integer,integer)").nativeIndex);
+			this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
 			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {
