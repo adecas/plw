@@ -121,7 +121,19 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] += this.stack[this.sp - 1];
 				this.sp--;
+			} else if (code === "addf") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] += this.stack[this.sp - 1];
+				this.sp--;
 			} else if (code === "sub") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] -= this.stack[this.sp - 1];
+				this.sp--;
+			} else if (code === "subf") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
@@ -136,6 +148,12 @@ class StackMachine {
 					return smError.divByZero().fromCode(currentCodeBlockId, i);
 				}
 				this.stack[this.sp - 2] = Math.trunc(this.stack[this.sp - 2] / divisor);
+				this.sp--;
+			} else if (code === "divf") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] /= this.stack[this.sp - 1];
 				this.sp--;
 			} else if (code === "rem") {
 				if (this.sp < 2) {
@@ -153,12 +171,29 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] *= this.stack[this.sp - 1];
 				this.sp--;
+			} else if (code === "mulf") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] *= this.stack[this.sp - 1];
+				this.sp--;
 			} else if (code === "neg") {
 				if (this.sp < 1) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
 				this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
+			} else if (code === "negf") {
+				if (this.sp < 1) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
 			} else if (code === "gt") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "gtf") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
@@ -170,13 +205,31 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
 				this.sp--;
+			} else if (code === "ltf") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
 			} else if (code === "gte") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
 				this.sp--;
+			} else if (code === "gtef") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
 			} else if (code === "lte") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "ltef") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
@@ -205,6 +258,12 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
 				this.sp--;
+			} else if (code === "eqf") {
+				if (this.sp < 1) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
 			} else if (code === "eq_ref") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
@@ -223,6 +282,12 @@ class StackMachine {
 				this.stack[this.sp - 2] = result ? 1 : 0;
 				this.sp--;
 			} else if (code === "ne") {
+				if (this.sp < 2) {
+					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
+				this.sp--;
+			} else if (code === "nef") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}

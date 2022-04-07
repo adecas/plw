@@ -281,6 +281,10 @@ class Parser {
 			return new AstValueInteger(parseInt(token.text, 10)).fromToken(token);
 		}
 		
+		if (token.tag === TOK_REAL) {
+			return new AstValueReal(parseFloat(token.text)).fromToken(token);
+		}
+
 		if (token.tag === TOK_STRING) {
 			return new AstValueText(token.text).fromToken(token);
 		}

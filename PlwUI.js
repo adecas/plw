@@ -94,21 +94,17 @@ function onEvalClick() {
 			document.getElementById("debug").value += JSON.stringify(expr, null, 2);
 			compiler.resetCode();
 			let result = compiler.eval(expr);
-			// printTextOutObject(result);
-			// printTextOutObject(compiler.codeBlock);
-			if (!result.isError()) {
-				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-				if (smRet === null) {
-					if (result.tag !== "res-ok") {
-						printTextOutObject(stackMachine.popResult());
-					}
-				} else {
-					printTextOutObject(smRet);
-				}
-				// printTextOutObject(stackMachine);
-			}
-			if (result.isError()) {
+			if (result.isError()) {			
+				printTextOutObject(result);
 				break;
+			}
+			let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+			if (smRet === null) {
+				if (result.tag !== "res-ok") {
+					printTextOutObject(stackMachine.popResult());
+				}
+			} else {
+				printTextOutObject(smRet);
 			}
 		}
 	} catch (error) {

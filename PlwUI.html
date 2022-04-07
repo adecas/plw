@@ -31,7 +31,8 @@ print('i = ' || text(i) || ', expected 7');
 i := 8 % 3;
 print('i = ' || text(i) || ', expected 2');
 i := (2 + 3) * 4;
-print('i = ' || text(i) || ', expected 20');
+i := 5 - i;
+print('i = ' || text(i) || ', expected -15');
 var b boolean := true or true and false;
 print('b = ' || text(b) || ', expected true');
 b := (true or true) and false;
@@ -65,6 +66,40 @@ t := t || 'World';
 print('t = ' || t || ', expected Hello World');
 t := subtext(t, 3, 5);
 print('t = ' || t || ', expected lo Wo');
+</pre>
+
+<p id="snippet-real-title" class="snippet">Real</p>
+<pre id="snippet-real">
+var i real := 2.2 + 3.3 * 4.4;
+i := i / 2.2;
+print('i = ' || text(i) || ', expected 7.6');
+i := (2.2 + 3.3) * 4.4;
+i := 5.5 - i;
+print('i = ' || text(i) || ', expected -18.7');
+var b boolean := 1.1 = 2.2;
+print('b = ' || text(b) || ', expected false');
+b := 2.2 = 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 1.1 < 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 1.1 > 2.2;
+print('b = ' || text(b) || ', expected false');
+b := 2.2 < 2.2;
+print('b = ' || text(b) || ', expected false');
+b := 2.2 > 2.2;
+print('b = ' || text(b) || ', expected false');
+b := 1.1 <= 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 1.1 >= 2.2;
+print('b = ' || text(b) || ', expected false');
+b := 2.2 <= 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 2.2 >= 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 1.1 <> 2.2;
+print('b = ' || text(b) || ', expected true');
+b := 2.2 <> 2.2;
+print('b = ' || text(b) || ', expected false');
 </pre>
 
 <p id="snippet-flow-control-title" class="snippet">Flow Control</p>

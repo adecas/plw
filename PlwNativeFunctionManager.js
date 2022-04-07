@@ -81,6 +81,22 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"text",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = sm.refMan.createString("" + sm.stack[sm.sp - 2]);
+				sm.stackMap[sm.sp - 2] = true;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
 
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"text",

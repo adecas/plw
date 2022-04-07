@@ -9,6 +9,7 @@
 const TOK_IDENTIFIER = "tok-identifier";
 const TOK_STRING = "tok-string";
 const TOK_INTEGER = "tok-integer";
+const TOK_REAL = "tok-real";
 const TOK_ASSIGN = "tok-assign";
 const TOK_LTE = "tok-lte";
 const TOK_GTE = "tok-gte";
@@ -222,10 +223,11 @@ class TokenReader {
 		return new Token(TOK_IDENTIFIER, token, line, col);
 	}
 	
-	readInteger() {
+	readIntegerOrReal() {
 		let line = this.line;
 		let col = this.col;
 		let beginPos = this.pos;
+		let dotCount = 0;
 		if (this.pos < this.exprStr.length) {
 			let c = this.exprStr.charAt(this.pos);
 			if (TokenReader.isDigitChar(c) || c == "-") {
@@ -233,7 +235,18 @@ class TokenReader {
 				this.col++;
 				while (this.pos < this.exprStr.length) {
 					c = this.exprStr.charAt(this.pos);
-					if (!TokenReader.isDigitChar(c)) {
+					if (c === ".") {
+						if (dotCount === 0) {
+							let nc = this.pos + 1 < this.exprStr.length ? this.exprStr.charAt(this.pos + 1) : null;
+							if (nc !== null && TokenReader.isDigitChar(nc)) {
+								dotCount = 1;
+							} else {
+								break;
+							}
+						} else {
+							break;
+						}
+					} else if (!TokenReader.isDigitChar(c)) {
 						break;
 					}
 					this.pos++;
@@ -242,7 +255,10 @@ class TokenReader {
 			}
 		}
 		this.allowSignedInteger = false;
-		return new Token(TOK_INTEGER, this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+		if (dotCount === 0) {
+			return new Token(TOK_INTEGER, this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
+		}
+		return new Token(TOK_REAL, this.exprStr.substr(beginPos, this.pos - beginPos), line, col);
 	}
 		
 	readToken() {
@@ -254,7 +270,7 @@ class TokenReader {
 		let c = this.exprStr.charAt(this.pos);
 		
 		if (TokenReader.isDigitChar(c)) {
-			return this.readInteger();
+			return this.readIntegerOrReal();
 		}
 
 		if (TokenReader.isAlphaChar(c)) {
@@ -272,7 +288,7 @@ class TokenReader {
 
 		
 		if (this.allowSignedInteger && c === "-" && nc !== null && TokenReader.isDigitChar(nc)) {
-			return this.readInteger();
+			return this.readIntegerOrReal();
 		}
 		
 		this.allowSignedInteger = true;

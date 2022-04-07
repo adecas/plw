@@ -35,6 +35,13 @@ class AstValueInteger extends AstNode {
 	}
 }
 
+class AstValueReal extends AstNode {
+	constructor(realValue) {
+		super("ast-value-real");
+		this.realValue = realValue;
+	}
+}
+
 class AstValueText extends AstNode {
 	constructor(textValue) {
 		super("ast-value-text");

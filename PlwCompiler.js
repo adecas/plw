@@ -324,6 +324,7 @@ class EvalError extends EvalResult {
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
+const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
 const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
 
@@ -337,6 +338,11 @@ class CodeBlock {
 	}
 	
 	addStrConst(str) {
+		for (let i = 0; i < this.strConstSize; i++) {
+			if (this.strConsts[i] === str) {
+				return i;
+			}
+		}
 		let strId = this.strConstSize;
 		this.strConsts[strId] = str;
 		this.strConstSize++;
@@ -447,6 +453,55 @@ class CodeBlock {
 		this.code1("ne");
 	}
 
+	// real
+
+	codeAddf() {
+		this.code1("addf");
+	}
+	
+	codeSubf() {
+		this.code1("subf");
+	}
+
+	codeDivf() {
+		this.code1("divf");
+	}
+
+	codeMulf() {
+		this.code1("mulf");
+	}
+	
+	codeNegf() {
+		this.code1("negf");
+	}
+	
+	codeGtf() {
+		this.code1("gtf");
+	}
+
+	codeGtef() {
+		this.code1("gtef");
+	}
+
+	codeLtf() {
+		this.code1("ltf");
+	}
+
+	codeLtef() {
+		this.code1("ltef");
+	}
+	
+	codeEqf() {
+		this.code1("eqf");
+	}
+	
+	codeNef() {
+		this.code1("nef");
+	}
+	
+	// real
+
+
 	codeAnd() {
 		this.code1("and");
 	}
@@ -523,6 +578,7 @@ class CompilerContext {
 		this.globalScope = new CompilerScope(null, false, false, null);
 		this.types = {
 			"integer": EVAL_TYPE_INTEGER,
+			"real": EVAL_TYPE_REAL,
 			"boolean": EVAL_TYPE_BOOLEAN,
 			"text": EVAL_TYPE_TEXT
 		};
@@ -558,7 +614,6 @@ class CompilerContext {
 		let uniqueType = this.types[evalType.typeKey()];
 		if (uniqueType === undefined) {
 			this.types[evalType.typeKey()] = evalType;
-			// TODO: if array types, we add the related functions
 			if (evalType.tag === "res-type-array") {
 				var lengthFunc = new EvalResultFunction(
 					"length",
@@ -705,6 +760,10 @@ class Compiler {
 			this.codeBlock.codePush(expr.intValue);
 			return EVAL_TYPE_INTEGER;
 		}
+		if (expr.tag === "ast-value-real") {
+			this.codeBlock.codePush(expr.realValue);
+			return EVAL_TYPE_REAL;
+		}
 		if (expr.tag === "ast-value-text") {
 			let strId = this.codeBlock.addStrConst(expr.textValue);
 			this.codeBlock.codeCreateString(strId);
@@ -807,12 +866,7 @@ class Compiler {
 				}
 				return leftType;
 			}
-			if (
-				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
-				expr.operator === TOK_DIV || expr.operator === TOK_MUL || expr.operator === TOK_REM ||
-				expr.operator === TOK_GT || expr.operator === TOK_LT ||
-				expr.operator === TOK_GTE || expr.operator === TOK_LTE
-			) {
+			if (expr.operator === TOK_REM) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
 					return leftType;
@@ -827,30 +881,71 @@ class Compiler {
 				if (rightType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(rightType, "integer").fromExpr(expr.right);
 				}
-				if (expr.operator === TOK_ADD) {
-					this.codeBlock.codeAdd();
-				} else if (expr.operator === TOK_SUB) {
-					this.codeBlock.codeSub();
-				} else if (expr.operator === TOK_DIV) {
-					this.codeBlock.codeDiv();
-				} else if (expr.operator === TOK_REM) {
-					this.codeBlock.codeRem();
-				} else if (expr.operator === TOK_MUL) {
-					this.codeBlock.codeMul();
-				} else if (expr.operator === TOK_GT) {
-					this.codeBlock.codeGt();
-				} else if (expr.operator === TOK_LT) {
-					this.codeBlock.codeLt();
-				} else if (expr.operator === TOK_GTE) {
-					this.codeBlock.codeGte();
+				this.codeBlock.codeRem();
+				return EVAL_TYPE_INTEGER;
+			}
+			if (
+				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
+				expr.operator === TOK_DIV || expr.operator === TOK_MUL ||
+				expr.operator === TOK_GT || expr.operator === TOK_LT ||
+				expr.operator === TOK_GTE || expr.operator === TOK_LTE
+			) {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				if (leftType !== EVAL_TYPE_INTEGER && leftType !== EVAL_TYPE_REAL) {
+					return EvalError.wrongType(leftType, "integer or real").fromExpr(expr.left);
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== leftType) {
+					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
+				}
+				if (leftType === EVAL_TYPE_INTEGER) {
+					if (expr.operator === TOK_ADD) {
+						this.codeBlock.codeAdd();
+					} else if (expr.operator === TOK_SUB) {
+						this.codeBlock.codeSub();
+					} else if (expr.operator === TOK_DIV) {
+						this.codeBlock.codeDiv();
+					} else if (expr.operator === TOK_MUL) {
+						this.codeBlock.codeMul();
+					} else if (expr.operator === TOK_GT) {
+						this.codeBlock.codeGt();
+					} else if (expr.operator === TOK_LT) {
+						this.codeBlock.codeLt();
+					} else if (expr.operator === TOK_GTE) {
+						this.codeBlock.codeGte();
+					} else {
+						this.codeBlock.codeLte();
+					}
 				} else {
-					this.codeBlock.codeLte();
+					if (expr.operator === TOK_ADD) {
+						this.codeBlock.codeAddf();
+					} else if (expr.operator === TOK_SUB) {
+						this.codeBlock.codeSubf();
+					} else if (expr.operator === TOK_DIV) {
+						this.codeBlock.codeDivf();
+					} else if (expr.operator === TOK_MUL) {
+						this.codeBlock.codeMulf();
+					} else if (expr.operator === TOK_GT) {
+						this.codeBlock.codeGtf();
+					} else if (expr.operator === TOK_LT) {
+						this.codeBlock.codeLtf();
+					} else if (expr.operator === TOK_GTE) {
+						this.codeBlock.codeGtef();
+					} else {
+						this.codeBlock.codeLtef();
+					}
 				}
 				if (
 					expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
-					expr.operator === TOK_DIV || expr.operator === TOK_MUL || expr.operator === TOK_REM
+					expr.operator === TOK_DIV || expr.operator === TOK_MUL
 				) {
-					return EVAL_TYPE_INTEGER;
+					return leftType;
 				}
 				return EVAL_TYPE_BOOLEAN;
 			}
@@ -874,10 +969,18 @@ class Compiler {
 				} else if (rightType.isRef) {
 					return EvalError.wrongType(rightType, "comparable type").fromExpr(expr.right);
 				} else {
-					if (expr.operator === TOK_EQ) {
-						this.codeBlock.codeEq();
+					if (leftType === EVAL_TYPE_REAL) {
+						if (expr.operator === TOK_EQ) {
+							this.codeBlock.codeEqf();
+						} else {
+							this.codeBlock.codeNef();
+						}
 					} else {
-						this.codeBlock.codeNe();
+						if (expr.operator === TOK_EQ) {
+							this.codeBlock.codeEq();
+						} else {
+							this.codeBlock.codeNe();
+						}
 					}
 				}
 				return EVAL_TYPE_BOOLEAN;
@@ -897,11 +1000,15 @@ class Compiler {
 				return EVAL_TYPE_BOOLEAN;
 			}
 			if (expr.operator === TOK_SUB) {
-				if (operandType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(operandType, "integer").fromExpr(expr.operand);
+				if (operandType !== EVAL_TYPE_INTEGER && operandType !== EVAL_TYPE_REAL) {
+					return EvalError.wrongType(operandType, "integer or real").fromExpr(expr.operand);
 				}
-				this.codeBlock.codeNeg();
-				return EVAL_TYPE_INTEGER;
+				if (operandType === EVAL_TYPE_INTEGER) {
+					this.codeBlock.codeNeg();
+				} else {
+					this.codeBlock.codeNegf();
+				}
+				return operandType;
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
 		}
