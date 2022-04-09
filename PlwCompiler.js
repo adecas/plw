@@ -312,6 +312,14 @@ class EvalError extends EvalResult {
 		return new EvalError("Unexpected return");
 	}
 	
+	static unexpectedReturnWithValue() {
+		return new EvalError("Unexpected return with value");
+	}
+	
+	static unexpectedReturnWithoutValue() {
+		return new EvalError("Unexpected return without value");
+	}
+
 	static unexpectedYield() {
 		return new EvalError("Unexpected yield");
 	}
@@ -596,6 +604,10 @@ class CompilerContext {
 		this.functions[evalFunc.functionKey()] = evalFunc;
 	}
 	
+	removeFunction(functionKey) {
+		delete this.functions[functionKey];
+	}
+	
 	getProcedure(procedureKey) {
 		let proc = this.procedures[procedureKey];
 		return proc === undefined ? null : proc;
@@ -603,6 +615,10 @@ class CompilerContext {
 	
 	addProcedure(evalProc) {
 		this.procedures[evalProc.procedureKey()] = evalProc;
+	}
+	
+	removeProcedure(procedureKey) {
+		delete this.procedures[procedureKey];
 	}
 	
 	getType(typeName) {
@@ -1411,9 +1427,12 @@ class Compiler {
 		}
 		if (expr.tag === "ast-return") {
 			// Eval the returned expression
-			let retType = this.eval(expr.expr);
-			if (retType.isError()) {
-				return retType;
+			let retType = null;
+			if (expr.expr !== null) {
+				retType = this.eval(expr.expr);
+				if (retType.isError()) {
+					return retType;
+				}
 			}
 			// Find frame scope
 			let currentScope = this.scope;
@@ -1427,8 +1446,18 @@ class Compiler {
 				return EvalError.unexpectedReturn().fromExpr(expr);
 			}
 			// Check the return type
+			if (retType === null && currentScope.returnType !== null) {
+				return EvalError.unexpectedReturnWithoutValue().fromExpr(expr);
+			}
+			if (retType !== null && currentScope.returnType === null) {
+				return EvalError.unexpectedReturnWithValue().fromExpr(expr);
+			}
 			if (retType !== currentScope.returnType) {
 				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+			}
+			if (retType === null) {
+				this.codeBlock.codeRet();
+				return new EvalResultOk("return");
 			}
 			this.codeBlock.codeRetVal();
 			return new EvalResultReturn(retType);
@@ -1490,11 +1519,13 @@ class Compiler {
 				}
 				let ret = this.eval(expr.statement);
 				if (ret.isError()) {
+					this.context.removeFunction(evalFunc.functionKey());
 					return ret;
 				}
 				if (evalFunc.isGenerator === true) {
 					this.codeBlock.codeYieldDone();
 				} else if (ret.tag !== "res-return") {
+					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
 				}
 				this.scope = this.scope.parent;
@@ -1527,9 +1558,11 @@ class Compiler {
 				}
 				let ret = this.eval(expr.statement);
 				if (ret.isError()) {
+					this.context.removeProcedure(evalProc.procedureKey());
 					return ret;
 				}
 				if (ret.tag !== "res-ok") {
+					this.context.removeProcedure(evalProc.procedureKey());
 					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
 				}
 				this.codeBlock.codeRet();

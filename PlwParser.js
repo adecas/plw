@@ -760,9 +760,12 @@ class Parser {
 		if (retToken.tag !== TOK_RETURN) {
 			return ParserError.unexpectedToken(retToken, [TOK_RETURN]);
 		}
-		let expr = this.readExpression();
-		if (Parser.isError(expr)) {
-			return expr;
+		let expr = null;
+		if (this.peekToken() !== TOK_TERM) {
+			expr = this.readExpression();
+			if (Parser.isError(expr)) {
+				return expr;
+			}
 		}
 		return new AstReturn(expr).fromToken(retToken);
 	}

@@ -179,6 +179,20 @@ else
 end if;
 </pre>
 
+<p id="snippet-basic-procedure-title" class="snippet">Basic Procedure</p>
+<pre id="snippet-basic-procedure">
+procedure say_hello(name text) begin
+  if name = 'HAL' then
+    print('Hello HAL, are you the HAL from 2001 ?');
+    return;
+  end if;
+  print('Hello ' || name || ', nice to meet you');
+end say_hello;
+say_hello('HAL');
+say_hello('Jane Smith');
+</pre>
+
+
 <p id="snippet-basic-function-title" class="snippet">Basic function</p>
 <pre id="snippet-basic-function">
 var toto integer := 42;
