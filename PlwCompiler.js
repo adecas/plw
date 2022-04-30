@@ -1147,7 +1147,7 @@ class Compiler {
 				// evaluate the value
 				let valueType = this.eval(expr.right);
 				if (valueType.isError()) {
-					return value;
+					return valueType;
 				}
 				if (valueType !== variable.varType) {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					

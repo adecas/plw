@@ -284,6 +284,64 @@ end bubble_sort;
 print(text(bubble_sort([integer := 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
+<p id="snippet-standard-deviation-title" class="snippet">Standard Deviation</p>
+<pre id="snippet-standard-deviation">
+function avg(nums [real]) real begin
+  var sum real := 0.0;
+  for i in 0..length(nums)-1 loop
+    sum := sum + nums[i];
+  end loop;
+  return sum / real(length(nums));
+end avg;
+function stddev(nums [real]) real begin
+  var avg := avg(nums);
+  var acc real := 0.0;
+  for i in 0..length(nums)-1 loop
+  	var diff := nums[i] - avg;
+  	acc := acc + diff * diff;
+  end loop;
+  return sqrt(acc / real(length(nums)));
+end stddev;
+print(text(stddev([real := 0.0, 1.11, 10.1, 22.33, -6.7])));
+print(text(stddev([real := 0.0, 1.0])));
+</pre>
+
+<p id="snippet-entropy-title" class="snippet">Entropy</p>
+<pre id="snippet-entropy">
+function occurence_pos(c integer, occurences [{c integer, n integer}]) integer begin
+  for i in 0 .. length(occurences) - 1 loop
+    if occurences[i].c = c then
+      return i;
+    end if;
+  end loop;
+  return -1;
+end occurence_pos;
+function char_occurences(t text) [{c integer, n integer}] begin
+  var occurences := [{c integer, n integer} := ];
+  for i in 0 .. length(t) - 1 loop
+    var c := char_code(t, i);
+    var pos := occurence_pos(c, occurences);
+    if pos = - 1 then
+      occurences := occurences || [:= { c := c, n := 1}];
+    else
+      occurences[pos].n := occurences[pos].n + 1;
+    end if;
+  end loop;
+  return occurences;
+end char_occurences;
+function char_entropy(t text) real begin
+  var occurences := char_occurences(t);
+  var entropy := 0.0;
+  for i in 0 .. length(occurences) - 1 loop
+    var frequency := real(occurences[i].n) / real(length(t));
+    entropy := entropy - frequency * log(frequency) / log(2.0);
+  end loop;
+  return entropy;
+end char_entropy;
+print(text(char_entropy('Hello World')));  
+print(text(char_entropy('abababababababababab')));
+</pre>
+
 <p id="snippet-html-escape-title" class="snippet">Html Escape</p>
 <pre id="snippet-html-escape">
 function html_escape(t text) text begin

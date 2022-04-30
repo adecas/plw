@@ -97,7 +97,6 @@ class NativeFunctionManager {
 			})
 		));
 		
-
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_BOOLEAN)]),
@@ -331,6 +330,33 @@ class NativeFunctionManager {
 			})
 		));	
 		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"char_code",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT),
+				new EvalResultParameter("i", EVAL_TYPE_INTEGER)
+			]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				let refManError = new RefManagerError();
+				let refId = sm.stack[sm.sp - 3];
+				let index = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, "ref-string", refManError);
+				if (refManError.hasError()) {
+					return new StackMachineError().referenceManagerError(refManError);
+				}
+				if (index < 0 || index >= ref.str.length) {
+					return new StackMachineError().refAccessOutOfBound();
+				}
+				sm.stack[sm.sp - 3] = ref.str.charCodeAt(index);
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));	
 		
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
@@ -450,6 +476,50 @@ class NativeFunctionManager {
 			})
 		));
 		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"real",
+			new EvalResultParameterList(1, [new EvalResultParameter("i", EVAL_TYPE_INTEGER)]),
+			EVAL_TYPE_REAL,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"sqrt",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
+			EVAL_TYPE_REAL,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = Math.sqrt(sm.stack[sm.sp - 2]);
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"log",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
+			EVAL_TYPE_REAL,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = Math.log(sm.stack[sm.sp - 2]);
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+
 		return nativeFunctionManager;
 	}
 }
