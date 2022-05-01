@@ -182,28 +182,6 @@ class EvalResultProcedure extends EvalResult {
 	}
 }
 
-
-class EvalResultValue extends EvalResult {
-	constructor(resultType, valueType) {
-		super(resultType);
-		this.valueType = valueType;
-	}
-}
-
-class EvalResultInteger extends EvalResultValue {
-	constructor(intValue) {
-		super("res-integer", EVAL_TYPE_INTEGER);
-		this.intValue = intValue;
-	}
-}
-
-class EvalResultBoolean extends EvalResultValue {
-	constructor(boolValue) {
-		super("res-boolean", EVAL_TYPE_BOOLEAN);
-		this.boolValue = boolValue;
-	}
-}
-
 class EvalResultReturn extends EvalResult {
 	constructor(returnValue) {
 		super("res-return");
@@ -735,7 +713,7 @@ class Compiler {
 		this.codeBlock = new CodeBlock();
 	}
 	
-	eval(expr) {
+	evalType(expr) {
 		if (expr.tag === "ast-type-named") {
 			let evalType = this.context.getType(expr.typeName);
 			if (evalType === null) {
@@ -744,14 +722,14 @@ class Compiler {
 			return evalType;
 		}
 		if (expr.tag === "ast-type-array") {
-			let underType = this.eval(expr.underlyingType);
+			let underType = this.evalType(expr.underlyingType);
 			if (underType.isError()) {
 				return underType;
 			}
 			return this.context.addType(new EvalTypeArray(underType));
 		}
 		if (expr.tag === "ast-type-sequence") {
-			let underType = this.eval(expr.underlyingType);
+			let underType = this.evalType(expr.underlyingType);
 			if (underType.isError()) {
 				return underType;
 			}
@@ -760,7 +738,7 @@ class Compiler {
 		if (expr.tag === "ast-type-record") {
 			let fields = [];
 			for (let i = 0; i < expr.fieldCount; i++) {
-				let fieldType = this.eval(expr.fields[i].fieldType);
+				let fieldType = this.evalType(expr.fields[i].fieldType);
 				if (fieldType.isError()) {
 					return fieldType;
 				}
@@ -768,6 +746,494 @@ class Compiler {
 			}
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
+		return EvalError.unknownType(expr.tag).fromExpr(expr);
+	}
+	
+	evalStatement(expr) {
+		if (expr.tag === "ast-type-declaration") {
+			if (this.context.getType(expr.typeName) !== null) {
+				return EvalError.typeAlreadyExists(expr.typeName).fromExpr(expr);
+			}
+			let underlyingType = this.evalType(expr.typeExpr);
+			if (underlyingType.isError()) {
+				return underlyingType;
+			}
+			return this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
+		}
+		if (expr.tag === "ast-variable-declaration") {
+			if (this.scope.getLocalVariable(expr.varName) !== null) {
+				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
+			}
+			let initValueType = this.eval(expr.valueExpr);
+			if (initValueType.isError()) {
+				return initValueType;
+			}
+			let varType = expr.varType === null ? initValueType : this.evalType(expr.varType);
+			if (varType.isError()) {
+				return varType;
+			}
+			if (
+				initValueType.tag === "res-type-array" &&
+			    initValueType.underlyingType === null &&
+			    varType.tag === "res-type-array"
+			) {
+				initValueType = varType;
+			} else if (initValueType !== varType) {
+				if (varType.tag === "res-type-name") {
+					if (initValueType !== varType.underlyingType) {
+						return EvalError.wrongType(
+							initValueType,
+							varType.typeKey() + " or " + varType.underlyingType.typeKey()
+						).fromExpr(expr.valueExpr);
+					}
+				} else {
+					return EvalError.wrongType(initValueType, varType.typeKey()).fromExpr(expr.valueExpr);
+				}
+			}
+			this.scope.addVariable(expr.varName, varType);
+			return new EvalResultOk("Variable created");
+		}
+		if (expr.tag === "ast-assign") {
+			if (expr.left.tag === "ast-variable") {
+				// search the variable
+				let variable = this.scope.getVariable(expr.left.varName);
+				if (variable === null) {
+					return EvalError.unknownVariable(expr.left.varName).fromExpr(expr.left);
+				}
+				// evaluate the value
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return valueType;
+				}
+				if (valueType !== variable.varType) {
+					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
+				}
+				// assign the value
+				if (variable.isGlobal) {
+					this.codeBlock.codePopGlobal(variable.offset);
+				} else {
+					this.codeBlock.codePopLocal(variable.offset);
+				}
+				return new EvalResultOk("assigned");
+			}
+			if (expr.left.tag === "ast-index") {
+				let indexExpr = expr.left;
+				// Evaluate the indexed ptr
+				let indexedType = this.eval(indexExpr.indexed);
+				if (indexedType.isError()) {
+					return indexedType;
+				}
+				while (indexedType.tag === "res-type-name") {
+					indexedType = indexedType.underlyingType;
+				}
+				if (indexedType.tag !== "res-type-array") {
+					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
+				}
+				// Evaluate the index
+				let indexType = this.eval(indexExpr.index);
+				if (indexType.isError()) {
+					return indexType;
+				}
+				if (indexType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(indexType, "integer").fromExpr(indexExpr.index);
+				}
+				// Evaluate the value to assign
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return valueType;
+				}
+				if (valueType !== indexedType.underlyingType) {
+					return EvalError.wrongType(valueType, indexedType.underlyingType.typeKey()).fromExpr(expr.right);
+				}
+				// Assigne the value
+				this.codeBlock.codePopPtrOffset();
+				return new EvalResultOk("assigned");
+			}
+			if (expr.left.tag === "ast-field") {
+				let fieldExpr = expr.left;
+				// evaluate the record
+				let recordType = this.eval(fieldExpr.expr);
+				if (recordType.isError()) {
+					return recordType;
+				}
+				while (recordType.tag === "res-type-name") {
+					recordType = recordType.underlyingType;
+				}
+				if (recordType.tag != "res-type-record") {
+					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
+				}
+				// search and push the offset of the field
+				let fieldIndex = -1;
+				for (let i = 0; i < recordType.fieldCount; i++) {
+					if (recordType.fields[i].fieldName === fieldExpr.fieldName) {
+						fieldIndex = i;
+						break;
+					}
+				}
+				if (fieldIndex === -1) {
+					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
+				}
+				this.codeBlock.codePush(recordType.fields[fieldIndex].offset);
+				// Evaluate the value to assign
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return valueType;
+				}
+				if (valueType !== recordType.fields[fieldIndex].fieldType) {
+					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
+				}
+				// Assigne the value
+				this.codeBlock.codePopPtrOffset();
+				return new EvalResultOk("assigned");
+			}
+			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
+		}
+		if (expr.tag == "ast-block") {
+			let ret = null;
+			this.scope = new CompilerScope(this.scope, false, false, null);
+			for (let i = 0; i < expr.statementCount; i++) {
+				if (ret !== null) {
+					return EvalError.unreachableCode().fromExpr(expr.statements[i]);
+				}
+				let val = this.evalStatement(expr.statements[i]);
+				if (val.isError()) {
+					return val;
+				}
+				if (val.tag === "res-return") {
+					if (ret === null) {
+						ret = val;
+					} else if ( val.returnType !== ret.returnType) {
+						return EvalError.wrongType(val.valueType, ret.returnType).fromExpr(expr.statements[i]);	
+					}
+				} else if (val.tag !== "res-ok" && val.tag !== "res-yield") {
+					return EvalError.wrongType(val.valueType, "statement").fromExpr(expr.statements[i]);	
+				}
+			}
+			if (ret === null) {
+				if (this.scope.variableCount > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableCount);
+				}
+			}
+			this.scope = this.scope.parent;
+			return ret === null ? new EvalResultOk("block") : ret;
+		}
+		if (expr.tag === "ast-if") {
+			let condType = this.eval(expr.condition);
+			if (condType.isError()) {
+				return condType;
+			}
+			if (condType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
+			}
+			let falseLoc = this.codeBlock.codeJz(0);
+			let trueRet =  this.evalStatement(expr.trueStatement);
+			if (trueRet.isError()) {
+				return trueRet;
+			}
+			if (trueRet.tag !== "res-ok" && trueRet.tag !== "res-return") {
+				return EvalError.wrongType(trueRet, "statement").fromExpr(expr.trueStatement);	
+			}
+			let endLoc = expr.falseStatement === null ? 0 : this.codeBlock.codeJmp(0);
+			this.codeBlock.setLoc(falseLoc);
+			if (expr.falseStatement === null) {
+				return new EvalResultOk("if");
+			}
+			let falseRet = this.evalStatement(expr.falseStatement);
+			if (falseRet.isError()) {
+				return falseRet;
+			}
+			if (falseRet.tag !== "res-ok" && falseRet.tag !== "res-return") {
+				return EvalError.wrongType(falseRet, "statement").fromExpr(expr.falseStatement);	
+			}
+			this.codeBlock.setLoc(endLoc);
+			if (falseRet.tag === "res-return" && trueRet.tag === "res-return") {
+				if (falseRet.returnType !== trueRet.returnType) {
+					return EvalError.wrongType(falseRet.returnType, trueRet.returnType.typeKey()).fromExpr(expr.falseStatement);	
+				}
+				return trueRet;
+			}
+			return new EvalResultOk("if");
+		}
+		if (expr.tag === "ast-while") {
+			let testLoc = this.codeBlock.codeSize;
+			let conditionType = this.eval(expr.condition);
+			if (conditionType.isError()) {
+				return conditionType;
+			}
+			if (conditionType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
+			}
+			let endLoc = this.codeBlock.codeJz(0);
+			let stmtRet = this.evalStatement(expr.statement);
+			if (stmtRet.isError()) {
+				return stmtRet;
+			}
+			if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+				return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+			}
+			this.codeBlock.codeJmp(testLoc);
+			this.codeBlock.setLoc(endLoc);
+			return new EvalResultOk("while");
+		}
+		if (expr.tag === "ast-for") {
+			if (expr.sequence.tag === "ast-range") {
+				this.scope = new CompilerScope(this.scope, false, false, null);
+				let startBoundExpr = expr.isReverse ? expr.sequence.upperBound : expr.sequence.lowerBound;
+				let endBoundExpr = expr.isReverse ? expr.sequence.lowerBound : expr.sequence.upperBound;				
+				let endBoundType = this.eval(endBoundExpr);
+				if (endBoundType.isError()) {
+					return endBoundType;
+				}
+				if (endBoundType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
+				}
+				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER);
+				let startBoundType = this.eval(startBoundExpr);
+				if (startBoundType.isError()) {
+					return startBoundType;
+				}
+				if (startBoundType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
+				}
+				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER);
+				let testLoc = this.codeBlock.codeSize;
+				this.codeBlock.codePushLocal(indexVar.offset);
+				this.codeBlock.codePushLocal(endBoundVar.offset);
+				if (expr.isReverse) {
+					this.codeBlock.codeGte();
+				} else {
+					this.codeBlock.codeLte();
+				}
+				let endLoc = this.codeBlock.codeJz(0);
+				let stmtRet = this.evalStatement(expr.statement);
+				if (stmtRet.isError()) {
+					return stmtRet;
+				}
+				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+				}
+				this.codeBlock.codePush(1);
+				if (expr.isReverse) {
+					this.codeBlock.codeSub();
+				} else {
+					this.codeBlock.codeAdd();
+				}
+				this.codeBlock.codeJmp(testLoc);
+				this.codeBlock.setLoc(endLoc);
+				this.codeBlock.codePopVoid(this.scope.variableCount);
+				this.scope = this.scope.parent;
+				return new EvalResultOk("for");
+			} else {
+				this.scope = new CompilerScope(this.scope, false, false, null);
+				let sequence = this.eval(expr.sequence);
+				if (sequence.isError()) {
+					return sequence;
+				}
+				if (sequence.tag !== "res-type-sequence") {
+					return EvalError.wrongType(sequance, "sequence").fromExpr(expr.sequence);
+				}
+				let sequenceVar = this.scope.addVariable("_for_sequence", sequence);
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeNext();
+				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType);
+				let testLoc = this.codeBlock.codeSize;
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeEnded();
+				let endLoc = this.codeBlock.codeJnz(0);
+				let stmtRet = this.evalStatement(expr.statement);
+				if (stmtRet.isError()) {
+					return stmtRet;
+				}
+				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
+					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
+				}
+				this.codeBlock.codePushLocal(sequenceVar.offset);
+				this.codeBlock.codeNext();
+				this.codeBlock.codePopLocal(indexVar.offset);
+				this.codeBlock.codeJmp(testLoc);
+				this.codeBlock.setLoc(endLoc);
+				this.codeBlock.codePopVoid(this.scope.variableCount);
+				this.scope = this.scope.parent;
+				return new EvalResultOk("for");
+			}
+			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
+		}
+		if (expr.tag === "ast-return") {
+			// Eval the returned expression
+			let retType = null;
+			if (expr.expr !== null) {
+				retType = this.eval(expr.expr);
+				if (retType.isError()) {
+					return retType;
+				}
+			}
+			// Find frame scope
+			let currentScope = this.scope;
+			while (currentScope !== null) {
+				if (currentScope.isFrame) {
+					break;
+				}
+				currentScope = currentScope.parent;
+			}
+			if (currentScope === null || currentScope.isGenerator !== false) {
+				return EvalError.unexpectedReturn().fromExpr(expr);
+			}
+			// Check the return type
+			if (retType === null && currentScope.returnType !== null) {
+				return EvalError.unexpectedReturnWithoutValue().fromExpr(expr);
+			}
+			if (retType !== null && currentScope.returnType === null) {
+				return EvalError.unexpectedReturnWithValue().fromExpr(expr);
+			}
+			if (retType !== currentScope.returnType) {
+				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+			}
+			if (retType === null) {
+				this.codeBlock.codeRet();
+				return new EvalResultOk("return");
+			}
+			this.codeBlock.codeRetVal();
+			return new EvalResultReturn(retType);
+		}
+		if (expr.tag === "ast-yield") {
+			// Check that the frame is a generator
+			let frameScope = this.scope;
+			while (frameScope !== null && frameScope.isFrame === false) {
+				frameScope = frameScope.parent;
+			}
+			if (frameScope === null || frameScope.isGenerator !== true) {
+				return EvalError.unexpectedYield().fromExpr(expr);
+			}
+			// Eval the returned expression
+			let retType = this.eval(expr.expr);
+			if (retType.isError()) {
+				return retType;
+			}
+			// Check the return type
+			if (retType !== frameScope.returnType) {
+				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+			}
+			this.codeBlock.codeYield();
+			return new EvalResultYield(retType);
+		}
+		if (expr.tag === "ast-function-declaration") {
+			let parameterList = this.eval(expr.parameterList);
+			if (parameterList.isError(parameterList)) {
+				return parameterList;
+			}
+			let returnType = this.evalType(expr.returnType);
+			if (returnType.isError()) {
+				return returnType;
+			}
+			let evalFunc = new EvalResultFunction(expr.functionName, parameterList, returnType, expr.isGenerator);
+			if (this.context.getFunction(evalFunc.functionKey()) !== null) {
+				return EvalError.functionAlreadyExists(evalFunc.functionKey()).fromExpr(expr);
+			}
+			this.context.addFunction(evalFunc);
+			{ // begin Compile function
+				let oldCodeBlock = this.codeBlock;
+				let codeBlockIndex = this.context.addCodeBlock();
+				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
+				evalFunc.codeBlockIndex = codeBlockIndex;
+				this.scope = new CompilerScope(this.scope, true, evalFunc.isGenerator, returnType);
+				for (let i = 0; i < parameterList.parameterCount; i++) {
+					if (evalFunc.isGenerator === true) {
+						this.scope.addVariable(
+							parameterList.parameters[i].parameterName,
+							parameterList.parameters[i].parameterType
+						);
+					} else {
+						this.scope.addParameter(
+							parameterList.parameters[i].parameterName,
+							parameterList.parameters[i].parameterType,
+							i - parameterList.parameterCount - 4
+						);
+					}
+				}
+				let ret = this.evalStatement(expr.statement);
+				if (ret.isError()) {
+					this.context.removeFunction(evalFunc.functionKey());
+					return ret;
+				}
+				if (evalFunc.isGenerator === true) {
+					this.codeBlock.codeYieldDone();
+				} else if (ret.tag !== "res-return") {
+					this.context.removeFunction(evalFunc.functionKey());
+					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
+				}
+				this.scope = this.scope.parent;
+				this.codeBlock = oldCodeBlock;
+			} // End Compile function
+			return new EvalResultOk("Function created");
+		}
+		if (expr.tag === "ast-procedure-declaration") {
+			let parameterList = this.eval(expr.parameterList);
+			if (parameterList.isError(parameterList)) {
+				return parameterList;
+			}
+			let evalProc = new EvalResultProcedure(expr.procedureName, parameterList);
+			if (this.context.getProcedure(evalProc.procedureKey()) !== null) {
+				return EvalError.procedureAlreadyExists(evalProc.procedureKey()).fromExpr(expr);
+			}
+			this.context.addProcedure(evalProc);
+			{ // begin Compile procedure
+				let oldCodeBlock = this.codeBlock;
+				let codeBlockIndex = this.context.addCodeBlock();
+				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
+				evalProc.codeBlockIndex = codeBlockIndex;
+				this.scope = new CompilerScope(this.scope, true, false, null);
+				for (let i = 0; i < parameterList.parameterCount; i++) {
+					this.scope.addParameter(
+						parameterList.parameters[i].parameterName,
+						parameterList.parameters[i].parameterType,
+						i - parameterList.parameterCount - 4
+					);
+				}
+				let ret = this.evalStatement(expr.statement);
+				if (ret.isError()) {
+					this.context.removeProcedure(evalProc.procedureKey());
+					return ret;
+				}
+				if (ret.tag !== "res-ok") {
+					this.context.removeProcedure(evalProc.procedureKey());
+					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
+				}
+				this.codeBlock.codeRet();
+				this.scope = this.scope.parent;
+				this.codeBlock = oldCodeBlock;
+			} // End Compile procedure
+			return new EvalResultOk("Procedure created");
+		}
+		if (expr.tag === "ast-procedure") {
+			let argTypes = [];
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				let argType = this.eval(expr.argList.args[i]);
+				if (argType.isError()) {
+					return argType;
+				}
+				argTypes[i] = argType;
+			}
+			let procKey = expr.procedureName + "(";
+			for (let i = 0; i < expr.argList.argCount; i++) {
+				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+			}
+			procKey += ")";
+			let proc = this.context.getProcedure(procKey);
+			if (proc === null) {
+				return EvalError.unknownProcedure(procKey).fromExpr(expr);
+			}
+			this.codeBlock.codePush(expr.argList.argCount);
+			if (proc.nativeIndex !== -1) {
+				this.codeBlock.codeCallNative(proc.nativeIndex);
+			} else {
+				this.codeBlock.codeCall(proc.codeBlockIndex);
+			}
+			return new EvalResultOk("procedure");;
+		}
+		return EvalError.unknownType(expr.tag).fromExpr(expr);
+	}
+	
+	eval(expr) {
 		if (expr.tag === "ast-value-boolean") {
 			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
 			return EVAL_TYPE_BOOLEAN;
@@ -788,7 +1254,7 @@ class Compiler {
 		if (expr.tag === "ast-value-array") {
 			let itemType = null;
 			if (expr.itemType !== null) {
-				itemType = this.eval(expr.itemType);
+				itemType = this.evalType(expr.itemType);
 				if (itemType.isError()) {
 					return itemType;
 				}
@@ -823,7 +1289,7 @@ class Compiler {
 				if (expr.fields[i].fieldType === null) {
 					fieldType = fieldValueType;
 				} else {
-					fieldType = this.eval(expr.fields[i].fieldType);
+					fieldType = this.evalType(expr.fields[i].fieldType);
 					if (fieldType.isError()) {
 						return fieldType;
 					}
@@ -1006,7 +1472,7 @@ class Compiler {
 		if (expr.tag === "ast-operator-unary") {
 			let operandType = this.eval(expr.operand);
 			if (operandType.isError()) {
-				return operand;
+				return operandType;
 			}
 			if (expr.operator === TOK_NOT) {
 				if (operandType !== EVAL_TYPE_BOOLEAN) {
@@ -1027,49 +1493,6 @@ class Compiler {
 				return operandType;
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
-		}
-		if (expr.tag === "ast-type-declaration") {
-			if (this.context.getType(expr.typeName) !== null) {
-				return EvalError.typeAlreadyExists(expr.typeName).fromExpr(expr);
-			}
-			let underlyingType = this.eval(expr.typeExpr);
-			if (underlyingType.isError()) {
-				return underlyingType;
-			}
-			return this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
-		}
-		if (expr.tag === "ast-variable-declaration") {
-			if (this.scope.getLocalVariable(expr.varName) !== null) {
-				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
-			}
-			let initValueType = this.eval(expr.valueExpr);
-			if (initValueType.isError()) {
-				return initValueType;
-			}
-			let varType = expr.varType === null ? initValueType : this.eval(expr.varType);
-			if (varType.isError()) {
-				return varType;
-			}
-			if (
-				initValueType.tag === "res-type-array" &&
-			    initValueType.underlyingType === null &&
-			    varType.tag === "res-type-array"
-			) {
-				initValueType = varType;
-			} else if (initValueType !== varType) {
-				if (varType.tag === "res-type-name") {
-					if (initValueType !== varType.underlyingType) {
-						return EvalError.wrongType(
-							initValueType,
-							varType.typeKey() + " or " + varType.underlyingType.typeKey()
-						).fromExpr(expr.valueExpr);
-					}
-				} else {
-					return EvalError.wrongType(initValueType, varType.typeKey()).fromExpr(expr.valueExpr);
-				}
-			}
-			this.scope.addVariable(expr.varName, varType);
-			return new EvalResultOk("Variable created");
 		}
 		if (expr.tag === "ast-variable") {
 			let v = this.scope.getVariable(expr.varName);
@@ -1113,6 +1536,9 @@ class Compiler {
 			if (indexToType.isError()) {
 				return indexToType;
 			}
+			if (indexToType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexToType, "integer").fromExpr(expr.indexTo);
+			}
 			this.codeBlock.codePush(3);
 			this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
 			return indexedType;
@@ -1137,273 +1563,8 @@ class Compiler {
 			}
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
-		if (expr.tag === "ast-assign") {
-			if (expr.left.tag === "ast-variable") {
-				// search the variable
-				let variable = this.scope.getVariable(expr.left.varName);
-				if (variable === null) {
-					return EvalError.unknownVariable(expr.left.varName).fromExpr(expr.left);
-				}
-				// evaluate the value
-				let valueType = this.eval(expr.right);
-				if (valueType.isError()) {
-					return valueType;
-				}
-				if (valueType !== variable.varType) {
-					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
-				}
-				// assign the value
-				if (variable.isGlobal) {
-					this.codeBlock.codePopGlobal(variable.offset);
-				} else {
-					this.codeBlock.codePopLocal(variable.offset);
-				}
-				return new EvalResultOk("assigned");
-			}
-			if (expr.left.tag === "ast-index") {
-				let indexExpr = expr.left;
-				// Evaluate the indexed ptr
-				let indexedType = this.eval(indexExpr.indexed);
-				if (indexedType.isError()) {
-					return indexed;
-				}
-				while (indexedType.tag === "res-type-name") {
-					indexedType = indexedType.underlyingType;
-				}
-				if (indexedType.tag !== "res-type-array") {
-					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
-				}
-				// Evaluate the index
-				let indexType = this.eval(indexExpr.index);
-				if (indexType.isError()) {
-					return index;
-				}
-				if (indexType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(indexType, "integer").fromExpr(indexExpr.index);
-				}
-				// Evaluate the value to assign
-				let valueType = this.eval(expr.right);
-				if (valueType.isError()) {
-					return value;
-				}
-				if (valueType !== indexedType.underlyingType) {
-					return EvalError.wrongType(valueType, indexedType.underlyingType.typeKey()).fromExpr(expr.right);
-				}
-				// Assigne the value
-				this.codeBlock.codePopPtrOffset();
-				return new EvalResultOk("assigned");
-			}
-			if (expr.left.tag === "ast-field") {
-				let fieldExpr = expr.left;
-				// evaluate the record
-				let recordType = this.eval(fieldExpr.expr);
-				if (recordType.isError()) {
-					return recordType;
-				}
-				while (recordType.tag === "res-type-name") {
-					recordType = recordType.underlyingType;
-				}
-				if (recordType.tag != "res-type-record") {
-					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
-				}
-				// search and push the offset of the field
-				let fieldIndex = -1;
-				for (let i = 0; i < recordType.fieldCount; i++) {
-					if (recordType.fields[i].fieldName === fieldExpr.fieldName) {
-						fieldIndex = i;
-						break;
-					}
-				}
-				if (fieldIndex === -1) {
-					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
-				}
-				this.codeBlock.codePush(recordType.fields[fieldIndex].offset);
-				// Evaluate the value to assign
-				let valueType = this.eval(expr.right);
-				if (valueType.isError()) {
-					return value;
-				}
-				if (valueType !== recordType.fields[fieldIndex].fieldType) {
-					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
-				}
-				// Assigne the value
-				this.codeBlock.codePopPtrOffset();
-				return new EvalResultOk("assigned");
-			}
-			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
-		}
-		if (expr.tag == "ast-block") {
-			let ret = null;
-			this.scope = new CompilerScope(this.scope, false, false, null);
-			for (let i = 0; i < expr.statementCount; i++) {
-				if (ret !== null) {
-					return EvalError.unreachableCode().fromExpr(expr.statements[i]);
-				}
-				let val = this.eval(expr.statements[i]);
-				if (val.isError()) {
-					return val;
-				}
-				if (val.tag === "res-return") {
-					if (ret === null) {
-						ret = val;
-					} else if ( val.returnType !== ret.returnType) {
-						return EvalError.wrongType(val.valueType, ret.returnType).fromExpr(expr.statements[i]);	
-					}
-				} else if (val.tag !== "res-ok" && val.tag !== "res-yield") {
-					return EvalError.wrongType(val.valueType, "statement").fromExpr(expr.statements[i]);	
-				}
-			}
-			if (ret === null) {
-				if (this.scope.variableCount > 0) {
-					this.codeBlock.codePopVoid(this.scope.variableCount);
-				}
-			}
-			this.scope = this.scope.parent;
-			return ret === null ? new EvalResultOk("block") : ret;
-		}
-		if (expr.tag === "ast-if") {
-			let condType = this.eval(expr.condition);
-			if (condType.isError()) {
-				return condType;
-			}
-			if (condType !== EVAL_TYPE_BOOLEAN) {
-				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
-			}
-			let falseLoc = this.codeBlock.codeJz(0);
-			let trueRet =  this.eval(expr.trueStatement);
-			if (trueRet.isError()) {
-				return trueRet;
-			}
-			if (trueRet.tag !== "res-ok" && trueRet.tag !== "res-return") {
-				return EvalError.wrongType(trueRet, "statement").fromExpr(expr.trueStatement);	
-			}
-			let endLoc = expr.falseStatement === null ? 0 : this.codeBlock.codeJmp(0);
-			this.codeBlock.setLoc(falseLoc);
-			if (expr.falseStatement === null) {
-				return new EvalResultOk("if");
-			}
-			let falseRet = this.eval(expr.falseStatement);
-			if (falseRet.isError()) {
-				return falseRet;
-			}
-			if (falseRet.tag !== "res-ok" && falseRet.tag !== "res-return") {
-				return EvalError.wrongType(falseRet, "statement").fromExpr(expr.falseStatement);	
-			}
-			this.codeBlock.setLoc(endLoc);
-			if (falseRet.tag === "res-return" && trueRet.tag === "res-return") {
-				if (falseRet.returnType !== trueRet.returnType) {
-					return EvalError.wrongType(falseRet.returnType, trueRet.returnType.typeKey()).fromExpr(expr.falseStatement);	
-				}
-				return trueRet;
-			}
-			return new EvalResultOk("if");
-		}
-		if (expr.tag === "ast-while") {
-			let testLoc = this.codeBlock.codeSize;
-			let conditionType = this.eval(expr.condition);
-			if (conditionType.isError()) {
-				return condition;
-			}
-			if (conditionType !== EVAL_TYPE_BOOLEAN) {
-				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
-			}
-			let endLoc = this.codeBlock.codeJz(0);
-			let stmtRet = this.eval(expr.statement);
-			if (stmtRet.isError()) {
-				return stmtRet;
-			}
-			if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-				return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-			}
-			this.codeBlock.codeJmp(testLoc);
-			this.codeBlock.setLoc(endLoc);
-			return new EvalResultOk("while");
-		}
-		if (expr.tag === "ast-for") {
-			if (expr.sequence.tag === "ast-range") {
-				this.scope = new CompilerScope(this.scope, false, false, null);
-				let startBoundExpr = expr.isReverse ? expr.sequence.upperBound : expr.sequence.lowerBound;
-				let endBoundExpr = expr.isReverse ? expr.sequence.lowerBound : expr.sequence.upperBound;				
-				let endBoundType = this.eval(endBoundExpr);
-				if (endBoundType.isError()) {
-					return endBoundType;
-				}
-				if (endBoundType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
-				}
-				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER);
-				let startBoundType = this.eval(startBoundExpr);
-				if (startBoundType.isError()) {
-					return startBoundType;
-				}
-				if (startBoundType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
-				}
-				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER);
-				let testLoc = this.codeBlock.codeSize;
-				this.codeBlock.codePushLocal(indexVar.offset);
-				this.codeBlock.codePushLocal(endBoundVar.offset);
-				if (expr.isReverse) {
-					this.codeBlock.codeGte();
-				} else {
-					this.codeBlock.codeLte();
-				}
-				let endLoc = this.codeBlock.codeJz(0);
-				let stmtRet = this.eval(expr.statement);
-				if (stmtRet.isError()) {
-					return stmtRet;
-				}
-				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-				}
-				this.codeBlock.codePush(1);
-				if (expr.isReverse) {
-					this.codeBlock.codeSub();
-				} else {
-					this.codeBlock.codeAdd();
-				}
-				this.codeBlock.codeJmp(testLoc);
-				this.codeBlock.setLoc(endLoc);
-				this.codeBlock.codePopVoid(this.scope.variableCount);
-				this.scope = this.scope.parent;
-				return new EvalResultOk("for");
-			} else {
-				this.scope = new CompilerScope(this.scope, false, false, null);
-				let sequence = this.eval(expr.sequence);
-				if (sequence.isError()) {
-					return sequence;
-				}
-				if (sequence.tag !== "res-type-sequence") {
-					return EvalError.wrongType(stmt, "sequence").fromExpr(expr.sequence);
-				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence);
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType);
-				let testLoc = this.codeBlock.codeSize;
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeEnded();
-				let endLoc = this.codeBlock.codeJnz(0);
-				let stmtRet = this.eval(expr.statement);
-				if (stmtRet.isError()) {
-					return stmtRet;
-				}
-				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-				}
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				this.codeBlock.codePopLocal(indexVar.offset);
-				this.codeBlock.codeJmp(testLoc);
-				this.codeBlock.setLoc(endLoc);
-				this.codeBlock.codePopVoid(this.scope.variableCount);
-				this.scope = this.scope.parent;
-				return new EvalResultOk("for");
-			}
-			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
-		}
 		if (expr.tag === "ast-parameter") {
-			let paramType = this.eval(expr.parameterType);
+			let paramType = this.evalType(expr.parameterType);
 			if (paramType.isError()) {
 				return paramType;
 			}
@@ -1424,152 +1585,6 @@ class Compiler {
 				parameters[i] = parameter;
 			}
 			return new EvalResultParameterList(expr.parameterCount, parameters);
-		}
-		if (expr.tag === "ast-return") {
-			// Eval the returned expression
-			let retType = null;
-			if (expr.expr !== null) {
-				retType = this.eval(expr.expr);
-				if (retType.isError()) {
-					return retType;
-				}
-			}
-			// Find frame scope
-			let currentScope = this.scope;
-			while (currentScope !== null) {
-				if (currentScope.isFrame) {
-					break;
-				}
-				currentScope = currentScope.parent;
-			}
-			if (currentScope === null || currentScope.isGenerator !== false) {
-				return EvalError.unexpectedReturn().fromExpr(expr);
-			}
-			// Check the return type
-			if (retType === null && currentScope.returnType !== null) {
-				return EvalError.unexpectedReturnWithoutValue().fromExpr(expr);
-			}
-			if (retType !== null && currentScope.returnType === null) {
-				return EvalError.unexpectedReturnWithValue().fromExpr(expr);
-			}
-			if (retType !== currentScope.returnType) {
-				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
-			}
-			if (retType === null) {
-				this.codeBlock.codeRet();
-				return new EvalResultOk("return");
-			}
-			this.codeBlock.codeRetVal();
-			return new EvalResultReturn(retType);
-		}
-		if (expr.tag === "ast-yield") {
-			// Check that the frame is a generator
-			let frameScope = this.scope;
-			while (frameScope !== null && frameScope.isFrame === false) {
-				frameScope = frameScope.parent;
-			}
-			if (frameScope === null || frameScope.isGenerator !== true) {
-				return EvalError.unexpectedYield().fromExpr(expr);
-			}
-			// Eval the returned expression
-			let retType = this.eval(expr.expr);
-			if (retType.isError()) {
-				return retType;
-			}
-			// Check the return type
-			if (retType !== frameScope.returnType) {
-				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
-			}
-			this.codeBlock.codeYield();
-			return new EvalResultYield(retType);
-		}
-		if (expr.tag === "ast-function-declaration") {
-			let parameterList = this.eval(expr.parameterList);
-			if (parameterList.isError(parameterList)) {
-				return parameterList;
-			}
-			let returnType = this.eval(expr.returnType);
-			if (returnType.isError()) {
-				return returnType;
-			}
-			let evalFunc = new EvalResultFunction(expr.functionName, parameterList, returnType, expr.isGenerator);
-			if (this.context.getFunction(evalFunc.functionKey()) !== null) {
-				return EvalError.functionAlreadyExists(evalFunc.functionKey()).fromExpr(expr);
-			}
-			this.context.addFunction(evalFunc);
-			{ // begin Compile function
-				let oldCodeBlock = this.codeBlock;
-				let codeBlockIndex = this.context.addCodeBlock();
-				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
-				evalFunc.codeBlockIndex = codeBlockIndex;
-				this.scope = new CompilerScope(this.scope, true, evalFunc.isGenerator, returnType);
-				for (let i = 0; i < parameterList.parameterCount; i++) {
-					if (evalFunc.isGenerator === true) {
-						this.scope.addVariable(
-							parameterList.parameters[i].parameterName,
-							parameterList.parameters[i].parameterType
-						);
-					} else {
-						this.scope.addParameter(
-							parameterList.parameters[i].parameterName,
-							parameterList.parameters[i].parameterType,
-							i - parameterList.parameterCount - 4
-						);
-					}
-				}
-				let ret = this.eval(expr.statement);
-				if (ret.isError()) {
-					this.context.removeFunction(evalFunc.functionKey());
-					return ret;
-				}
-				if (evalFunc.isGenerator === true) {
-					this.codeBlock.codeYieldDone();
-				} else if (ret.tag !== "res-return") {
-					this.context.removeFunction(evalFunc.functionKey());
-					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
-				}
-				this.scope = this.scope.parent;
-				this.codeBlock = oldCodeBlock;
-			} // End Compile function
-			return new EvalResultOk("Function created");
-		}
-		if (expr.tag === "ast-procedure-declaration") {
-			let parameterList = this.eval(expr.parameterList);
-			if (parameterList.isError(parameterList)) {
-				return parameterList;
-			}
-			let evalProc = new EvalResultProcedure(expr.procedureName, parameterList);
-			if (this.context.getProcedure(evalProc.procedureKey()) !== null) {
-				return EvalError.procedureAlreadyExists(evalProc.procedureKey()).fromExpr(expr);
-			}
-			this.context.addProcedure(evalProc);
-			{ // begin Compile procedure
-				let oldCodeBlock = this.codeBlock;
-				let codeBlockIndex = this.context.addCodeBlock();
-				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
-				evalProc.codeBlockIndex = codeBlockIndex;
-				this.scope = new CompilerScope(this.scope, true, false, null);
-				for (let i = 0; i < parameterList.parameterCount; i++) {
-					this.scope.addParameter(
-						parameterList.parameters[i].parameterName,
-						parameterList.parameters[i].parameterType,
-						i - parameterList.parameterCount - 4
-					);
-				}
-				let ret = this.eval(expr.statement);
-				if (ret.isError()) {
-					this.context.removeProcedure(evalProc.procedureKey());
-					return ret;
-				}
-				if (ret.tag !== "res-ok") {
-					this.context.removeProcedure(evalProc.procedureKey());
-					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
-				}
-				this.codeBlock.codeRet();
-				this.scope = this.scope.parent;
-				this.codeBlock = oldCodeBlock;
-			} // End Compile procedure
-			return new EvalResultOk("Procedure created");
 		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
@@ -1598,32 +1613,6 @@ class Compiler {
 				this.codeBlock.codeCall(func.codeBlockIndex);
 			}
 			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
-		}
-		if (expr.tag === "ast-procedure") {
-			let argTypes = [];
-			for (let i = 0; i < expr.argList.argCount; i++) {
-				let argType = this.eval(expr.argList.args[i]);
-				if (argType.isError()) {
-					return argType;
-				}
-				argTypes[i] = argType;
-			}
-			let procKey = expr.procedureName + "(";
-			for (let i = 0; i < expr.argList.argCount; i++) {
-				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
-			}
-			procKey += ")";
-			let proc = this.context.getProcedure(procKey);
-			if (proc === null) {
-				return EvalError.unknownProcedure(procKey).fromExpr(expr);
-			}
-			this.codeBlock.codePush(expr.argList.argCount);
-			if (proc.nativeIndex !== -1) {
-				this.codeBlock.codeCallNative(proc.nativeIndex);
-			} else {
-				this.codeBlock.codeCall(proc.codeBlockIndex);
-			}
-			return new EvalResultOk("procedure");;
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}

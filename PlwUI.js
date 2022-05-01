@@ -54,7 +54,7 @@ function onExecClick(isDebug) {
 				printDebugObject(expr);
 			}
 			compiler.resetCode();
-			let result = compiler.eval(expr);
+			let result = compiler.evalStatement(expr);
 			if (isDebug) {
 				printDebugText("=== Compiler ============================");
 				printDebugObject(compiler);
