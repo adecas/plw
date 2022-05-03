@@ -1,3 +1,5 @@
+"use strict";
+
 let compilerContext = new CompilerContext();
 let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
 let stackMachine = new StackMachine();

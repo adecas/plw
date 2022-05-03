@@ -1,3 +1,5 @@
+"use strict";
+
 class NativeFunctionManager {
 	constructor() {
 		this.functions = [];

@@ -1,3 +1,4 @@
+"use strict";
 /******************************************************************************************************************************************
 
 	StackMachine
@@ -293,7 +294,7 @@ class StackMachine {
 				}
 				this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
 				this.sp--;
-			} else if (code === "push_ptr_offset") {
+			} else if (code === "push_ptr_offset" || code === "push_ptr_offset_for_mutate") {
 				if (this.sp < 2) {
 					return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
 				}
@@ -305,6 +306,12 @@ class StackMachine {
 				let offset = this.stack[this.sp - 1];
 				if (offset < 0 || offset >= ref.totalSize) {
 					return smError.refAccessOutOfBound().fromCode(currentCodeBlockId, i);
+				}
+				if (code === "push_ptr_offset_for_mutate") {
+					ref.ptr[offset] = this.refMan.makeMutable(ref.ptr[offset], refManError);
+					if (refManError.hasError()) {
+						return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
+					}				
 				}
 				this.stack[this.sp - 2] = ref.ptr[offset];
 				this.stackMap[this.sp - 2] = ref.isOffsetRef(offset);
@@ -533,9 +540,16 @@ class StackMachine {
 					this.stack[this.sp] = arg1;
 					this.stackMap[this.sp] = false;
 					this.sp++;
-				} else if (code === "push_global") {
+				} else if (code === "push_global" || code === "push_global_for_mutate") {
 					if (arg1 < 0 || arg1 >= this.sp) {
 						return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+					}
+					if (code === "push_global_for_mutate") {
+						this.stack[arg1] = this.refMan.makeMutable(this.stack[arg1], refManError);
+						if (refManError.hasError()) {
+							return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
+						}
+						this.stackMap[arg1] = true;
 					}
 					this.stack[this.sp] = this.stack[arg1];
 					this.stackMap[this.sp] = this.stackMap[arg1];
@@ -546,9 +560,16 @@ class StackMachine {
 						}
 					}
 					this.sp++;
-				} else if (code === "push_local") {
+				} else if (code === "push_local" || code === "push_local_for_mutate") {
 					if (this.bp + arg1 < 0 || this.bp + arg1 >= this.sp) {
 						return smError.stackAccessOutOfBound().fromCode(currentCodeBlockId, i);
+					}
+					if (code === "push_local_for_mutate") {
+						this.stack[this.bp + arg1] = this.refMan.makeMutable(this.stack[this.bp + arg1], refManError);
+						if (refManError.hasError()) {
+							return smError.referenceManagerError(refManError).fromCode(currentCodeBlockId, i);
+						}
+						this.stackMap[this.bp + arg1] = true;
 					}
 					this.stack[this.sp] = this.stack[this.bp + arg1];
 					this.stackMap[this.sp] = this.stackMap[this.bp + arg1];

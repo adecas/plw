@@ -1,3 +1,4 @@
+"use strict";
 /******************************************************************************************************************************************
 
 	RefManager
@@ -248,5 +249,44 @@ class RefManager {
 		return false;
 	}
 	
+	shallowCopy(refId, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return -1;
+		}
+		let ref = this.refs[refId];
+		if (ref.tag !== "ref-object") {
+			refManError.cantCopyRef(refId);
+		}
+		let newPtr = [];
+		for (let i = 0; i < ref.ptr.length; i++) {
+			newPtr[i] = ref.ptr[i];
+			if (i < ref.refSize) {
+				this.incRefCount(newPtr[i], refManError);
+				if (refManError.hasError()) {
+					return -1;
+				}
+			}
+		}
+		return this.createObject(ref.refSize, ref.totalSize, newPtr);
+	}
+	
+	makeMutable(refId, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return false;
+		}
+		let ref = this.refs[refId];
+		if (ref.refCount === 1) {
+			return refId;
+		}
+		let newRefId = this.shallowCopy(refId, refManError);
+		if (refManError.hasError()) {
+			return -1;
+		}
+		ref.refCount--;
+		return newRefId;
+	}		
+
 }
 

@@ -382,15 +382,50 @@ else
 end if;
 </pre>
 
-<p id="snippet-assign-records-title" class="snippet">Assign record</p>
-<pre id="snippet-assign-records">
-procedure init_record(r { a integer, b [integer] }, a integer, b [integer]) begin
+<p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>
+<pre id="snippet-copy-on-write">
+var v1 := [:=
+  [:= 10, 11],
+  [:= 20, 21],
+  [:= 30, 31],
+];
+function text(v [[integer]]) text begin
+  var s := '[';
+  for i in 0..length(v) - 1 loop
+    if i = 0 then
+      s := s || text(v[i]);
+    else
+      s := s || ', ' || text(v[i]);
+    end if;
+  end loop;
+  return s || ']';
+end text;
+var v2 := v1;
+v2[0] := [:= 42, 51];
+var v3 := v1;
+v3[1][0] := 42;
+var v4 := v1[0];
+v4[1] := 43;
+print(text(v1));
+print(text(v2));
+print(text(v3));
+print(text(v4));
+var v5 := [:= 1, 2, 3];
+procedure change_array(v [integer]) begin
+  v[0] := 42;
+  v[1] := 51;
+  print(text(v));
+end change_array;
+change_array(v5);
+print(text(v5));
+procedure change_record(r { a integer, b [integer] }, a integer, b [integer]) begin
   r.a := a;
   r.b := b;
-end init_record;
-var v { a integer, b [integer] } := { a integer := 0, b [integer] := [integer := 0] };
-init_record(v, 42, [integer := 51]);
-print('a = ' || text(v.a) || ', b = ' || text(v.b));
+  print('a = ' || text(r.a) || ', b = ' || text(r.b));
+end change_record;
+var r1 := {a := 1, b := [integer := 2]};
+change_record(r1, 42, [:= 51]);
+print('a = ' || text(r1.a) || ', b = ' || text(r1.b));
 </pre>
 
 <p id="snippet-type-inference-title" class="snippet">Type inference</p>
