@@ -227,6 +227,10 @@ class EvalError extends EvalResult {
 		return new EvalError("Unassignable left expression " + tag);
 	}
 	
+	static cantMutateConst(varName) {
+		return new EvalError("Can't mutate const " + varName);
+	}
+	
 	static unknownBinaryOperator(operator) {
 		return new EvalError("Unknown binary operator " + operator);
 	}
@@ -646,9 +650,10 @@ class CompilerContext {
 
 
 class CompilerVariable {
-	constructor(varName, varType, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isConst, isGlobal, isParameter, offset) {
 		this.varName = varName;
 		this.varType = varType;
+		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
 		this.offset = offset;
@@ -725,15 +730,15 @@ class CompilerScope {
 	}
 	
 	addParameter(varName, varType, offset) {
-		let newVar = new CompilerVariable(varName, varType, false, true, offset);
+		let newVar = new CompilerVariable(varName, varType, false, false, true, offset);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
 	}
 
 
-	addVariable(varName, varType) {
-		let newVar = new CompilerVariable(varName, varType, this.isGlobal, false, this.offset + this.variableCount);
+	addVariable(varName, varType, isConst) {
+		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableCount);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -871,7 +876,7 @@ class Compiler {
 					return EvalError.wrongType(initValueType, varType.typeKey()).fromExpr(expr.valueExpr);
 				}
 			}
-			this.scope.addVariable(expr.varName, varType);
+			this.scope.addVariable(expr.varName, varType, expr.isConst);
 			return new EvalResultOk("Variable created");
 		}
 		if (expr.tag === "ast-assign") {
@@ -880,6 +885,9 @@ class Compiler {
 				let variable = this.scope.getVariable(expr.left.varName);
 				if (variable === null) {
 					return EvalError.unknownVariable(expr.left.varName).fromExpr(expr.left);
+				}
+				if (variable.isConst) {
+					return EvalError.cantMutateConst(expr.left.varName).fromExpr(expr.left);
 				}
 				// evaluate the value
 				let valueType = this.eval(expr.right);
@@ -1071,7 +1079,7 @@ class Compiler {
 				if (endBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
 				}
-				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER);
+				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false);
 				let startBoundType = this.eval(startBoundExpr);
 				if (startBoundType.isError()) {
 					return startBoundType;
@@ -1079,7 +1087,7 @@ class Compiler {
 				if (startBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
 				}
-				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER);
+				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(indexVar.offset);
 				this.codeBlock.codePushLocal(endBoundVar.offset);
@@ -1116,10 +1124,10 @@ class Compiler {
 				if (sequence.tag !== "res-type-sequence") {
 					return EvalError.wrongType(sequance, "sequence").fromExpr(expr.sequence);
 				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence);
+				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType);
+				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeEnded();
@@ -1215,7 +1223,8 @@ class Compiler {
 					if (evalFunc.isGenerator === true) {
 						this.scope.addVariable(
 							parameterList.parameters[i].parameterName,
-							parameterList.parameters[i].parameterType
+							parameterList.parameters[i].parameterType,
+							false
 						);
 					} else {
 						this.scope.addParameter(
@@ -1313,6 +1322,9 @@ class Compiler {
 			let v = this.scope.getVariable(expr.varName);
 			if (v === null) {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
+			}
+			if (v.isConst) {
+				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
 			if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);

@@ -110,11 +110,12 @@ class AstOperatorUnary extends AstNode {
 }
 
 class AstVariableDeclaration extends AstNode {
-	constructor(varName, varType, valueExpr) {
+	constructor(varName, varType, valueExpr, isConst) {
 		super("ast-variable-declaration");
 		this.varName = varName;
 		this.varType = varType;
 		this.valueExpr = valueExpr;
+		this.isConst = isConst;
 	}
 }
 

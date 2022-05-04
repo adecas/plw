@@ -49,7 +49,7 @@ class Parser {
 	
 	readStatement() {
 		let stmt = null;
-		if (this.peekToken() === TOK_VAR) {
+		if (this.peekToken() === TOK_VAR || this.peekToken() == TOK_CONST) {
 			stmt = this.readVariableDeclaration();
 		} else if (this.peekToken() === TOK_IF) {
 			stmt = this.readIf();
@@ -528,8 +528,8 @@ class Parser {
 	
 	readVariableDeclaration() {
 		let varToken = this.readToken();
-		if (varToken.tag !== TOK_VAR) {
-			return ParserError.unexpectedToken(varToken, [TOK_VAR]);
+		if (varToken.tag !== TOK_VAR && varToken.tag !== TOK_CONST) {
+			return ParserError.unexpectedToken(varToken, [TOK_VAR, TOK_CONST]);
 		}
 		let varName = this.readToken();
 		if (varName.tag !== TOK_IDENTIFIER) {
@@ -550,7 +550,7 @@ class Parser {
 		if (Parser.isError(expr)) {
 			return expr;
 		}
-		return new AstVariableDeclaration(varName.text, varType, expr).fromToken(varToken);
+		return new AstVariableDeclaration(varName.text, varType, expr, varToken.tag === TOK_CONST).fromToken(varToken);
 	}
 	
 	readIfBlock(fromToken) {
