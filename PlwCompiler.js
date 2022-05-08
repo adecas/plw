@@ -183,26 +183,10 @@ class EvalResultProcedure extends EvalResult {
 	}
 }
 
-class EvalResultReturn extends EvalResult {
-	constructor(returnValue) {
-		super("res-return");
-		this.returnValue = returnValue;
-	}
-}
+const EVAL_RESULT_RETURN = new EvalResult("res-return");
+const EVAL_RESULT_RAISE = new EvalResult("res-raise");
+const EVAL_RESULT_OK = new EvalResult("res-ok");
 
-class EvalResultYield extends EvalResult {
-	constructor(yieldValue) {
-		super("res-yield");
-		this.yieldValue = yieldValue;
-	}
-}
-
-class EvalResultOk extends EvalResult {
-	constructor(okText) {
-		super("res-ok");
-		this.okText = okText;
-	}
-}
 
 class EvalError extends EvalResult {
 
@@ -543,6 +527,10 @@ class CodeBlock {
 		this.code2("jmp", offset);
 		return this.codeSize - 1;
 	}
+	
+	codeRaise() {
+		this.code1("raise");
+	}
 			
 	codeRet() {
 		this.code1("ret");
@@ -572,6 +560,11 @@ class CodeBlock {
 		this.code2("init_generator", ptr);
 	}
 	
+	codeCreateExceptionHandler(offset) {
+		this.code2("create_exception_handler", offset);
+		return this.codeSize - 1;
+	}
+		
 }
 
 
@@ -746,30 +739,6 @@ class CompilerScope {
 	
 }
 
-class CompilerScopeStack {
-	constructor(globalScope) {
-		this.top = globalScope;
-	}
-	
-	pushBlock() {
-		this.top = CompilerScope.makeBlock(this.top);
-	}
-	
-	pushFunction(isGenerator, returnType) {
-		this.top = CompilerScope.makeFunction(this.top, isGenerator, returnType);
-	}
-	
-	pushProcedure() {
-		this.top = CompilerScope.makeProcedure(this.top);
-	}
-	
-	pop() {
-		this.top = this.top.parent;
-	}
-	
-}
-
-
 
 class Compiler {
 
@@ -834,7 +803,12 @@ class Compiler {
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
-		
+	
+	
+	// The eval of a statement must return:
+	//   EVAL_RESULT_RAISE if all paths raise an exception, else
+	//   EVAL_RESULT_RETURN if all paths return or raise, else
+	//   EVAL_RESULT_OK 
 	evalStatement(expr) {
 		if (expr.tag === "ast-type-declaration") {
 			if (this.context.getType(expr.typeName) !== null) {
@@ -844,7 +818,8 @@ class Compiler {
 			if (underlyingType.isError()) {
 				return underlyingType;
 			}
-			return this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
+			this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-variable-declaration") {
 			if (this.scope.getLocalVariable(expr.varName) !== null) {
@@ -877,7 +852,7 @@ class Compiler {
 				}
 			}
 			this.scope.addVariable(expr.varName, varType, expr.isConst);
-			return new EvalResultOk("Variable created");
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-assign") {
 			if (expr.left.tag === "ast-variable") {
@@ -903,7 +878,7 @@ class Compiler {
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
 				}
-				return new EvalResultOk("assigned");
+				return EVAL_RESULT_OK;
 			}
 			if (expr.left.tag === "ast-index") {
 				let indexExpr = expr.left;
@@ -939,7 +914,7 @@ class Compiler {
 				}
 				// Assigne the value
 				this.codeBlock.codePopPtrOffset();
-				return new EvalResultOk("assigned");
+				return EVAL_RESULT_OK;
 			}
 			if (expr.left.tag === "ast-field") {
 				let fieldExpr = expr.left;
@@ -976,38 +951,123 @@ class Compiler {
 				}
 				// Assigne the value
 				this.codeBlock.codePopPtrOffset();
-				return new EvalResultOk("assigned");
+				return EVAL_RESULT_OK;
 			}
 			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
 		}
 		if (expr.tag == "ast-block") {
-			let ret = null;
+			let ret = EVAL_RESULT_OK;
+			let exceptionLoc = -1;
 			this.pushScopeBlock();
+			if (expr.exception !== null) {
+				exceptionLoc = this.codeBlock.codeCreateExceptionHandler(0);
+				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true);
+			}
 			for (let i = 0; i < expr.statementCount; i++) {
-				if (ret !== null) {
+				if (ret !== EVAL_RESULT_OK) {
 					return EvalError.unreachableCode().fromExpr(expr.statements[i]);
 				}
-				let val = this.evalStatement(expr.statements[i]);
-				if (val.isError()) {
-					return val;
-				}
-				if (val.tag === "res-return") {
-					if (ret === null) {
-						ret = val;
-					} else if ( val.returnType !== ret.returnType) {
-						return EvalError.wrongType(val.valueType, ret.returnType).fromExpr(expr.statements[i]);	
-					}
-				} else if (val.tag !== "res-ok" && val.tag !== "res-yield") {
-					return EvalError.wrongType(val.valueType, "statement").fromExpr(expr.statements[i]);	
+				ret = this.evalStatement(expr.statements[i]);
+				if (ret.isError()) {
+					return ret;
 				}
 			}
-			if (ret === null) {
+			if (ret === EVAL_RESULT_OK) {
 				if (this.scope.variableCount > 0) {
 					this.codeBlock.codePopVoid(this.scope.variableCount);
 				}
 			}
 			this.popScope();
-			return ret === null ? new EvalResultOk("block") : ret;
+			if (expr.exception === null) {
+				return ret;
+			}
+			let endLoc = -1;
+			if (ret === EVAL_RESULT_OK) {
+				endLoc = this.codeBlock.codeJmp(0);
+			}
+			this.codeBlock.setLoc(exceptionLoc);
+			let exRet = this.evalStatement(expr.exception);
+			if (exRet.isError()) {
+				return exRet;
+			}
+			if (endLoc !== -1) {
+				this.codeBlock.setLoc(endLoc);
+			}
+			if (ret === EVAL_RESULT_RAISE) {
+				return exRet;
+			}
+			if (ret === EVAL_RESULT_RETURN && exRet !== EVAL_RESULT_OK) {
+				return ret;
+			}
+			return EVAL_RESULT_OK;
+		}
+		if (expr.tag === "ast-exception") {
+			this.pushScopeBlock();
+			let exceptionVar = this.scope.addVariable("_exception_value", EVAL_TYPE_INTEGER, false);
+			let endLocs = [];
+			let endLocCount = 0;
+			let ret = null;
+			for (let i = 0; i < expr.whenStmtCount; i++) {
+				let whenStmt = expr.whenStmts[i];
+				if (whenStmt.tag !== "ast-when-statement") {
+					return EvalError.unknownType(whenStmt.tag).fromExpr(expr);
+				}
+				this.codeBlock.codePushLocal(exceptionVar.offset);
+				let whenType = this.eval(whenStmt.whenExpr);
+				if (whenType.isError()) {
+					return whenType;
+				}
+				if (whenType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(whenType, "integer").fromExpr(whenStmt.whenExpr);	
+				}
+				this.codeBlock.codeEq();
+				let nextLoc = this.codeBlock.codeJz(0);
+				let stmtRes = this.evalStatement(whenStmt.statement);
+				if (stmtRes.isError()) {
+					return stmtRes;
+				}
+				if (
+					(ret === null || stmtRes === EVAL_RESULT_OK) ||
+					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
+				) {
+					ret = stmtRes;
+				}
+				if (stmtRes == EVAL_RESULT_OK) {
+					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
+					endLocCount++;
+				}
+				this.codeBlock.setLoc(nextLoc);
+			}
+			if (expr.defaultStmt === null) {
+				if (ret === null) {
+					ret = EVAL_RESULT_RAISE;
+				}
+				this.codeBlock.codeRaise();
+			} else {
+				let stmtRes = this.evalStatement(expr.defaultStmt);
+				if (stmtRes.isError()) {
+					return stmtRes;
+				}
+				if (
+					(ret === null || stmtRes === EVAL_RESULT_OK) ||
+					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
+				) {
+					ret = stmtRes;
+				}
+			}
+			for (let i = 0; i < endLocCount; i++) {
+				this.codeBlock.setLoc(endLocs[i]);
+			}
+			if (ret === null) {
+				ret = EVAL_RESULT_OK;
+			}
+			if (ret === EVAL_RESULT_OK) {
+				if (this.scope.variableCount > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableCount);
+				}
+			}
+			this.popScope();			
+			return ret;
 		}
 		if (expr.tag === "ast-if") {
 			let condType = this.eval(expr.condition);
@@ -1022,29 +1082,26 @@ class Compiler {
 			if (trueRet.isError()) {
 				return trueRet;
 			}
-			if (trueRet.tag !== "res-ok" && trueRet.tag !== "res-return") {
-				return EvalError.wrongType(trueRet, "statement").fromExpr(expr.trueStatement);	
-			}
-			let endLoc = expr.falseStatement === null ? 0 : this.codeBlock.codeJmp(0);
+			let endLoc = expr.falseStatement === null ? -1 : this.codeBlock.codeJmp(0);
 			this.codeBlock.setLoc(falseLoc);
 			if (expr.falseStatement === null) {
-				return new EvalResultOk("if");
+				return EVAL_RESULT_OK;
 			}
 			let falseRet = this.evalStatement(expr.falseStatement);
 			if (falseRet.isError()) {
 				return falseRet;
 			}
-			if (falseRet.tag !== "res-ok" && falseRet.tag !== "res-return") {
-				return EvalError.wrongType(falseRet, "statement").fromExpr(expr.falseStatement);	
-			}
 			this.codeBlock.setLoc(endLoc);
-			if (falseRet.tag === "res-return" && trueRet.tag === "res-return") {
-				if (falseRet.returnType !== trueRet.returnType) {
-					return EvalError.wrongType(falseRet.returnType, trueRet.returnType.typeKey()).fromExpr(expr.falseStatement);	
-				}
-				return trueRet;
+			if (trueRet === EVAL_RESULT_RAISE && falseRet === EVAL_RESULT_RAISE) {
+				return EVAL_RESULT_RAISE; 
 			}
-			return new EvalResultOk("if");
+			if (
+				(trueRet === EVAL_RESULT_RETURN && falseRet !== EVAL_RESULT_OK) ||
+				(falseRet === EVAL_RESULT_RETURN && trueRet !== EVAL_RESULT_OK)
+			) {
+				return EVAL_RESULT_RETURN;
+			}
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-while") {
 			let testLoc = this.codeBlock.codeSize;
@@ -1060,12 +1117,9 @@ class Compiler {
 			if (stmtRet.isError()) {
 				return stmtRet;
 			}
-			if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-				return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-			}
 			this.codeBlock.codeJmp(testLoc);
 			this.codeBlock.setLoc(endLoc);
-			return new EvalResultOk("while");
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
@@ -1101,9 +1155,6 @@ class Compiler {
 				if (stmtRet.isError()) {
 					return stmtRet;
 				}
-				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-				}
 				this.codeBlock.codePush(1);
 				if (expr.isReverse) {
 					this.codeBlock.codeSub();
@@ -1114,7 +1165,7 @@ class Compiler {
 				this.codeBlock.setLoc(endLoc);
 				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.popScope();
-				return new EvalResultOk("for");
+				return EVAL_RESULT_OK;
 			} else {
 				this.pushScopeBlock();
 				let sequence = this.eval(expr.sequence);
@@ -1122,7 +1173,7 @@ class Compiler {
 					return sequence;
 				}
 				if (sequence.tag !== "res-type-sequence") {
-					return EvalError.wrongType(sequance, "sequence").fromExpr(expr.sequence);
+					return EvalError.wrongType(sequence, "sequence").fromExpr(expr.sequence);
 				}
 				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 				this.codeBlock.codePushLocal(sequenceVar.offset);
@@ -1136,9 +1187,6 @@ class Compiler {
 				if (stmtRet.isError()) {
 					return stmtRet;
 				}
-				if (stmtRet.tag !== "res-ok" && stmtRet.tag !== "res-return") {
-					return EvalError.wrongType(stmtRet, "statement").fromExpr(expr.statements);
-				}
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeNext();
 				this.codeBlock.codePopLocal(indexVar.offset);
@@ -1146,9 +1194,20 @@ class Compiler {
 				this.codeBlock.setLoc(endLoc);
 				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.popScope();
-				return new EvalResultOk("for");
+				return EVAL_RESULT_OK;
 			}
 			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
+		}
+		if (expr.tag === "ast-raise") {
+			let raiseType = this.eval(expr.expr);
+			if (raiseType.isError()) {
+				return raiseType;
+			}
+			if (raiseType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(raiseType, "integer").fromExpr(expr.expr);
+			}
+			this.codeBlock.codeRaise();
+			return EVAL_RESULT_RAISE;
 		}
 		if (expr.tag === "ast-return") {
 			// Eval the returned expression
@@ -1176,10 +1235,10 @@ class Compiler {
 			}
 			if (retType === null) {
 				this.codeBlock.codeRet();
-				return new EvalResultOk("return");
+			} else {
+				this.codeBlock.codeRetVal();
 			}
-			this.codeBlock.codeRetVal();
-			return new EvalResultReturn(retType);
+			return EVAL_RESULT_RETURN;
 		}
 		if (expr.tag === "ast-yield") {
 			// Check that the frame is a generator
@@ -1197,7 +1256,7 @@ class Compiler {
 				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
 			this.codeBlock.codeYield();
-			return new EvalResultYield(retType);
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-function-declaration") {
 			let parameterList = this.evalParameterList(expr.parameterList);
@@ -1241,14 +1300,14 @@ class Compiler {
 				}
 				if (evalFunc.isGenerator === true) {
 					this.codeBlock.codeYieldDone();
-				} else if (ret.tag !== "res-return") {
+				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
 				}
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile function
-			return new EvalResultOk("Function created");
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-procedure-declaration") {
 			let parameterList = this.evalParameterList(expr.parameterList);
@@ -1278,15 +1337,11 @@ class Compiler {
 					this.context.removeProcedure(evalProc.procedureKey());
 					return ret;
 				}
-				if (ret.tag !== "res-ok") {
-					this.context.removeProcedure(evalProc.procedureKey());
-					return EvalError.wrongType(ret.returnValue, "none").fromExpr(expr.statement);
-				}
 				this.codeBlock.codeRet();
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile procedure
-			return new EvalResultOk("Procedure created");
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-procedure") {
 			let argTypes = [];
@@ -1312,7 +1367,7 @@ class Compiler {
 			} else {
 				this.codeBlock.codeCall(proc.codeBlockIndex);
 			}
-			return new EvalResultOk("procedure");;
+			return EVAL_RESULT_OK;
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}

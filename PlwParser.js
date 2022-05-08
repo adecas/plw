@@ -65,10 +65,12 @@ class Parser {
 			stmt = this.readReturn();
 		} else if (this.peekToken() === TOK_YIELD) {
 			stmt = this.readYield();
+		} else if (this.peekToken() === TOK_RAISE) {
+			stmt = this.readRaise();
 		} else if (this.peekToken() == TOK_FOR) {
 			stmt = this.readFor();
 		} else if (this.peekToken() == TOK_BEGIN) {
-			stmt = this.readBlock(false, null);
+			stmt = this.readAnonymousBlock();
 		} else {
 			stmt = this.readAssign();
 		}
@@ -553,44 +555,24 @@ class Parser {
 		return new AstVariableDeclaration(varName.text, varType, expr, varToken.tag === TOK_CONST).fromToken(varToken);
 	}
 	
-	readIfBlock(fromToken) {
-		let statementIndex = 0;
-		let statements = [];
-		let token = this.peekToken();
-		while (token !== TOK_END && token !== TOK_ELSE && token !== TOK_ELSIF) {
-			let statement = this.readStatement();
-			if (Parser.isError(statement)) {
-				return statement;
-			}
-			statements[statementIndex] = statement;
-			statementIndex++;			
-			token = this.peekToken();
-		}
-		return new AstBlock(statementIndex, statements).fromToken(fromToken);
-	}
-	
 	readIf() {
-		return this.readIfOrElsif(true);
+		return this.readIfOrElsif(TOK_IF);
 	}
 	
 	readElsif() {
-		return this.readIfOrElsif(false);
+		return this.readIfOrElsif(TOK_ELSIF);
 	}
 	
-	readIfOrElsif(isIf) {
+	readIfOrElsif(ifTokenTag) {
 		let ifToken = this.readToken();
-		if (ifToken.tag !== (isIf ? TOK_IF : TOK_ELSIF)) {
-			return ParserError.unexpectedToken(ifToken, [isIf ? TOK_IF : TOK_ELSIF]);
-		}
+		if (ifToken.tag !== ifTokenTag) {
+			return ParserError.unexpectedToken(ifToken, [ifTokenTag]);
+		}		
 		let condition = this.readExpression();
 		if (Parser.isError(condition)) {
 			return condition;
 		}
-		let thenToken = this.readToken();
-		if (thenToken.tag !== TOK_THEN) {
-			return ParserError.unexpectedToken(ifToken, [TOK_THEN]);
-		}
-		let trueStatement = this.readIfBlock(thenToken);
+		let trueStatement = this.readBlockUntil(TOK_THEN, [TOK_END, TOK_ELSE, TOK_ELSIF]);
 		if (Parser.isError(trueStatement)) {
 			return trueStatement;
 		}
@@ -603,8 +585,7 @@ class Parser {
 		}
 		let falseStatement = null;
 		if (this.peekToken() === TOK_ELSE) {
-			let elseToken = this.readToken();
-			falseStatement = this.readIfBlock(elseToken);
+			falseStatement = this.readBlockUntil(TOK_ELSE, [TOK_END, TOK_ELSE, TOK_ELSIF]);
 			if (Parser.isError(falseStatement)) {
 				return falseStatement;
 			}
@@ -620,15 +601,35 @@ class Parser {
 		return new AstIf(condition, trueStatement, falseStatement).fromToken(ifToken);
 	}
 	
-	readBlock(isLoop, endTokenSuffixText) {
-		let beginToken = this.readToken();
-		if (beginToken.tag !== (isLoop ? TOK_LOOP : TOK_BEGIN)) {
-			return ParserError.unexpectedToken(beginToken, [isLoop ? TOK_LOOP : TOK_BEGIN]);
+	readLoopBlock() {
+		let block = this.readBlockUntil(TOK_LOOP, [TOK_END]);
+		if (Parser.isError(block)) {
+			return block;
+		}
+		let endToken = this.readToken();
+		if (endToken.tag !== TOK_END) {
+			return ParserError.unexpectedToken(endToken, [TOK_END]);
+		}
+		let endLoopToken = this.readToken();
+		if (endLoopToken.tag !== TOK_LOOP) {
+			return ParserError.unexpectedToken(endLoopToken, [TOK_LOOP]);
+		}
+		return block;
+	}
+	
+	readAnonymousBlock() {
+		return this.readBlock(null);
+	}
+	
+	readBlockUntil(beginTokenTag, stopTokenTags) {
+		let beginToken  = this.readToken();
+		if (beginToken.tag !== beginTokenTag) {
+			return ParserError.unexpectedToken(beginToken, [beginTokenTag]);
 		}
 		let statementIndex = 0;
 		let statements = [];
 		let token = this.peekToken();
-		while (token !== TOK_END) {
+		while (stopTokenTags.indexOf(token) === - 1) {
 			let statement = this.readStatement();
 			if (Parser.isError(statement)) {
 				return statement;
@@ -637,26 +638,76 @@ class Parser {
 			statementIndex++;			
 			token = this.peekToken();
 		}
+		return new AstBlock(statementIndex, statements, null).fromToken(beginToken);
+	}
+	
+	readWhenStatement() {
+		let whenToken = this.readToken();
+		if (whenToken.tag !== TOK_WHEN) {
+			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);			
+		}
+		let whenExpr = this.readExpression();
+		if (Parser.isError(whenExpr)) {
+			return whenExpr;
+		}
+		let block = this.readBlockUntil(TOK_THEN, [TOK_END, TOK_WHEN, TOK_ELSE]);
+		if (Parser.isError(block)) {
+			return block;
+		}
+		return new AstWhenStatement(whenExpr, block).fromToken(whenToken);
+	}
+	
+	readException() {
+		let exceptionToken  = this.readToken();
+		if (exceptionToken.tag !== TOK_EXCEPTION) {
+			return ParserError.unexpectedToken(exceptionToken, [TOK_EXCEPTION]);
+		}
+		let whenStmtCount = 0;
+		let whenStmts = [];
+		while (this.peekToken() === TOK_WHEN) {
+			let whenStmt = this.readWhenStatement();
+			if (Parser.isError(whenStmt)) {
+				return whenStmt;
+			}
+			whenStmts[whenStmtCount] = whenStmt;
+			whenStmtCount++;
+		}
+		let defaultStmt = null;
+		if (this.peekToken() === TOK_ELSE) {
+			defaultStmt = this.readBlockUntil(TOK_ELSE, [TOK_END]);
+			if (Parser.isError(defaultStmt)) {
+				return defaultStmt;
+			}
+		}
+		return new AstException(whenStmtCount, whenStmts, defaultStmt);
+	}
+	
+	readBlock(blockName) {
+		let block = this.readBlockUntil(TOK_BEGIN, [TOK_END, TOK_EXCEPTION]);
+		if (Parser.isError(block)) {
+			return block;
+		}
+		if (this.peekToken() === TOK_EXCEPTION) {
+			let exception = this.readException();
+			if (Parser.isError(exception)) {
+				return exception;
+			}
+			block.exception = exception;
+		}
 		let endToken = this.readToken();
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		if (isLoop) {
-			let endLoopToken = this.readToken();
-			if (endLoopToken.tag !== TOK_LOOP) {
-				return ParserError.unexpectedToken(endLoopToken, [TOK_LOOP]);
+		if (blockName !== null) {
+			let blockNameToken = this.readToken();
+			if (blockNameToken.tag !== TOK_IDENTIFIER) {
+				return ParserError.unexpectedToken(blockNameToken, [TOK_IDENTIFIER]);
 			}
-		} 
-		if (endTokenSuffixText !== null) {
-			let endTokenSuffix = this.readToken();
-			if (endTokenSuffix.tag !== TOK_IDENTIFIER) {
-				return ParserError.unexpectedToken(endTokenSuffix, [TOK_IDENTIFIER]);
-			}
-			if (endTokenSuffix.text !== endTokenSuffixText) {
-				return ParserError.wrongEndSuffix(endTokenSuffix, endTokenSuffixText);
+			if (blockNameToken.text !== blockName) {
+				return ParserError.wrongEndSuffix(blockNameToken, blockName);
 			}
 		}
-		return new AstBlock(statementIndex, statements).fromToken(beginToken);
+		return block;
 	}
 	
 	readWhile() {
@@ -668,7 +719,7 @@ class Parser {
 		if (Parser.isError(condition)) {
 			return condition;
 		}
-		let statement = this.readBlock(true, null);
+		let statement = this.readLoopBlock();
 		if (Parser.isError(statement)) {
 			return statement;
 		}
@@ -730,7 +781,7 @@ class Parser {
 		if (Parser.isError(returnType)) {
 			return returnType;
 		}
-		let statement = this.readBlock(false, functionName.text);
+		let statement = this.readBlock(functionName.text);
 		if (Parser.isError(statement)) {
 			return statement;
 		}
@@ -750,7 +801,7 @@ class Parser {
 		if (Parser.isError(parameterList)) {
 			return parameterList;
 		}
-		let statement = this.readBlock(false, procedureName.text);
+		let statement = this.readBlock(procedureName.text);
 		if (Parser.isError(statement)) {
 			return statement;
 		}
@@ -772,6 +823,18 @@ class Parser {
 		return new AstReturn(expr).fromToken(retToken);
 	}
 	
+	readRaise() {
+		let raiseToken = this.readToken();
+		if (raiseToken.tag !== TOK_RAISE) {
+			return ParserError.unexpectedToken(raiseToken, [TOK_RAISE]);
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstRaise(expr).fromToken(raiseToken);
+	}
+
 	readYield() {
 		let yieldToken = this.readToken();
 		if (yieldToken.tag !== TOK_YIELD) {
@@ -839,7 +902,7 @@ class Parser {
 			}
 			sequence = new AstRange(sequence, upperBound).fromToken(rangeToken);
 		}
-		let statement = this.readBlock(true, null);
+		let statement = this.readLoopBlock();
 		if (Parser.isError(statement)) {
 			return statement;
 		}

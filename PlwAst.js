@@ -173,10 +173,28 @@ class AstIndex extends AstNode {
 }
 
 class AstBlock extends AstNode {
-	constructor(statementCount, statements) {
+	constructor(statementCount, statements, exception) {
 		super("ast-block");
 		this.statementCount = statementCount;
 		this.statements = statements;
+		this.exception = exception;
+	}
+}
+
+class AstException extends AstNode {
+	constructor(whenStmtCount, whenStmts, defaultStmt) {
+		super("ast-exception");
+		this.whenStmtCount = whenStmtCount;
+		this.whenStmts = whenStmts;
+		this.defaultStmt = defaultStmt;
+	}
+}
+
+class AstWhenStatement extends AstNode {
+	constructor(whenExpr, statement) {
+		super("ast-when-statement");
+		this.whenExpr = whenExpr;
+		this.statement = statement;
 	}
 }
 
@@ -254,6 +272,13 @@ class AstProcedureDeclaration extends AstNode {
 class AstReturn extends AstNode {
 	constructor(expr) {
 		super("ast-return");
+		this.expr = expr;
+	}
+}
+
+class AstRaise extends AstNode {
+	constructor(expr) {
+		super("ast-raise");
 		this.expr = expr;
 	}
 }

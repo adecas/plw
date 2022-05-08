@@ -353,7 +353,12 @@ class NativeFunctionManager {
 				if (index < 0 || index >= ref.str.length) {
 					return new StackMachineError().refAccessOutOfBound();
 				}
-				sm.stack[sm.sp - 3] = ref.str.charCodeAt(index);
+				let charCode = ref.str.charCodeAt(index)
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return new StackMachineError().referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = charCode;
 				sm.stackMap[sm.sp - 3] = false;
 				sm.sp -= 2;
 				return null;

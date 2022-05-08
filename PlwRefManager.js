@@ -22,6 +22,15 @@ class CountedRef {
 	}
 }
 
+class CountedRefExceptionHandler extends CountedRef {
+	constructor(codeBlockId, ip, bp) {
+		super("ref-exception-handler");
+		this.codeBlockId = codeBlockId;
+		this.ip = ip;
+		this.bp = bp;
+	}
+}
+
 class CountedRefObject extends CountedRef {
 	constructor(refSize, totalSize, ptr) {
 		super("ref-object");
@@ -141,7 +150,11 @@ class RefManager {
 	
 	createFrame(totalSize, ptr, mapPtr) {
 		return this.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
-	}		
+	}
+	
+	createExceptionHandler(codeBlockId, ip, bp) {
+		return this.addRef(new CountedRefExceptionHandler(codeBlockId, ip, bp));
+	}	
 		
 	destroyObject(ref, refManError) {
 		for (let i = 0; i < ref.refSize; i++) {

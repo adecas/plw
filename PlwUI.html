@@ -507,5 +507,66 @@ for html_frag in employee_table(false, fetch_employees()) loop
 end loop;
 </pre>
 
+<p id="snippet-exception-title" class="snippet">Exception</p>
+<pre id="snippet-exception">
+const empty_input := 1;
+const non_octal_digit := 2;
+function parse_octal(t text) integer begin
+  if length(t) = 0 then
+    raise empty_input;
+  end if;
+  var code0 := char_code('0', 0);
+  var num := 0;
+  for i in 0..length(t) - 1 loop
+    var digit := char_code(t, i) - code0;
+    if digit < 0 or digit > 7 then
+      raise non_octal_digit;
+    end if;
+    num := num * 8 + digit;
+  end loop;
+  return num;
+end parse_octal;
+procedure print_test_result(input text, result integer, is_result_exception boolean, expected integer, is_expected_exception boolean) begin
+  var result_text := text(result);
+  if is_result_exception then
+    result_text := 'exception(' || text(result) || ')';
+  end if;
+  var expected_text := text(expected);
+  if is_expected_exception then
+    expected_text := 'exception(' || text(expected) || ')';
+  end if;
+  var status := 'FAILED';
+  if result = expected and is_result_exception = is_expected_exception then
+    status := 'OK';
+  end if;
+  print('Test ' || status || ' for ' || input || ' got ' || result_text || ', expected ' || expected_text);
+  if input = 'Darth Vader' then
+    raise 54;
+  end if;
+end print_test_result;
+procedure test_parse_octal(t text, expected_result integer, expected_exception boolean) begin
+  var num := parse_octal(t);
+  print_test_result(t, num, false, expected_result, expected_exception);
+exception
+  when empty_input then
+  	print_test_result(t, empty_input, true, expected_result, expected_exception);
+  when non_octal_digit then
+  	print_test_result(t, non_octal_digit, true, expected_result, expected_exception);
+end test_parse_octal;      
+begin
+  test_parse_octal('', empty_input, true);
+  test_parse_octal('abc', non_octal_digit, true);
+  test_parse_octal('12345678', non_octal_digit, true);
+  test_parse_octal('0', 0, false);
+  test_parse_octal('10', 8, false);
+  test_parse_octal('31337', 31337, false);
+  test_parse_octal('1234567', 1234567, false);
+  test_parse_octal('Darth Vader', non_octal_digit, true);
+exception
+  else
+    print('easter egg exception');   
+end;
+</pre>
+
 <script>fillSnippetSelect()</script>
 </body></html>

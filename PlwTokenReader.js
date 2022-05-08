@@ -26,6 +26,10 @@ const TOK_ELSIF = "tok-elsif";
 const TOK_ELSE = "tok-else";
 const TOK_BEGIN = "tok-begin";
 const TOK_END = "tok-end";
+const TOK_EXCEPTION = "tok-exception";
+const TOK_RAISE = "tok-raise";
+const TOK_CASE = "tok-case";
+const TOK_WHEN = "tok-when";
 const TOK_WHILE = "tok-while";
 const TOK_LOOP = "tok-loop";
 const TOK_FOR = "tok-for";
@@ -177,6 +181,18 @@ class TokenReader {
 		if (token === "end") {
 			return new Token(TOK_END, token, line, col);
 		}
+		if (token === "exception") {
+			return new Token(TOK_EXCEPTION, token, line, col);
+		}
+		if (token === "raise") {
+			return new Token(TOK_RAISE, token, line, col);
+		}
+		if (token === "case") {
+			return new Token(TOK_CASE, token, line, col);
+		}
+		if (token === "when") {
+			return new Token(TOK_WHEN, token, line, col);
+		}		
 		if (token === "while") {
 			return new Token(TOK_WHILE, token, line, col);
 		}
