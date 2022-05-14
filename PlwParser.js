@@ -333,15 +333,15 @@ class Parser {
 			return ParserError.unexpectedToken(openToken, TOK_BEGIN_ARRAY);
 		}
 		let itemType = null;
-		if (this.peekToken() !== TOK_ASSIGN) {
+		if (this.peekToken() !== TOK_OF) {
 			itemType = this.readType();
 			if (Parser.isError(itemType)) {
 				return itemType;
 			}
 		}
-		let assignToken = this.readToken();
-		if (assignToken.tag !== TOK_ASSIGN) {
-			return ParserError.unexpectedToken(assignToken, [TOK_ASSIGN]);
+		let ofToken = this.readToken();
+		if (ofToken.tag !== TOK_OF) {
+			return ParserError.unexpectedToken(ofToken, [TOK_OF]);
 		}
 		let itemValues = [];
 		let itemIndex = 0;
@@ -373,15 +373,15 @@ class Parser {
 			return ParserError.unexpectedToken(fieldName, [TOK_IDENTIFIER])
 		}
 		let fieldType = null;
-		if (this.peekToken() !== TOK_ASSIGN) {
+		if (this.peekToken() !== TOK_OF) {
 			fieldType = this.readType();
 			if (Parser.isError(fieldType)) {
 				return fieldType;
 			}
 		}
-		let assign = this.readToken();
-		if (assign.tag !== TOK_ASSIGN) {
-			return ParserError.unexpectedToken(assign, [TOK_ASSIGN]);
+		let ofToken = this.readToken();
+		if (ofToken.tag !== TOK_OF) {
+			return ParserError.unexpectedToken(ofToken, [TOK_OF]);
 		}
 		let expr = this.readExpression();
 		if (Parser.isError(expr)) {

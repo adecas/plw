@@ -145,34 +145,39 @@ print('Done while');
 
 <p id="snippet-arrays-title" class="snippet">Arrays</p>
 <pre id="snippet-arrays">
-var a [integer] := [integer := 11, 22, 33, 44, 55];
+var a [integer] := [integer: 11, 22, 33, 44, 55];
 var b integer := a[1];
 var c [integer] := a[2..4];
-var d [integer] := c || [integer := 66, 77];
-if b = 22 and c = [integer := 33, 44, 55] and d = [integer := 33, 44, 55, 66, 77] then
+var d [integer] := c || [integer: 66, 77];
+if b = 22 and c = [integer: 33, 44, 55] and d = [integer: 33, 44, 55, 66, 77] then
   print('Good');
 else
   print('Error: alternate reality');
 end if;
-var aa [[integer]] := [[integer] := [integer := 11, 12], [integer := 22, 23],
-  [integer := 33, 34], [integer := 44], [integer := 55, 56, 57]];
+var aa [[integer]] := [[integer]:
+  [integer: 11, 12],
+  [integer: 22, 23],
+  [integer: 33, 34],
+  [integer: 44],
+  [integer: 55, 56, 57]
+];
 var bb [integer] := aa[1];
 var cc [[integer]] := aa[1..2];
-var dd [[integer]] := cc || [[integer] := [integer := 66, 67, 68], [integer :=]];
+var dd [[integer]] := cc || [[integer]: [integer: 66, 67, 68], [integer:]];
 if
-  bb = [integer := 22, 23] and
-  cc = [[integer] := [integer := 22, 23], [integer := 33, 34]] and
-  dd = [[integer] := [integer := 22, 23], [integer := 33, 34], [integer := 66, 67, 68], [integer :=]]
+  bb = [integer: 22, 23] and
+  cc = [[integer]: [integer: 22, 23], [integer: 33, 34]] and
+  dd = [[integer]: [integer: 22, 23], [integer: 33, 34], [integer: 66, 67, 68], [integer:]]
 then
   print('Good');
 else
   print('Error: alternate reality');
 end if;
-var at [text] := [text := '11', '22', '33', '44', '55'];
+var at [text] := [text: '11', '22', '33', '44', '55'];
 var bt text := at[1];
 var ct [text] := at[2..3];
-var dt [text] := ct || [text := '66', '77'];
-if bt = '22' and ct = [text := '33', '44'] and dt = [text := '33', '44', '66', '77'] then
+var dt [text] := ct || [text: '66', '77'];
+if bt = '22' and ct = [text: '33', '44'] and dt = [text: '33', '44', '66', '77'] then
   print('Good');
 else
   print('Error: alternate reality');
@@ -281,7 +286,7 @@ function bubble_sort(nums [integer]) [integer] begin
   end loop;
   return nums;
 end bubble_sort;
-print(text(bubble_sort([integer := 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
+print(text(bubble_sort([integer: 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
 <p id="snippet-standard-deviation-title" class="snippet">Standard Deviation</p>
@@ -302,8 +307,8 @@ function stddev(nums [real]) real begin
   end loop;
   return sqrt(acc / real(length(nums)));
 end stddev;
-print(text(stddev([real := 0.0, 1.11, 10.1, 22.33, -6.7])));
-print(text(stddev([real := 0.0, 1.0])));
+print(text(stddev([real: 0.0, 1.11, 10.1, 22.33, -6.7])));
+print(text(stddev([real: 0.0, 1.0])));
 </pre>
 
 <p id="snippet-entropy-title" class="snippet">Entropy</p>
@@ -317,12 +322,12 @@ function occurence_pos(c integer, occurences [{c integer, n integer}]) integer b
   return -1;
 end occurence_pos;
 function char_occurences(t text) [{c integer, n integer}] begin
-  var occurences := [{c integer, n integer} := ];
+  var occurences := [{c integer, n integer}:];
   for i in 0 .. length(t) - 1 loop
     var c := char_code(t, i);
     var pos := occurence_pos(c, occurences);
     if pos = - 1 then
-      occurences := occurences || [:= { c := c, n := 1}];
+      occurences := occurences || [:{c: c, n: 1}];
     else
       occurences[pos].n := occurences[pos].n + 1;
     end if;
@@ -367,7 +372,7 @@ print(html_escape('in C bitwise op is & and shift is << or >> (ex: "(a & 0xFF00)
 
 <p id="snippet-records-title" class="snippet">Records</p>
 <pre id="snippet-records">
-var r1 { i integer, b boolean } := { i integer := 42, b boolean := true };
+var r1 {i integer, b boolean} := {i: 42, b: true};
 if r1.i = 42 and r1.b then
   print('Good');
 else
@@ -384,11 +389,7 @@ end if;
 
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>
 <pre id="snippet-copy-on-write">
-var v1 := [:=
-  [:= 10, 11],
-  [:= 20, 21],
-  [:= 30, 31],
-];
+var v1 := [:[:10, 11], [:20, 21], [:30, 31]];
 function text(v [[integer]]) text begin
   var s := '[';
   for i in 0..length(v) - 1 loop
@@ -401,7 +402,7 @@ function text(v [[integer]]) text begin
   return s || ']';
 end text;
 var v2 := v1;
-v2[0] := [:= 42, 51];
+v2[0] := [:42, 51];
 var v3 := v1;
 v3[1][0] := 42;
 var v4 := v1[0];
@@ -410,7 +411,7 @@ print(text(v1));
 print(text(v2));
 print(text(v3));
 print(text(v4));
-var v5 := [:= 1, 2, 3];
+var v5 := [:1, 2, 3];
 procedure change_array(v [integer]) begin
   v[0] := 42;
   v[1] := 51;
@@ -423,8 +424,8 @@ procedure change_record(r { a integer, b [integer] }, a integer, b [integer]) be
   r.b := b;
   print('a = ' || text(r.a) || ', b = ' || text(r.b));
 end change_record;
-var r1 := {a := 1, b := [integer := 2]};
-change_record(r1, 42, [:= 51]);
+var r1 := {a: 1, b: [: 2]};
+change_record(r1, 42, [:51]);
 print('a = ' || text(r1.a) || ', b = ' || text(r1.b));
 </pre>
 
@@ -432,9 +433,9 @@ print('a = ' || text(r1.a) || ', b = ' || text(r1.b));
 <pre id="snippet-type-inference">
 var i := 42;
 var b := true;
-var v := [:= 42, 51];
+var v := [:42, 51];
 var t := 'Hello';
-var r := { i := 42, b := true, v := [:= 42, 51], t := 'Hello' };
+var r := {i: 42, b: true, v: [:42, 51], t: 'Hello'};
 if     i - r.i = 0
    and ((b and r.b) or (not b and not r.b))
    and v[0] - r.v[0] = 0 and v[1] - r.v[1] = 0
@@ -485,7 +486,11 @@ type employee {
   skills [text]
 };
 function employee(first_name text, last_name text, skills [text]) employee begin
-  var e employee := { first_name text := first_name, last_name text := last_name, skills [text] := skills };
+  var e employee := {
+    first_name: first_name,
+    last_name: last_name,
+    skills: skills
+  };
   return e;
 end employee;
 generator fetch_employees() employee begin
