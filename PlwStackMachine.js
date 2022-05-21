@@ -151,6 +151,26 @@ class StackMachine {
 			this.ip++;
 			if (code === "debug") {
 				console.log(this);
+			} else if (code === "dup") {
+				if (this.sp < 1) {
+					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+				}
+				this.stack[this.sp] = this.stack[this.sp - 1];
+				this.stackMap[this.sp] = this.stackMap[this.sp - 1];
+				if (this.stackMap[this.sp]) {
+					this.refMan.incRefCount(this.stack[this.sp]);
+				}
+				this.sp++;
+			} else if (code === "swap") {
+				if (this.sp < 2) {
+					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+				}
+				let tmp = this.stack[this.sp - 2];
+				let tmpMap = this.stackMap[this.sp - 2];
+				this.stack[this.sp - 2] = this.stack[this.sp - 1];
+				this.stackMap[this.sp - 2] = this.stackMap[this.sp - 1];
+				this.stack[this.sp - 1] = tmp;
+				this.stackMap[this.sp - 1] = tmpMap;
 			} else if (code === "add") {
 				if (this.sp < 2) {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -312,7 +332,7 @@ class StackMachine {
 				}
 				let result = this.refMan.compareRefs(this.stack[this.sp - 2], this.stack[this.sp - 1], refManError);
 				if (refManError.hasError()) {
-					return sm.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
 				this.refMan.decRefCount(this.stack[this.sp - 2], refManError);
 				if (!refManError.hasError()) {

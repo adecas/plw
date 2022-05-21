@@ -82,6 +82,31 @@ class EvalTypeRecord extends EvalResultType {
 	}
 }
 
+class EvalTypeVariantField {
+	constructor(fieldName, fieldType) {
+		this.fieldName = fieldName;
+		this.fieldType = fieldType;
+	}
+}
+
+class EvalTypeVariant extends EvalResultType {
+	constructor(fieldCount, fields) {
+		super("res-type-variant", true);
+		this.fieldCount = fieldCount;
+		this.fields = fields;
+	}
+
+	typeKey() {
+		let name = "variant(";
+		for (let i = 0; i < this.fieldCount; i++) {
+			name += (i == 0 ? "" : ", ") + this.fields[i].fieldName;
+			if (this.fields[i].fieldType !== null) {
+				name += " " + this.fields[i].fieldType.typeKey();
+			}
+		}
+		return name + ")";
+	}
+}
 
 class EvalTypeArray extends EvalResultType {
 	constructor(underlyingType) {
@@ -294,6 +319,18 @@ class EvalError extends EvalResult {
 	static unreachableCode() {
 		return new EvalError("Unreachable code");
 	}
+	
+	static variantKindAlreadyManaged(kindName) {
+		return new EvalError("Variant kind " + kindName + " already managed");
+	}
+	
+	static variantKindNotManaged(kindName) {
+		return new EvalError("Variant kind " + kindName + " not managed");
+	}
+	
+	static fieldAlreadyExists(fieldName) {
+		return new EvalError("Field " + fieldName + " already exists");
+	}
 		
 }
 
@@ -338,6 +375,14 @@ class CodeBlock {
 		this.codeSize++;
 		this.codes[this.codeSize] = arg;
 		this.codeSize++;
+	}
+	
+	codeDup() {
+		this.code1("dup");
+	}
+	
+	codeSwap() {
+		this.code1("swap");
 	}
 	
 	codePush(val) {
@@ -650,6 +695,7 @@ class CompilerVariable {
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
 		this.offset = offset;
+		this.resolvedVariant = -1;
 	}
 }
 
@@ -791,6 +837,13 @@ class Compiler {
 			return this.context.addType(new EvalTypeSequence(underType));
 		}
 		if (expr.tag === "ast-type-record") {
+			for (let i = 1; i < expr.fieldCount; i++) {
+				for (let j = 0; j < i; j++) {
+					if (expr.fields[i].fieldName === expr.fields[j].fieldName) {
+						return EvalError.fieldAlreadyExists(expr.fields[i].fieldName).fromExpr(expr.fields[i]);
+					}
+				}
+			}
 			let fields = [];
 			for (let i = 0; i < expr.fieldCount; i++) {
 				let fieldType = this.evalType(expr.fields[i].fieldType);
@@ -800,6 +853,76 @@ class Compiler {
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
+		}
+		if (expr.tag === "ast-type-variant") {
+			for (let i = 1; i < expr.fieldCount; i++) {
+				for (let j = 0; j < i; j++) {
+					if (expr.fields[i].fieldName === expr.fields[j].fieldName) {
+						return EvalError.fieldAlreadyExists(expr.fields[i].fieldName).fromExpr(expr.fields[i]);
+					}
+				}
+			}
+			let fields = [];
+			for (let i = 0; i < expr.fieldCount; i++) {
+				let fieldType = null;
+				if (expr.fields[i].fieldType !== null) {
+					fieldType = this.evalType(expr.fields[i].fieldType);
+					if (fieldType.isError()) {
+						return fieldType;
+					}
+				}
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
+			}
+			let variantType = new EvalTypeVariant(expr.fieldCount, fields);
+			let existingType = this.context.getType(variantType.typeKey());
+			if (existingType !== null) {
+				return existingType;
+			}
+			for (let i = 0; i < variantType.fieldCount; i++) {
+				let paramCount = 0;
+				let params = [];
+				if (variantType.fields[i].fieldType !== null) {
+					paramCount = 1;
+					params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+				}
+				let evalFunc = new EvalResultFunction(
+					variantType.fields[i].fieldName,
+					new EvalResultParameterList(paramCount, params),
+					null,
+					false
+				);
+				if (this.context.getFunction(evalFunc) !== null) {
+					return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);
+				}
+			}
+			this.context.addType(variantType);
+			for (let i = 0; i < variantType.fieldCount; i++) {
+				let paramCount = 0;
+				let params = [];
+				if (variantType.fields[i].fieldType !== null) {
+					paramCount = 1;
+					params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+				}
+				let evalFunc = new EvalResultFunction(
+					variantType.fields[i].fieldName,
+					new EvalResultParameterList(paramCount, params),
+					variantType,
+					false
+				);
+				this.context.addFunction(evalFunc);
+				let codeBlockId = this.context.addCodeBlock();
+				let codeBlock = this.context.codeBlocks[codeBlockId];
+				if (paramCount === 0) {
+					codeBlock.codePush(0);
+				} else {
+					codeBlock.codePushLocal(-5);
+				}
+				codeBlock.codePush(i);
+				codeBlock.codeCreateObject(2);
+				codeBlock.codeRetVal();
+				evalFunc.codeBlockIndex = codeBlockId;
+			}
+			return variantType;
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
@@ -825,13 +948,19 @@ class Compiler {
 			if (this.scope.getLocalVariable(expr.varName) !== null) {
 				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
 			}
+			let varType = null;
+			if (expr.varType !== null) {
+				varType = this.evalType(expr.varType);
+				if (varType.isError()) {
+					return varType;
+				}
+			}
 			let initValueType = this.eval(expr.valueExpr);
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			let varType = expr.varType === null ? initValueType : this.evalType(expr.varType);
-			if (varType.isError()) {
-				return varType;
+			if (varType === null) {
+				varType = initValueType;
 			}
 			if (
 				initValueType.tag === "res-type-array" &&
@@ -1795,6 +1924,167 @@ class Compiler {
 				this.codeBlock.codeCall(func.codeBlockIndex);
 			}
 			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
+		}
+		if (expr.tag === "ast-case") {
+			let caseType = null;
+			if (expr.caseExpr !== null) {
+				caseType = this.eval(expr.caseExpr);
+				if (caseType.isError()) {
+					return caseType;
+				}
+			}
+			let endLocs = [];
+			let endLocCount = 0;
+			let resultType = null;
+			for (let i = 0; i < expr.whenCount; i++) {
+				if (caseType !== null) {
+					this.codeBlock.codeDup();
+					let whenType = this.eval(expr.whens[i].whenExpr);
+					if (whenType.isError()) {
+						return whenType;
+					}
+					if (whenType !== caseType) {
+						return EvalError.wrongType(whenType, caseType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+					}
+					if (caseType.isRef) {
+						this.codeBlock.codeEqRef();
+					} else {
+						this.codeBlock.codeEq();
+					}
+					let nextLoc = this.codeBlock.codeJz(0);
+					this.codeBlock.codePopVoid(1);
+					let thenType = this.eval(expr.whens[i].thenExpr);
+					if (thenType.isError()) {
+						return thenType;
+					}
+					if (resultType === null) {
+						resultType = thenType;
+					} else if (thenType !== resultType) {
+						return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+					}
+					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
+					endLocCount++;
+					this.codeBlock.setLoc(nextLoc);
+				} else {
+					let whenType = this.eval(expr.whens[i].whenExpr);
+					if (whenType.isError()) {
+						return whenType;
+					}
+					if (whenType !== EVAL_TYPE_BOOLEAN) {
+						return EvalError.wrongType(whenType, "boolean").fromExpr(expr.whens[i].whenExpr);
+					}
+					let nextLoc = this.codeBlock.codeJz(0);
+					let thenType = this.eval(expr.whens[i].thenExpr);
+					if (thenType.isError()) {
+						return thenType;
+					}
+					if (resultType === null) {
+						resultType = thenType;
+					} else if (thenType !== resultType) {
+						return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+					}
+					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
+					endLocCount++;
+					this.codeBlock.setLoc(nextLoc);
+				}		
+			}
+			if (caseType !== null) {
+				this.codeBlock.codePopVoid(1);
+			}
+			let elseType = this.eval(expr.elseExpr);
+			if (elseType.isError()) {
+				return elseType;
+			}
+			if (resultType === null) {
+				resultType = elseType;
+			} else if (elseType !== resultType) {
+				return EvalError.wrongType(elseType, resultType.typeKey()).fromExpr(expr.elseExpr);
+			}
+			for (let i = 0; i < endLocCount; i++) {
+				this.codeBlock.setLoc(endLocs[i]);
+			}
+			return resultType;
+		}
+		if (expr.tag === "ast-kindof") {
+			let caseType = this.eval(expr.caseExpr);
+			if (caseType.isError()) {
+				return caseType;
+			}
+			if (caseType.tag !== "res-type-variant") {
+				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
+			}
+			this.codeBlock.codeDup();
+			this.codeBlock.codePush(1);
+			this.codeBlock.codePushPtrOffset();
+			let endLocs = [];
+			let endLocCount = 0;
+			let resultType = null;
+			let kindHasWhen = [];
+			for (let i = 0; i < caseType.fieldCount; i++) {
+				kindHasWhen[i] = false;
+			}
+			for (let i = 0; i < expr.whenCount; i++) {
+				this.codeBlock.codeDup();
+				let fieldIndex = 0;
+				while (fieldIndex < caseType.fieldCount) {
+					if (caseType.fields[fieldIndex].fieldName === expr.whens[i].kindName) {
+						break;
+					}
+					fieldIndex++;
+				}
+				if (fieldIndex === caseType.fieldCount) {
+					return EvalError.unknownVariantKind(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				}
+				if (kindHasWhen[fieldIndex] === true) {
+					return EvalError.variantKindAlreadyManaged(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				}
+				kindHasWhen[fieldIndex] = true;
+				this.codeBlock.codePush(fieldIndex);
+				this.codeBlock.codeEq();						
+				let nextLoc = this.codeBlock.codeJz(0);
+				this.codeBlock.codePopVoid(1);
+				this.pushScopeBlock();
+				this.codeBlock.codePush(0);
+				this.codeBlock.codePushPtrOffset();
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
+				let thenType = this.eval(expr.whens[i].thenExpr);
+				if (thenType.isError()) {
+					return thenType;
+				}
+				if (resultType === null) {
+					resultType = thenType;
+				} else if (thenType !== resultType) {
+					return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+				}
+				this.codeBlock.codeSwap();
+				this.codeBlock.codePopVoid(1);
+				this.popScope();
+				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
+				endLocCount++;
+				this.codeBlock.setLoc(nextLoc);
+			}
+			this.codeBlock.codePopVoid(1);
+			if (expr.elseExpr === null) {
+				for (let i = 0; i < caseType.fieldCount; i++) {
+					if (kindHasWhen[i] === false) {
+						return EvalError.variantKindNotManaged(caseType.fields[i].fieldName).fromExpr(expr);
+					}
+				}
+			} else {
+				let elseType = this.eval(expr.elseExpr);
+				if (elseType.isError()) {
+					return elseType;
+				}
+				if (resultType === null) {
+					resultType = elseType;
+				} else if (elseType !== resultType) {
+					return EvalError.wrongType(elseType, resultType.typeKey()).fromExpr(expr.elseExpr);
+				}
+			}
+			for (let i = 0; i < endLocCount; i++) {
+				this.codeBlock.setLoc(endLocs[i]);
+			}
+			return resultType;
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}

@@ -266,6 +266,14 @@ class Parser {
 		if (this.peekToken() === TOK_BEGIN_AGG) {
 			return this.readRecordValue();
 		}
+		
+		if (this.peekToken() === TOK_CASE) {
+			return this.readCase();
+		}
+		
+		if (this.peekToken() === TOK_KINDOF) {
+			return this.readKindof();
+		}
 					
 		let token = this.readToken();
 
@@ -307,8 +315,132 @@ class Parser {
 		
 		return ParserError.unexpectedToken(token, [
 			TOK_IDENTIFIER, TOK_STRING, TOK_INTEGER, TOK_TRUE, TOK_FALSE,
-			TOK_SUB, TOK_NOT, TOK_BEGIN_AGG, TOK_BEGIN_ARRAY, TOK_BEGIN_GROUP
+			TOK_SUB, TOK_NOT, TOK_BEGIN_AGG, TOK_CASE, TOK_BEGIN_ARRAY, TOK_BEGIN_GROUP
 		]);
+	}
+		
+	readCase() {
+		let caseToken = this.readToken();
+		if (caseToken.tag !== TOK_CASE) {
+			return ParserError.unexpectedToken(caseToken, [TOK_CASE]);
+		}
+		let caseExpr = null;
+		if (this.peekToken() !== TOK_WHEN) {
+			caseExpr = this.readExpression();
+			if (Parser.isError(caseExpr)) {
+				return caseExpr;
+			}
+		}
+		let whens = [];
+		let whenIndex = 0;
+		while (this.peekToken() === TOK_WHEN) {
+			let when = this.readWhen();
+			if (Parser.isError(when)) {
+				return when;
+			}
+			whens[whenIndex] = when;
+			whenIndex++;
+		}
+		let elseToken = this.readToken();
+		if (elseToken.tag !== TOK_ELSE) {
+			return ParserError.unexpectedToken(elseToken, [TOK_ELSE]);
+		}
+		let elseExpr = this.readExpression();
+		if (Parser.isError(elseExpr)) {
+			return elseExpr;
+		}
+		let endToken = this.readToken();
+		if (endToken.tag !== TOK_END) {
+			return ParserError.unexpectedToken(endToken, [TOK_END]);
+		}
+		return new AstCase(caseExpr, whenIndex, whens, elseExpr);
+	}
+	
+	readWhen() {
+		let whenToken = this.readToken();
+		if (whenToken.tag !== TOK_WHEN) {
+			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);
+		}
+		let whenExpr = this.readExpression();
+		if (Parser.isError(whenExpr)) {
+			return whenExpr;
+		}
+		let thenToken = this.readToken();
+		if (thenToken.tag !== TOK_THEN) {
+			return ParserError.unexpectedToken(thenToken, [TOK_THEN]);
+		}
+		let thenExpr = this.readExpression();
+		if (Parser.isError(thenExpr)) {
+			return thenExpr;
+		}
+		return new AstWhen(whenExpr, thenExpr);
+	}
+	
+	readKindof() {
+		let kindofToken = this.readToken();
+		if (kindofToken.tag !== TOK_KINDOF) {
+			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
+		}
+		let caseExpr = this.readExpression();
+		if (Parser.isError(caseExpr)) {
+			return caseExpr;
+		}
+		let whens = [];
+		let whenIndex = 0;
+		while (this.peekToken() === TOK_WHEN) {
+			let when = this.readKindofWhen();
+			if (Parser.isError(when)) {
+				return when;
+			}
+			whens[whenIndex] = when;
+			whenIndex++;
+		}
+		let elseExpr = null;
+		if (this.peekToken() === TOK_ELSE) {
+			this.readToken();
+			elseExpr = this.readExpression();
+			if (Parser.isError(elseExpr)) {
+				return elseExpr;
+			}
+		}
+		let endToken = this.readToken();
+		if (endToken.tag !== TOK_END) {
+			return ParserError.unexpectedToken(endToken, [TOK_END]);
+		}
+		return new AstKindof(caseExpr, whenIndex, whens, elseExpr);
+	}
+	
+	readKindofWhen() {
+		let whenToken = this.readToken();
+		if (whenToken.tag !== TOK_WHEN) {
+			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);
+		}
+		let kindNameToken = this.readToken();
+		if (kindNameToken.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(kindNameToken, [TOK_IDENTIFIER]);
+		}
+		let varName = null;
+		if (this.peekToken() === TOK_BEGIN_GROUP) {
+			this.readToken();
+			let varNameToken = this.readToken();
+			if (varNameToken.tag !== TOK_IDENTIFIER) {
+				return ParserError.unexpectedToken(varNameToken, [TOK_IDENTIFIER]);
+			}
+			varName = varNameToken.text;
+			let closeToken = this.readToken();
+			if (closeToken.tag !== TOK_END_GROUP) {
+				return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
+			}
+		}
+		let thenToken = this.readToken();
+		if (thenToken.tag !== TOK_THEN) {
+			return ParserError.unexpectedToken(thenToken, [TOK_THEN]);
+		}
+		let thenExpr = this.readExpression();
+		if (Parser.isError(thenExpr)) {
+			return thenExpr;
+		}
+		return new AstKindofWhen(kindNameToken.text, varName, thenExpr);
 	}
 	
 	readExprGroup() {
@@ -423,6 +555,9 @@ class Parser {
 		if (this.peekToken() === TOK_SEQUENCE) {
 			return this.readTypeSequence();
 		}
+		if (this.peekToken() === TOK_VARIANT) {
+			return this.readTypeVariant();
+		}
 		if (this.peekToken() === TOK_BEGIN_AGG) {
 			return this.readTypeRecord();
 		}
@@ -510,6 +645,53 @@ class Parser {
 			return ParserError.unexpectedToken(closeToken, [TOK_END_AGG]);
 		}
 		return new AstTypeRecord(fieldIndex, fields).fromToken(openToken);		
+	}
+	
+	readTypeVariantField() {
+		let fieldName = this.readToken();
+		if (fieldName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(fieldName, [TOK_IDENTIFIER]);
+		}
+		let fieldType = null;
+		if (this.peekToken() !== TOK_END_GROUP && this.peekToken() !== TOK_SEP) {
+			fieldType = this.readType();
+			if (Parser.isError(fieldType)) {
+				return fieldType;
+			}
+		}
+		return new AstTypeRecordField(fieldName.text, fieldType).fromToken(fieldName);	
+	}
+	
+	readTypeVariant() {
+		let variantToken = this.readToken();
+		if (variantToken.tag !== TOK_VARIANT) {
+			return ParserError.unexpectedToken(variantToken, [TOK_VARIANT]);
+		}
+		let openToken = this.readToken();
+		if (openToken.tag !== TOK_BEGIN_GROUP) {
+			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
+		}
+		let fields = [];
+		let fieldIndex = 0;
+		while (this.peekToken() !== TOK_END_GROUP) {
+			if (fieldIndex > 0) {
+				let sepToken = this.readToken();
+				if (sepToken.tag !== TOK_SEP) {
+					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
+				}
+			}
+			let fieldExpr = this.readTypeVariantField();
+			if (Parser.isError(fieldExpr)) {
+				return fieldExpr;
+			}
+			fields[fieldIndex] = fieldExpr;
+			fieldIndex++;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.tag !== TOK_END_GROUP) {
+			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
+		}
+		return new AstTypeVariant(fieldIndex, fields).fromToken(openToken);		
 	}
 	
 	readTypeDeclaration() {

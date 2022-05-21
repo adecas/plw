@@ -92,6 +92,22 @@ class AstTypeRecord extends AstNode {
 	}
 }
 
+class AstTypeVariantField extends AstNode {
+	constructor(fieldName, fieldType) {
+		super("ast-type-variant-field");
+		this.fieldName = fieldName;
+		this.fieldType = fieldType;
+	}
+}
+
+class AstTypeVariant extends AstNode {
+	constructor(fieldCount, fields) {
+		super("ast-type-variant");
+		this.fieldCount = fieldCount;
+		this.fields = fields;
+	}
+}
+
 class AstOperatorBinary extends AstNode {
 	constructor(operator, left, right) {
 		super("ast-operator-binary");
@@ -328,3 +344,41 @@ class AstTypeDeclaration extends AstNode {
 		this.typeExpr = typeExpr;
 	}
 }
+
+class AstCase extends AstNode {
+	constructor(caseExpr, whenCount, whens, elseExpr) {
+		super("ast-case");
+		this.caseExpr = caseExpr;
+		this.whenCount = whenCount;
+		this.whens = whens;
+		this.elseExpr = elseExpr;
+	}
+}
+
+class AstWhen extends AstNode {
+	constructor(whenExpr, thenExpr) {
+		super("ast-when");
+		this.whenExpr = whenExpr;
+		this.thenExpr = thenExpr;
+	}
+}
+
+class AstKindof extends AstNode {
+	constructor(caseExpr, whenCount, whens, elseExpr) {
+		super("ast-kindof");
+		this.caseExpr = caseExpr;
+		this.whenCount = whenCount;
+		this.whens = whens;
+		this.elseExpr = elseExpr;
+	}
+}
+
+class AstKindofWhen extends AstNode {
+	constructor(kindName, varName, thenExpr) {
+		super("ast-kindof-when");
+		this.kindName = kindName;
+		this.varName = varName;
+		this.thenExpr = thenExpr;
+	}
+}
+

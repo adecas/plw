@@ -353,17 +353,13 @@ function html_escape(t text) text begin
   var esc := '';
   for i in 0..length(t) - 1 loop
     var c := subtext(t, i, 1);
-    if c = '&gt;' then
-      esc := esc || '&amp;gt;';
-    elsif c = '&lt;' then
-      esc := esc || '&amp;lt';
-    elsif c = '&amp;' then
-      esc := esc || '&amp;amp;';
-    elsif c = '&quot;' then
-      esc := esc || '&amp;quot;';
-    else
-      esc := esc || c;
-    end if; 
+    esc := esc || case c
+      when '&gt;'   then '&amp;gt;'
+      when '&lt;'   then '&amp;lt'
+      when '&amp;'  then '&amp;amp;'
+      when '&quot;' then '&amp;quot;'
+      else c
+    end; 
   end loop;
   return esc;
 end html_escape;
@@ -385,6 +381,26 @@ if r1.i = 51 and not r1.b then
 else
   print('Error: alternate reality');
 end if;
+</pre>
+
+<p id="snippet-variant-records-title" class="snippet">Variant Records</p>
+<pre id="snippet-variant-records">
+# a variant record type automatically create a variable and a function
+# for each variant. the variable is numeric, and represents the kind
+# of the variant. The function is a constructor for the variant
+procedure print(status variant(none, error text, done integer)) begin
+  print(kindof status
+    when none then 'none'
+    when error(msg) then 'error: ' || msg
+    when done(row_count) then 'done: ' || text(row_count)
+  end);
+end print;
+var vr variant(none, error text, done integer) := done(5);
+print(vr);
+vr := none();
+print(vr);
+vr := error('file not found');
+print(vr);
 </pre>
 
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>
@@ -473,7 +489,7 @@ generator gen_concat(words [text], final_int integer) text begin
   end loop;
   yield text(final_int);
 end gen_concat;
-for i in gen_concat([text := 'hello', ' the', ' world'], 42) loop
+for i in gen_concat([:'hello', ' the', ' world'], 42) loop
   print(i);
 end loop;
 </pre>
@@ -494,9 +510,9 @@ function employee(first_name text, last_name text, skills [text]) employee begin
   return e;
 end employee;
 generator fetch_employees() employee begin
-  yield employee('John', 'Backer', [text := 'C++', 'SQL']);
-  yield employee('Jane', 'Smith', [text := 'Java', 'HTML']);
-  yield employee('Alan', 'Carpenter', [text := 'Ksh', 'Scrum']);
+  yield employee('John', 'Backer', [:'C++', 'SQL']);
+  yield employee('Jane', 'Smith', [:'Java', 'HTML']);
+  yield employee('Alan', 'Carpenter', [:'Ksh', 'Scrum']);
 end fetch_employees;
 generator employee_table(with_header boolean, employees sequence(employee)) text begin
   yield '&lt;table&gt;';

@@ -9,6 +9,7 @@
 
 const TOK_IDENTIFIER = "tok-identifier";
 const TOK_STRING = "tok-string";
+const TOK_COMMENT = "tok-comment";
 const TOK_INTEGER = "tok-integer";
 const TOK_REAL = "tok-real";
 const TOK_ASSIGN = "tok-assign";
@@ -61,6 +62,8 @@ const TOK_END_ARRAY = "tok-end-array";
 const TOK_BEGIN_AGG = "tok-begin-agg";
 const TOK_END_AGG = "tok-end-agg";
 const TOK_SEQUENCE = "tok-sequence";
+const TOK_VARIANT = "tok-variant";
+const TOK_KINDOF = "tok-kindof";
 const TOK_SEL = "tok-sel";
 const TOK_SEP = "tok-sep";
 const TOK_TERM = "tok-term";
@@ -139,6 +142,25 @@ class TokenReader {
 			this.pos++;
 		}
 		return new Token(TOK_STRING, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("''", "'"), line, col);
+	}
+	
+	skipComment() {
+		this.skipBlank();
+		while (this.pos < this.exprStr.length && this.exprStr.charAt(this.pos) === "#") {
+			this.pos++;
+			this.col++;
+			while (this.pos < this.exprStr.length) {
+				let c = this.exprStr.charAt(this.pos);
+				this.col++;
+				this.pos++;
+				if (c === "\n") {
+					this.line++;
+					this.col = 1;
+					break;
+				}
+			}
+			this.skipBlank();
+		}
 	}
 	
 	readKeywordOrIdentifier() {
@@ -242,6 +264,12 @@ class TokenReader {
 		if (token === "sequence") {
 			return new Token(TOK_SEQUENCE, token, line, col);
 		}
+		if (token === "variant") {
+			return new Token(TOK_VARIANT, token, line, col);
+		}
+		if (token === "kindof") {
+			return new Token(TOK_KINDOF, token, line, col);
+		}
 		return new Token(TOK_IDENTIFIER, token, line, col);
 	}
 	
@@ -284,7 +312,7 @@ class TokenReader {
 	}
 		
 	readToken() {
-		this.skipBlank();
+		this.skipComment();
 		
 		if (this.pos === this.exprStr.length) {
 			return new Token(TOK_EOF, "", this.line, this.col);
