@@ -589,5 +589,31 @@ exception
 end;
 </pre>
 
+<p id="snippet-abstract-types-title" class="snippet">Abstract types</p>
+<pre id="snippet-abstract-types">
+type circle {
+  name text,
+  diameter real
+};
+
+function shape_name(c circle) text begin
+  return c.name;
+end shape_name;
+
+function shape_perimeter(c circle) real begin
+  var pir :=  (3.14116 * c.diameter / 2.0);
+  return pir * pir;
+end shape_perimeter;
+
+var c circle := {name: 'circle', diameter: 10.0};
+
+# the compiler should find the function shape_name(circle) and shape_perimeter(circle)
+# and create an object with the refid of the circle and the codeBlockId of the functions
+# abstract layout: concreteRefId, func1, ..., funcN
+var shape abstract(shape_name() text, shape_perimeter() real) := c;
+
+print('The perimeter of the ' || shape_name(shape) || ' is ' || text(shape_perimeter(shape)));
+</pre>
+
 <script>fillSnippetSelect()</script>
 </body></html>

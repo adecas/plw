@@ -721,7 +721,7 @@ class StackMachine {
 					this.stack[this.sp - 1] = refId; 
 					this.stackMap[this.sp - 1] = true;
 				} else if (code === "call") {
-					if (arg1 < -1 || arg1 > this.codeBlocks.length) {
+					if (arg1 < 0 || arg1 > this.codeBlocks.length) {
 						return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
 					this.stack[this.sp] = this.codeBlockId;
@@ -735,6 +735,49 @@ class StackMachine {
 					this.sp++;
 					this.bp = this.sp;
 					this.codeBlockId = arg1;
+					this.ip = 0;
+				} else if (code === "call_abstract") {
+					if (this.sp < 2) {
+						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					let refId = this.stack[this.sp - 2];
+					let ref = this.refMan.getRefOfType(refId, "ref-object", refManError);
+					if (refManError.hasError()) {
+						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+					}
+					if (arg1 < 0 || ref.totalSize < 1 + 2 * arg1) {
+						return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					let codeBlockId = ref.ptr[1 + 2 * arg1];
+					if (codeBlockId < 0 || codeBlockId > this.codeBlocks.length) {
+						return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					let concreteIsRef = false;
+					if (ref.refSize > 0) {
+						concreteIsRef = true;
+						this.refMan.incRefCount(ref.ptr[0], refManError);
+						if (refManError.hasError()) {
+							return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+						}
+					}
+					let concreteVal = ref.ptr[0];
+					this.refMan.decRefCount(refId, refManError);
+					if (refManError.hasError()) {
+						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+					}
+					this.stack[this.sp - 2] = concreteVal;
+					this.stackMap[this.sp - 2] = concreteIsRef;
+					this.stack[this.sp] = this.codeBlockId;
+					this.stackMap[this.sp] = false;
+					this.sp++;
+					this.stack[this.sp] = this.ip;
+					this.stackMap[this.sp] = false;
+					this.sp++;					
+					this.stack[this.sp] = this.bp;
+					this.stackMap[this.sp] = false;
+					this.sp++;
+					this.bp = this.sp;
+					this.codeBlockId = codeBlockId;
 					this.ip = 0;
 				} else if (code === "call_native") {
 					if (arg1 < 0 || arg1 >= this.natives.length) {

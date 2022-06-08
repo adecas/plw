@@ -64,6 +64,7 @@ const TOK_END_AGG = "tok-end-agg";
 const TOK_SEQUENCE = "tok-sequence";
 const TOK_VARIANT = "tok-variant";
 const TOK_KINDOF = "tok-kindof";
+const TOK_ABSTRACT = "tok-abstract";
 const TOK_SEL = "tok-sel";
 const TOK_SEP = "tok-sep";
 const TOK_TERM = "tok-term";
@@ -269,6 +270,9 @@ class TokenReader {
 		}
 		if (token === "kindof") {
 			return new Token(TOK_KINDOF, token, line, col);
+		}
+		if (token === "abstract") {
+			return new Token(TOK_ABSTRACT, token, line, col);
 		}
 		return new Token(TOK_IDENTIFIER, token, line, col);
 	}

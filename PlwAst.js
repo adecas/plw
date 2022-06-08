@@ -382,3 +382,20 @@ class AstKindofWhen extends AstNode {
 	}
 }
 
+class AstTypeAbstract extends AstNode {
+	constructor(methodCount, methods) {
+		super("ast-type-abstract");
+		this.methodCount = methodCount;
+		this.methods = methods;
+	} 
+}
+
+class AstTypeAbstractMethod extends AstNode {
+	constructor(methodName, parameterList, returnType) {
+		super("ast-type-abstract-method");
+		this.methodName = methodName;
+		this.parameterList = parameterList;
+		this.returnType = returnType;
+	} 
+}
+

@@ -564,6 +564,9 @@ class Parser {
 		if (this.peekToken() === TOK_BEGIN_ARRAY) {
 			return this.readTypeArray();
 		}
+		if (this.peekToken() === TOK_ABSTRACT) {
+			return this.readTypeAbstract();
+		}
 		let typeName = this.readToken();
 		if (typeName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(typeName, [TOK_IDENTIFIER, TOK_BEGIN_ARRAY, TOK_BEGIN_AGG, TOK_SEQUENCE]);
@@ -694,10 +697,61 @@ class Parser {
 		return new AstTypeVariant(fieldIndex, fields).fromToken(openToken);		
 	}
 	
+	readTypeAbstract() {
+		let abstractToken = this.readToken();
+		if (abstractToken.tag !== TOK_ABSTRACT) {
+			return ParserError.unexpectedToken(abstractToken, [TOK_ABSTRACT]);
+		}
+		let openToken = this.readToken();
+		if (openToken.tag !== TOK_BEGIN_GROUP) {
+			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
+		}
+		let methodCount = 0;
+		let methods = [];
+		while (this.peekToken() !== TOK_END_GROUP) {
+			let method = this.readTypeAbstractMethod();
+			if (Parser.isError(method)) {
+				return method;
+			}
+			methods[methodCount] = method;
+			methodCount++;
+			if (this.peekToken() !== TOK_END_GROUP) {
+				let sepToken = this.readToken();
+				if (sepToken.tag !== TOK_SEP) {
+					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
+				}
+			}
+		}
+		let closeToken = this.readToken();
+		if (closeToken.tag !== TOK_END_GROUP) {
+			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
+		}
+		return new AstTypeAbstract(methodCount, methods).fromToken(abstractToken);
+	}
+	
+	readTypeAbstractMethod() {
+		let methodName = this.readToken();
+		if (methodName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(methodName, [TOK_IDENTIFIER]);
+		}
+		let parameterList = this.readParameterList();
+		if (Parser.isError(parameterList)) {
+			return parameterList;
+		}
+		let returnType = null;
+		if (this.peekToken() !== TOK_SEP && this.peekToken() !== TOK_END_GROUP) {
+			returnType = this.readType();
+			if (Parser.isError(returnType)) {
+				return returnType;
+			}
+		}
+		return new AstTypeAbstractMethod(methodName.text, parameterList, returnType).fromToken(methodName);
+	}
+	
 	readTypeDeclaration() {
 		let typeToken = this.readToken();
 		if (typeToken.tag !== TOK_TYPE) {
-			return ParserError.unexpectedToken(varToken, [TOK_TYPE]);
+			return ParserError.unexpectedToken(typeToken, [TOK_TYPE]);
 		}
 		let typeName = this.readToken();
 		if (typeName.tag !== TOK_IDENTIFIER) {

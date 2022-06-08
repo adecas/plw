@@ -130,6 +130,65 @@ class EvalTypeSequence extends EvalResultType {
 	}
 }
 
+class EvalTypeAbstract extends EvalResultType {
+	constructor(methodCount, methods) {
+		super("res-type-abstract");
+		this.methodCount = methodCount;
+		this.methods = methods;
+	}
+	
+	typeKey() {
+		let name = "abstract(";
+		for(let i = 0; i < this.methodCount; i++) {
+			if (i > 0) {
+				name += ", ";
+			}
+			name += this.methods[i].typeKey();
+		}
+		return name += ")";
+	}
+}
+
+class EvalTypeAbstractMethod {
+	constructor(isFunction, methodName, paramCount, params, returnType) {
+		this.isFunction = isFunction;
+		this.methodName = methodName;
+		this.paramCount = paramCount;
+		this.params = params;
+		this.returnType = returnType; 
+	}
+	
+	typeKey() {
+		let name = this.methodName + "(";
+		for(let i = 0; i < this.paramCount; i++) {
+			if (i > 0) {
+				name += ", ";
+			}
+			name += this.params[i].typeKey();
+		}
+		return name + ")" + (this.returnType === null ? (this.isFunction ? " self" : "") : " " + this.returnType.typeKey());
+	}
+	
+	methodKey(concreteType, abstractType) {
+		let key = this.methodName + "(" + concreteType.typeKey();
+		for (let i = 0; i < this.paramCount; i++) {
+			key += "," + (this.params[i].paramType === null ? abstractType.typeKey() : this.params[i].paramType.typeKey());
+		}
+		return key + ")";
+	}
+}
+
+class EvalTypeAbstractParam {
+	constructor(paramName, paramType) {
+		this.paramName = paramName;
+		this.paramType = paramType; 
+	}
+	
+	typeKey() {
+		return this.paramName + (this.paramType === null ? " self" : " " + this.paramType.typeKey());
+	}
+}
+
 class EvalTypeName extends EvalResultType {
 	constructor(typeName, underlyingType) {
 		super("res-type-name", underlyingType.isRef);
@@ -167,6 +226,7 @@ class EvalResultFunction extends EvalResult {
 		this.isGenerator = isGenerator;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
+		this.abstractIndex = -1;
 	}
 	
 	static fromNative(functionName, parameterList, returnType, nativeIndex) {
@@ -191,6 +251,7 @@ class EvalResultProcedure extends EvalResult {
 		this.parameterList = parameterList;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
+		this.abstractIndex = -1;
 	}
 	
 	static fromNative(procedureName, parameterList, nativeIndex) {
@@ -601,6 +662,10 @@ class CodeBlock {
 		this.code2("call_native", ptr);
 	}
 	
+	codeCallAbstract(methodIndex) {
+		this.code2("call_abstract", methodIndex);
+	}
+	
 	codeInitGenerator(ptr) {
 		this.code2("init_generator", ptr);
 	}
@@ -676,6 +741,10 @@ class CompilerContext {
 			return evalType;
 		}
 		return uniqueType;
+	}
+	
+	removeType(typeKey) {
+		delete this.types[typeKey];		
 	}
 	
 	addCodeBlock() {
@@ -924,6 +993,82 @@ class Compiler {
 			}
 			return variantType;
 		}
+		if (expr.tag === "ast-type-abstract") {
+			let methods = [];
+			for (let i = 0; i < expr.methodCount; i++) {
+				let methodExpr = expr.methods[i];
+				let paramListExpr = methodExpr.parameterList;
+				let params = [];
+				for (let j = 0; j < paramListExpr.parameterCount; j++) {
+					let paramExpr = paramListExpr.parameters[j];
+					let paramType = null;
+					if (paramExpr.parameterType.tag === "ast-type-named" && paramExpr.parameterType.typeName === "self") {
+						paramType = null;
+					} else {
+						paramType = this.evalType(paramExpr.parameterType);
+						if (paramType.isError()) {
+							return paramType;
+						}
+					}
+					params[j] = new EvalTypeAbstractParam(paramExpr.parameterName, paramType);
+				}
+				let isFunction = false;
+				let returnType = null;
+				if (methodExpr.returnType !== null) {
+					isFunction = true;
+					if (methodExpr.returnType.tag  === "ast-type-named" && methodExpr.returnType.typeName === "self") {
+						returnType = null;
+					} else {
+						returnType = this.evalType(methodExpr.returnType);
+						if (returnType.isError()) {
+							return returnType;
+						}
+					}
+				}
+				methods[i] = new EvalTypeAbstractMethod(isFunction, methodExpr.methodName, paramListExpr.parameterCount, params, returnType);
+			}
+			let abstractType = new EvalTypeAbstract(expr.methodCount, methods);
+			{
+				let uniqueType = this.context.getType(abstractType);
+				if (uniqueType !== null) {
+					return uniqueType;
+				}
+			}
+			abstractType = this.context.addType(abstractType);
+			//
+			// create the abstract functions and procedure for the abstract type
+			//
+			for (let i = 0; i < abstractType.methodCount; i++) {
+				let method = abstractType.methods[i];
+				let params = [ new EvalResultParameter("self", abstractType) ];
+				for (let j = 0; j < method.paramCount; j++) {
+					params[j + 1] = new EvalResultParameter(
+						method.params[j].paramName,
+						method.params[j].paramType === null ? abstractType : method.params[j].paramType
+					);
+				}
+				let paramList = new EvalResultParameterList(method.paramCount + 1, params);
+				if (method.isFunction) {
+					let retType = method.returnType === null ? abstractType : method.returnType;
+					let evalFunc = new EvalResultFunction(method.methodName, paramList, retType, false);
+					if (this.context.getFunction(evalFunc) !== null) {
+						this.context.removeType(abstactType.typeKey());
+						return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);					
+					}
+					this.context.addFunction(evalFunc);
+					evalFunc.abstractIndex = i;
+				} else {
+					let evalProc = new EvalResultProcedure(method.methodName, paramList);
+					if (this.context.getProcedure(evalProc) !== null) {
+						this.context.removeType(abstactType.typeKey());
+						return EvalError.procedureAlreadyExists(evalProc.procKey()).fromExpr(expr);					
+					}
+					this.context.addProcedure(evalProc);
+					evalProc.abstractIndex = i;
+				}
+			}
+			return abstractType;
+		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
 	
@@ -969,7 +1114,34 @@ class Compiler {
 			) {
 				initValueType = varType;
 			} else if (initValueType !== varType) {
-				if (varType.tag === "res-type-name") {
+				if (varType.tag === "res-type-abstract") {
+					for (let i = 0; i < varType.methodCount; i++) {
+						let methodKey = varType.methods[i].methodKey(initValueType, varType);
+						if (varType.methods[i].isFunction) {
+							let func = this.context.getFunction(methodKey);
+							if (func === null) {
+								return EvalError.unknownFunction(methodKey).fromExpr(expr.valueExpr);
+							}
+							let retType = varType.methods[i].returnType;
+							if (retType === null) {
+								retType = varType;
+							}
+							if (retType !== func.returnType) {
+								return EvalError.wrongType(func.returnType, retType.typeKey()).fromExpr(expr.valueExpr);
+							}
+							this.codeBlock.codePush(func.codeBlockIndex);
+							this.codeBlock.codePush(func.nativeIndex);
+						} else {
+							let proc = this.context.getProcedure(methodKey);
+							if (proc === null) {
+								return EvalError.unknownProcedure(methodKey);
+							}
+							this.codeBlock.codePush(proc.codeBlockIndex);
+							this.codeBlock.codePush(proc.nativeIndex);
+						}
+					}
+					this.codeBlock.codeCreateObject(1 + varType.methodCount * 2);
+				} else if (varType.tag === "res-type-name") {
 					if (initValueType !== varType.underlyingType) {
 						return EvalError.wrongType(
 							initValueType,
@@ -1493,8 +1665,10 @@ class Compiler {
 			this.codeBlock.codePush(expr.argList.argCount);
 			if (proc.nativeIndex !== -1) {
 				this.codeBlock.codeCallNative(proc.nativeIndex);
-			} else {
+			} else if (proc.codeBlockIndex !== -1) {
 				this.codeBlock.codeCall(proc.codeBlockIndex);
+			} else {
+				this.codeBlock.codeCallAbstract(proc.abstractIndex);
 			}
 			return EVAL_RESULT_OK;
 		}
@@ -1920,8 +2094,10 @@ class Compiler {
 				this.codeBlock.codeCallNative(func.nativeIndex);
 			} else if (func.isGenerator === true) {
 				this.codeBlock.codeInitGenerator(func.codeBlockIndex);
-			} else {
+			} else if (func.codeBlockIndex !== -1) {
 				this.codeBlock.codeCall(func.codeBlockIndex);
+			} else {
+				this.codeBlock.codeCallAbstract(func.abstractIndex);
 			}
 			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
 		}
