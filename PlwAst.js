@@ -51,19 +51,17 @@ class AstValueText extends AstNode {
 }
 
 class AstValueArray extends AstNode {
-	constructor(itemType, itemCount, items) {
+	constructor(itemCount, items) {
 		super("ast-value-array");
-		this.itemType = itemType;
 		this.itemCount = itemCount;
 		this.items = items;
 	}
 }
 
 class AstValueRecordField extends AstNode {
-	constructor(fieldName, fieldType, valueExpr) {
+	constructor(fieldName, valueExpr) {
 		super("ast-value-record-field");
 		this.fieldName = fieldName;
-		this.fieldType = fieldType;
 		this.valueExpr = valueExpr;
 	}
 }
@@ -108,6 +106,14 @@ class AstTypeVariant extends AstNode {
 	}
 }
 
+class AstAs extends AstNode {
+	constructor(expr, exprType) {
+		super("ast-as");
+		this.expr = expr;
+		this.exprType = exprType;
+	}
+}
+
 class AstOperatorBinary extends AstNode {
 	constructor(operator, left, right) {
 		super("ast-operator-binary");
@@ -126,10 +132,9 @@ class AstOperatorUnary extends AstNode {
 }
 
 class AstVariableDeclaration extends AstNode {
-	constructor(varName, varType, valueExpr, isConst) {
+	constructor(varName, valueExpr, isConst) {
 		super("ast-variable-declaration");
 		this.varName = varName;
-		this.varType = varType;
 		this.valueExpr = valueExpr;
 		this.isConst = isConst;
 	}

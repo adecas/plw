@@ -25,7 +25,7 @@
 
 <p id="snippet-variable-title" class="snippet">Variable</p>
 <pre id="snippet-variable">
-var i integer := 2 + 3 * 4;
+var i := 2 + 3 * 4;
 i := i / 2;
 print('i = ' || text(i) || ', expected 7');
 i := 8 % 3;
@@ -33,7 +33,7 @@ print('i = ' || text(i) || ', expected 2');
 i := (2 + 3) * 4;
 i := 5 - i;
 print('i = ' || text(i) || ', expected -15');
-var b boolean := true or true and false;
+var b := true or true and false;
 print('b = ' || text(b) || ', expected true');
 b := (true or true) and false;
 print('b = ' || text(b) || ', expected false');
@@ -61,7 +61,7 @@ b := 1 <> 2;
 print('b = ' || text(b) || ', expected true');
 b := 2 <> 2;
 print('b = ' || text(b) || ', expected false');
-var t text := 'Hello' || ' ';
+var t := 'Hello' || ' ';
 t := t || 'World';
 print('t = ' || t || ', expected Hello World');
 t := subtext(t, 3, 5);
@@ -70,13 +70,13 @@ print('t = ' || t || ', expected lo Wo');
 
 <p id="snippet-real-title" class="snippet">Real</p>
 <pre id="snippet-real">
-var i real := 2.2 + 3.3 * 4.4;
+var i := 2.2 + 3.3 * 4.4;
 i := i / 2.2;
 print('i = ' || text(i) || ', expected 7.6');
 i := (2.2 + 3.3) * 4.4;
 i := 5.5 - i;
 print('i = ' || text(i) || ', expected -18.7');
-var b boolean := 1.1 = 2.2;
+var b := 1.1 = 2.2;
 print('b = ' || text(b) || ', expected false');
 b := 2.2 = 2.2;
 print('b = ' || text(b) || ', expected true');
@@ -132,7 +132,7 @@ else
   print('Good');
 end if;
 print('Done if, 4 Good expected');
-var i integer := 10;
+var i := 10;
 while i <= 100 loop
   print(text(i));
   i := i + 10;
@@ -145,39 +145,39 @@ print('Done while');
 
 <p id="snippet-arrays-title" class="snippet">Arrays</p>
 <pre id="snippet-arrays">
-var a [integer] := [integer: 11, 22, 33, 44, 55];
-var b integer := a[1];
-var c [integer] := a[2..4];
-var d [integer] := c || [integer: 66, 77];
-if b = 22 and c = [integer: 33, 44, 55] and d = [integer: 33, 44, 55, 66, 77] then
+var a := [11, 22, 33, 44, 55];
+var b := a[1];
+var c := a[2..4];
+var d := c || [66, 77];
+if b = 22 and c = [33, 44, 55] and d = [33, 44, 55, 66, 77] then
   print('Good');
 else
   print('Error: alternate reality');
 end if;
-var aa [[integer]] := [[integer]:
-  [integer: 11, 12],
-  [integer: 22, 23],
-  [integer: 33, 34],
-  [integer: 44],
-  [integer: 55, 56, 57]
+var aa := [
+  [11, 12],
+  [22, 23],
+  [33, 34],
+  [44],
+  [55, 56, 57]
 ];
-var bb [integer] := aa[1];
-var cc [[integer]] := aa[1..2];
-var dd [[integer]] := cc || [[integer]: [integer: 66, 67, 68], [integer:]];
+var bb := aa[1];
+var cc := aa[1..2];
+var dd:= cc || [[66, 67, 68], [] as [integer]];
 if
-  bb = [integer: 22, 23] and
-  cc = [[integer]: [integer: 22, 23], [integer: 33, 34]] and
-  dd = [[integer]: [integer: 22, 23], [integer: 33, 34], [integer: 66, 67, 68], [integer:]]
+  bb = [22, 23] and
+  cc = [[22, 23], [33, 34]] and
+  dd = [[22, 23], [33, 34], [66, 67, 68], [] as [integer]]
 then
   print('Good');
 else
   print('Error: alternate reality');
 end if;
-var at [text] := [text: '11', '22', '33', '44', '55'];
-var bt text := at[1];
-var ct [text] := at[2..3];
-var dt [text] := ct || [text: '66', '77'];
-if bt = '22' and ct = [text: '33', '44'] and dt = [text: '33', '44', '66', '77'] then
+var at := ['11', '22', '33', '44', '55'];
+var bt := at[1];
+var ct := at[2..3];
+var dt := ct || ['66', '77'];
+if bt = '22' and ct = ['33', '44'] and dt = ['33', '44', '66', '77'] then
   print('Good');
 else
   print('Error: alternate reality');
@@ -200,7 +200,7 @@ say_hello('Jane Smith');
 
 <p id="snippet-basic-function-title" class="snippet">Basic function</p>
 <pre id="snippet-basic-function">
-var toto integer := 42;
+var toto := 42;
 function f(a integer) integer begin
   toto := toto + a;
   return toto + 1;
@@ -215,7 +215,7 @@ function add(a integer, b integer) integer begin
   return a + b;
 end add;
 function double(a integer) integer begin
-  var sum integer := add(a, a);
+  var sum := add(a, a);
   return sum;
 end double;
 print('double(3): ' || text(double(3)));
@@ -224,7 +224,7 @@ print('expected: 6');
 
 <p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>
 <pre id="snippet-first-100-primes">
-var primes_count integer := 100;
+var primes_count := 100;
 function isprime(n integer) boolean begin
   for i in 2 .. n - 1 loop
     if n % i = 0 then
@@ -233,10 +233,10 @@ function isprime(n integer) boolean begin
   end loop;
   return true;
 end isprime;
-var first_primes [integer] := array(0, primes_count);
+var first_primes := array(0, primes_count);
 begin
-  var i integer := 1;
-  var index integer := 0;
+  var i := 1;
+  var index := 0;
   while index < primes_count loop
     if isprime(i) then
       first_primes[index] := i;
@@ -278,7 +278,7 @@ function bubble_sort(nums [integer]) [integer] begin
   for i in reverse 0 .. length(nums) - 2 loop
     for j in 0 .. i loop
       if nums[j] > nums[j + 1] then
-        var tmp integer := nums[j];
+        var tmp := nums[j];
         nums[j] := nums[j + 1];
         nums[j + 1] := tmp;
       end if;
@@ -286,13 +286,13 @@ function bubble_sort(nums [integer]) [integer] begin
   end loop;
   return nums;
 end bubble_sort;
-print(text(bubble_sort([integer: 77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
+print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 </pre>
 
 <p id="snippet-standard-deviation-title" class="snippet">Standard Deviation</p>
 <pre id="snippet-standard-deviation">
 function avg(nums [real]) real begin
-  var sum real := 0.0;
+  var sum := 0.0;
   for i in 0..length(nums)-1 loop
     sum := sum + nums[i];
   end loop;
@@ -300,15 +300,15 @@ function avg(nums [real]) real begin
 end avg;
 function stddev(nums [real]) real begin
   var avg := avg(nums);
-  var acc real := 0.0;
+  var acc := 0.0;
   for i in 0..length(nums)-1 loop
   	var diff := nums[i] - avg;
   	acc := acc + diff * diff;
   end loop;
   return sqrt(acc / real(length(nums)));
 end stddev;
-print(text(stddev([real: 0.0, 1.11, 10.1, 22.33, -6.7])));
-print(text(stddev([real: 0.0, 1.0])));
+print(text(stddev([0.0, 1.11, 10.1, 22.33, -6.7])));
+print(text(stddev([0.0, 1.0])));
 </pre>
 
 <p id="snippet-entropy-title" class="snippet">Entropy</p>
@@ -322,12 +322,12 @@ function occurence_pos(c integer, occurences [{c integer, n integer}]) integer b
   return -1;
 end occurence_pos;
 function char_occurences(t text) [{c integer, n integer}] begin
-  var occurences := [{c integer, n integer}:];
+  var occurences := [] as [{c integer, n integer}];
   for i in 0 .. length(t) - 1 loop
     var c := char_code(t, i);
     var pos := occurence_pos(c, occurences);
     if pos = - 1 then
-      occurences := occurences || [:{c: c, n: 1}];
+      occurences := occurences || [{c: c, n: 1}];
     else
       occurences[pos].n := occurences[pos].n + 1;
     end if;
@@ -368,7 +368,7 @@ print(html_escape('in C bitwise op is & and shift is << or >> (ex: "(a & 0xFF00)
 
 <p id="snippet-records-title" class="snippet">Records</p>
 <pre id="snippet-records">
-var r1 {i integer, b boolean} := {i: 42, b: true};
+var r1 := {i: 42, b: true};
 if r1.i = 42 and r1.b then
   print('Good');
 else
@@ -395,7 +395,7 @@ procedure print(status variant(none, error text, done integer)) begin
     when done(row_count) then 'done: ' || text(row_count)
   end);
 end print;
-var vr variant(none, error text, done integer) := done(5);
+var vr := done(5) as variant(none, error text, done integer);
 print(vr);
 vr := none();
 print(vr);
@@ -405,7 +405,7 @@ print(vr);
 
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>
 <pre id="snippet-copy-on-write">
-var v1 := [:[:10, 11], [:20, 21], [:30, 31]];
+var v1 := [[10, 11], [20, 21], [30, 31]];
 function text(v [[integer]]) text begin
   var s := '[';
   for i in 0..length(v) - 1 loop
@@ -418,7 +418,7 @@ function text(v [[integer]]) text begin
   return s || ']';
 end text;
 var v2 := v1;
-v2[0] := [:42, 51];
+v2[0] := [42, 51];
 var v3 := v1;
 v3[1][0] := 42;
 var v4 := v1[0];
@@ -427,7 +427,7 @@ print(text(v1));
 print(text(v2));
 print(text(v3));
 print(text(v4));
-var v5 := [:1, 2, 3];
+var v5 := [1, 2, 3];
 procedure change_array(v [integer]) begin
   v[0] := 42;
   v[1] := 51;
@@ -440,8 +440,8 @@ procedure change_record(r { a integer, b [integer] }, a integer, b [integer]) be
   r.b := b;
   print('a = ' || text(r.a) || ', b = ' || text(r.b));
 end change_record;
-var r1 := {a: 1, b: [: 2]};
-change_record(r1, 42, [:51]);
+var r1 := {a: 1, b: [2]};
+change_record(r1, 42, [51]);
 print('a = ' || text(r1.a) || ', b = ' || text(r1.b));
 </pre>
 
@@ -449,9 +449,9 @@ print('a = ' || text(r1.a) || ', b = ' || text(r1.b));
 <pre id="snippet-type-inference">
 var i := 42;
 var b := true;
-var v := [:42, 51];
+var v := [42, 51];
 var t := 'Hello';
-var r := {i: 42, b: true, v: [:42, 51], t: 'Hello'};
+var r := {i: 42, b: true, v: [42, 51], t: 'Hello'};
 if     i - r.i = 0
    and ((b and r.b) or (not b and not r.b))
    and v[0] - r.v[0] = 0 and v[1] - r.v[1] = 0
@@ -466,7 +466,7 @@ end if;
 <p id="snippet-simple-generator-title" class="snippet">Simple Generator</p>
 <pre id="snippet-simple-generator">
 generator gen_range_step(first integer, last integer, step integer) integer begin
-  var current integer := first;
+  var current := first;
   while current <= last loop
     yield current;
     current := current + step;
@@ -480,8 +480,8 @@ end loop;
 <p id="snippet-simple-generator-with-refs-title" class="snippet">Simple Generator With refs</p>
 <pre id="snippet-simple-generator-with-refs">
 generator gen_concat(words [text], final_int integer) text begin
-  var word_count integer := length(words);
-  var phrase text := '';
+  var word_count := length(words);
+  var phrase := '';
   yield text(word_count);
   for i in 0 .. word_count - 1 loop
     phrase := phrase || words[i];
@@ -489,7 +489,7 @@ generator gen_concat(words [text], final_int integer) text begin
   end loop;
   yield text(final_int);
 end gen_concat;
-for i in gen_concat([:'hello', ' the', ' world'], 42) loop
+for i in gen_concat(['hello', ' the', ' world'], 42) loop
   print(i);
 end loop;
 </pre>
@@ -502,17 +502,16 @@ type employee {
   skills [text]
 };
 function employee(first_name text, last_name text, skills [text]) employee begin
-  var e employee := {
+  return {
     first_name: first_name,
     last_name: last_name,
     skills: skills
-  };
-  return e;
+  } as employee;
 end employee;
 generator fetch_employees() employee begin
-  yield employee('John', 'Backer', [:'C++', 'SQL']);
-  yield employee('Jane', 'Smith', [:'Java', 'HTML']);
-  yield employee('Alan', 'Carpenter', [:'Ksh', 'Scrum']);
+  yield employee('John', 'Backer', ['C++', 'SQL']);
+  yield employee('Jane', 'Smith', ['Java', 'HTML']);
+  yield employee('Alan', 'Carpenter', ['Ksh', 'Scrum']);
 end fetch_employees;
 generator employee_table(with_header boolean, employees sequence(employee)) text begin
   yield '&lt;table&gt;';
@@ -605,12 +604,12 @@ function shape_perimeter(c circle) real begin
   return pir * pir;
 end shape_perimeter;
 
-var c circle := {name: 'circle', diameter: 10.0};
+var c := {name: 'circle', diameter: 10.0} as circle;
 
 # the compiler should find the function shape_name(circle) and shape_perimeter(circle)
 # and create an object with the refid of the circle and the codeBlockId of the functions
 # abstract layout: concreteRefId, func1, ..., funcN
-var shape abstract(shape_name() text, shape_perimeter() real) := c;
+var shape := c as abstract(shape_name() text, shape_perimeter() real);
 
 print('The perimeter of the ' || shape_name(shape) || ' is ' || text(shape_perimeter(shape)));
 </pre>

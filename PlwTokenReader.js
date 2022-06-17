@@ -14,6 +14,7 @@ const TOK_INTEGER = "tok-integer";
 const TOK_REAL = "tok-real";
 const TOK_ASSIGN = "tok-assign";
 const TOK_OF = "tok-of";
+const TOK_AS = "tok-as";
 const TOK_LTE = "tok-lte";
 const TOK_GTE = "tok-gte";
 const TOK_NE = "tok-ne";
@@ -183,6 +184,9 @@ class TokenReader {
 		}
 		if (token === "const") {
 			return new Token(TOK_CONST, token, line, col);
+		}
+		if (token === "as") {
+			return new Token(TOK_AS, token, line, col);
 		}
 		if (token === "type") {
 			return new Token(TOK_TYPE, token, line, col);

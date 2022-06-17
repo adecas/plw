@@ -250,6 +250,15 @@ class Parser {
 			}
 		}
 		
+		if (this.peekToken() === TOK_AS) {
+			let asToken = this.readToken();
+			let exprType = this.readType();
+			if (Parser.isError(exprType)) {
+				return exprTye;
+			}
+			return new AstAs(expr, exprType).fromToken(asToken);
+		}
+		
 		return expr;
 	}
 
@@ -464,17 +473,6 @@ class Parser {
 		if (openToken.tag !== TOK_BEGIN_ARRAY) {
 			return ParserError.unexpectedToken(openToken, TOK_BEGIN_ARRAY);
 		}
-		let itemType = null;
-		if (this.peekToken() !== TOK_OF) {
-			itemType = this.readType();
-			if (Parser.isError(itemType)) {
-				return itemType;
-			}
-		}
-		let ofToken = this.readToken();
-		if (ofToken.tag !== TOK_OF) {
-			return ParserError.unexpectedToken(ofToken, [TOK_OF]);
-		}
 		let itemValues = [];
 		let itemIndex = 0;
 		while (this.peekToken() !== TOK_END_ARRAY) {
@@ -496,20 +494,13 @@ class Parser {
 		if (closeToken.tag !== TOK_END_ARRAY) {
 			return ParserError.unexpectedToken(closeToken, [TOK_END_ARRAY]);
 		}
-		return new AstValueArray(itemType, itemIndex, itemValues).fromToken(openToken);
+		return new AstValueArray(itemIndex, itemValues).fromToken(openToken);
 	}
 	
 	readRecordValueField() {
 		let fieldName = this.readToken();
 		if (fieldName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(fieldName, [TOK_IDENTIFIER])
-		}
-		let fieldType = null;
-		if (this.peekToken() !== TOK_OF) {
-			fieldType = this.readType();
-			if (Parser.isError(fieldType)) {
-				return fieldType;
-			}
 		}
 		let ofToken = this.readToken();
 		if (ofToken.tag !== TOK_OF) {
@@ -519,7 +510,7 @@ class Parser {
 		if (Parser.isError(expr)) {
 			return expr;
 		}
-		return new AstValueRecordField(fieldName.text, fieldType, expr).fromToken(fieldName);	
+		return new AstValueRecordField(fieldName.text, expr).fromToken(fieldName);	
 	}
 	
 	readRecordValue() {
@@ -773,13 +764,6 @@ class Parser {
 		if (varName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER])
 		}
-		let varType = null;
-		if (this.peekToken() !== TOK_ASSIGN) {
-			varType = this.readType();
-			if (Parser.isError(varType)) {
-				return varType;
-			}
-		}
 		let assign = this.readToken();
 		if (assign.tag !== TOK_ASSIGN) {
 			return ParserError.unexpectedToken(assign, [TOK_ASSIGN]);
@@ -788,7 +772,7 @@ class Parser {
 		if (Parser.isError(expr)) {
 			return expr;
 		}
-		return new AstVariableDeclaration(varName.text, varType, expr, varToken.tag === TOK_CONST).fromToken(varToken);
+		return new AstVariableDeclaration(varName.text, expr, varToken.tag === TOK_CONST).fromToken(varToken);
 	}
 	
 	readIf() {

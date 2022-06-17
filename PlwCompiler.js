@@ -396,6 +396,7 @@ class EvalError extends EvalResult {
 }
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
+const EVAL_TYPE_EMPTY_ARRAY = new EvalTypeBuiltIn("empty_array", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
@@ -1093,66 +1094,11 @@ class Compiler {
 			if (this.scope.getLocalVariable(expr.varName) !== null) {
 				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
 			}
-			let varType = null;
-			if (expr.varType !== null) {
-				varType = this.evalType(expr.varType);
-				if (varType.isError()) {
-					return varType;
-				}
-			}
 			let initValueType = this.eval(expr.valueExpr);
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			if (varType === null) {
-				varType = initValueType;
-			}
-			if (
-				initValueType.tag === "res-type-array" &&
-			    initValueType.underlyingType === null &&
-			    varType.tag === "res-type-array"
-			) {
-				initValueType = varType;
-			} else if (initValueType !== varType) {
-				if (varType.tag === "res-type-abstract") {
-					for (let i = 0; i < varType.methodCount; i++) {
-						let methodKey = varType.methods[i].methodKey(initValueType, varType);
-						if (varType.methods[i].isFunction) {
-							let func = this.context.getFunction(methodKey);
-							if (func === null) {
-								return EvalError.unknownFunction(methodKey).fromExpr(expr.valueExpr);
-							}
-							let retType = varType.methods[i].returnType;
-							if (retType === null) {
-								retType = varType;
-							}
-							if (retType !== func.returnType) {
-								return EvalError.wrongType(func.returnType, retType.typeKey()).fromExpr(expr.valueExpr);
-							}
-							this.codeBlock.codePush(func.codeBlockIndex);
-							this.codeBlock.codePush(func.nativeIndex);
-						} else {
-							let proc = this.context.getProcedure(methodKey);
-							if (proc === null) {
-								return EvalError.unknownProcedure(methodKey);
-							}
-							this.codeBlock.codePush(proc.codeBlockIndex);
-							this.codeBlock.codePush(proc.nativeIndex);
-						}
-					}
-					this.codeBlock.codeCreateObject(1 + varType.methodCount * 2);
-				} else if (varType.tag === "res-type-name") {
-					if (initValueType !== varType.underlyingType) {
-						return EvalError.wrongType(
-							initValueType,
-							varType.typeKey() + " or " + varType.underlyingType.typeKey()
-						).fromExpr(expr.valueExpr);
-					}
-				} else {
-					return EvalError.wrongType(initValueType, varType.typeKey()).fromExpr(expr.valueExpr);
-				}
-			}
-			this.scope.addVariable(expr.varName, varType, expr.isConst);
+			this.scope.addVariable(expr.varName, initValueType, expr.isConst);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-assign") {
@@ -1742,6 +1688,59 @@ class Compiler {
 	}
 	
 	eval(expr) {
+		if (expr.tag === "ast-as") {
+			let asType = this.evalType(expr.exprType);
+			if (asType.isError()) {
+				return asType;
+			}
+			let valueType = this.eval(expr.expr);
+			if (valueType.isError()) {
+				return valueType;
+			}
+			if (valueType === asType) {
+				return asType;
+			}
+			let actAsType = asType;
+			while (actAsType.tag === "res-type-name") {
+				actAsType = actAsType.underlyingType;
+				if (valueType === actAsType) {
+					return asType;
+				}
+			}
+			if (valueType === EVAL_TYPE_EMPTY_ARRAY && actAsType.tag === "res-type-array") {
+				return asType;
+			}
+			if (actAsType.tag === "res-type-abstract") {
+				for (let i = 0; i < actAsType.methodCount; i++) {
+					let methodKey = actAsType.methods[i].methodKey(valueType, asType);
+					if (actAsType.methods[i].isFunction) {
+						let func = this.context.getFunction(methodKey);
+						if (func === null) {
+							return EvalError.unknownFunction(methodKey).fromExpr(expr.expr);
+						}
+						let retType = actAsType.methods[i].returnType;
+						if (retType === null) {
+							retType = asType;
+						}
+						if (retType !== func.returnType) {
+							return EvalError.wrongType(func.returnType, retType.typeKey()).fromExpr(expr.valueExpr);
+						}
+						this.codeBlock.codePush(func.codeBlockIndex);
+						this.codeBlock.codePush(func.nativeIndex);
+					} else {
+						let proc = this.context.getProcedure(methodKey);
+						if (proc === null) {
+							return EvalError.unknownProcedure(methodKey);
+						}
+						this.codeBlock.codePush(proc.codeBlockIndex);
+						this.codeBlock.codePush(proc.nativeIndex);
+					}
+				}
+				this.codeBlock.codeCreateObject(1 + actAsType.methodCount * 2);
+				return asType;
+			}
+			return EvalError.wrongType(valueType, asType.typeKey()).fromExpr(expr.expr);				
+		}
 		if (expr.tag === "ast-value-boolean") {
 			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
 			return EVAL_TYPE_BOOLEAN;
@@ -1761,12 +1760,6 @@ class Compiler {
 		}
 		if (expr.tag === "ast-value-array") {
 			let itemType = null;
-			if (expr.itemType !== null) {
-				itemType = this.evalType(expr.itemType);
-				if (itemType.isError()) {
-					return itemType;
-				}
-			}
 			// Evalute the next items
 			for (let i = 0; i < expr.itemCount; i++) {
 				let currentItemType = this.eval(expr.items[i]);
@@ -1779,11 +1772,11 @@ class Compiler {
 					return EvalError.wrongType(currentItemType, itemType.typeKey()).fromExpr(expr.items[i]);
 				}
 			}
-			if (itemType === null) {
-				return EvalError.noTypeArray().fromExpr(expr);
-			}
 			// Allocate the array
 			this.codeBlock.codeCreateObject(expr.itemCount);
+			if (expr.itemCount === 0) {
+				return EVAL_TYPE_EMPTY_ARRAY;
+			}
 			return this.context.addType(new EvalTypeArray(itemType));
 		}
 		if (expr.tag === "ast-value-record") {
@@ -1793,19 +1786,7 @@ class Compiler {
 				if (fieldValueType.isError()) {
 					return fieldValueType;
 				}
-				let fieldType = null;
-				if (expr.fields[i].fieldType === null) {
-					fieldType = fieldValueType;
-				} else {
-					fieldType = this.evalType(expr.fields[i].fieldType);
-					if (fieldType.isError()) {
-						return fieldType;
-					}
-					if (fieldValueType !== fieldType) {
-						return EvalError.wrongType(fieldValueType, fieldType.typeKey()).fromExpr(expr.fields[i].valueExpr);
-					}
-				}
-				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
 			}
 			this.codeBlock.codeCreateObject(expr.fieldCount);
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
