@@ -72,7 +72,6 @@ const TOK_TERM = "tok-term";
 const TOK_EOF = "tok-eof";
 const TOK_UNKOWN = "tok-unknown";
 
-
 class Token {
 	constructor(tag, text, line, col) {
 		this.tag = tag;
@@ -81,7 +80,6 @@ class Token {
 		this.col = col;
 	}
 }
-
 
 class TokenReader {
 

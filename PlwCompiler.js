@@ -1500,7 +1500,7 @@ class Compiler {
 			}
 			// Check the return type
 			if (retType !== frameScope.returnType) {
-				return EvalError.wrongType(retType, currentScope.returnType.typeKey()).fromExpr(expr.expr);
+				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
 			this.codeBlock.codeYield();
 			return EVAL_RESULT_OK;

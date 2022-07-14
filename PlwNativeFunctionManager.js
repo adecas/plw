@@ -526,6 +526,21 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"now",
+			new EvalResultParameterList(0, []),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 0) {
+					return new StackMachineError().nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 1] = Date.now();
+				sm.stackMap[sm.sp - 1] = false;
+				return null;
+			})
+		));
+
 
 		return nativeFunctionManager;
 	}

@@ -1,0 +1,36 @@
+generator benchmark() boolean begin
+  var begin_time := now();
+  yield true;
+  print('elasped ' || text(now() - begin_time) || ' ms');
+end benchmark;
+
+function fibonacci_iterative(n integer) integer begin
+  if n < 2 then
+    return n;
+  end if;
+  var result := 0; 
+  var n1 := 1;
+  var n2 := 0;
+  for i in 2..n loop
+    result := n1 + n2;    
+    n2 := n1;    
+    n1 := result;  
+  end loop;  
+  return result; 
+end fibonacci_iterative;
+
+function fibonacci_recursive(n integer) integer begin
+  if n = 0 or n = 1 then
+    return n;
+  else
+    return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+  end if;
+end fibonacci_recursive;
+
+for i in benchmark() loop
+  print(text(fibonacci_iterative(42)));
+end loop;
+
+for i in benchmark() loop
+  print(text(fibonacci_recursive(42)));
+end loop;
