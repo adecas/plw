@@ -53,6 +53,8 @@ class Parser {
 			stmt = this.readVariableDeclaration();
 		} else if (this.peekToken() === TOK_IF) {
 			stmt = this.readIf();
+		} else if (this.peekToken() === TOK_KINDOF) {
+			stmt = this.readKindofStmt();
 		} else if (this.peekToken() === TOK_WHILE) {
 			stmt = this.readWhile();
 		} else if (this.peekToken() === TOK_FUNCTION || this.peekToken() === TOK_GENERATOR) {
@@ -179,7 +181,11 @@ class Parser {
 			return left;
 		}
 			
-		while (this.peekToken() === TOK_ADD || this.peekToken() === TOK_SUB || this.peekToken() === TOK_CONCAT) {
+		while (
+			this.peekToken() === TOK_ADD ||
+			this.peekToken() === TOK_SUB ||
+			this.peekToken() === TOK_CONCAT
+		) {
 			let operator = this.readToken();
 			
 			let right = this.readExpr2();
@@ -194,12 +200,32 @@ class Parser {
 	}
 	
 	readExpr2() {
-		let left = this.readExpr1();		
+		let left = this.readExpr2bis();		
 		if (Parser.isError(left)) {
 			return left;
 		}
 			
 		while (this.peekToken() === TOK_MUL || this.peekToken() === TOK_DIV || this.peekToken() === TOK_REM) {
+			let operator = this.readToken();
+			
+			let right = this.readExpr2bis();
+			if (Parser.isError(right)) {
+				return right;
+			}
+			
+			left = new AstOperatorBinary(operator.tag, left, right).fromToken(operator);
+		}
+		
+		return left;
+	}
+	
+	readExpr2bis() {
+		let left = this.readExpr1();		
+		if (Parser.isError(left)) {
+			return left;
+		}
+			
+		while (this.peekToken() === TOK_TIMES) {
 			let operator = this.readToken();
 			
 			let right = this.readExpr1();
@@ -245,6 +271,8 @@ class Parser {
 					return ParserError.unexpectedToken(fieldName, [TOK_IDENTIFIER])
 				}
 				expr = new AstField(expr, fieldName.text).fromToken(token);
+			} else if (token.tag === TOK_TIMES) {
+				
 			} else {
 				return ParserError.unexpectedToken(token, [TOK_BEGIN_ARRAY, TOK_SEL]);					
 			}
@@ -254,7 +282,7 @@ class Parser {
 			let asToken = this.readToken();
 			let exprType = this.readType();
 			if (Parser.isError(exprType)) {
-				return exprTye;
+				return exprType;
 			}
 			return new AstAs(expr, exprType).fromToken(asToken);
 		}
@@ -452,6 +480,68 @@ class Parser {
 		return new AstKindofWhen(kindNameToken.text, varName, thenExpr);
 	}
 	
+	readKindofStmt() {
+		let kindofToken = this.readToken();
+		if (kindofToken.tag !== TOK_KINDOF) {
+			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
+		}
+		let caseExpr = this.readExpression();
+		if (Parser.isError(caseExpr)) {
+			return caseExpr;
+		}
+		let whens = [];
+		let whenIndex = 0;
+		while (this.peekToken() === TOK_WHEN) {
+			let when = this.readKindofWhenStmt();
+			if (Parser.isError(when)) {
+				return when;
+			}
+			whens[whenIndex] = when;
+			whenIndex++;
+		}
+		let elseBlock = null;
+		if (this.peekToken() === TOK_ELSE) {
+			elseBlock = this.readBlockUntil(TOK_ELSE, [TOK_END]);
+			if (Parser.isError(elseBlock)) {
+				return elseBlock;
+			}
+		}
+		let endToken = this.readToken();
+		if (endToken.tag !== TOK_END) {
+			return ParserError.unexpectedToken(endToken, [TOK_END]);
+		}
+		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock);
+	}
+
+	readKindofWhenStmt() {
+		let whenToken = this.readToken();
+		if (whenToken.tag !== TOK_WHEN) {
+			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);
+		}
+		let kindNameToken = this.readToken();
+		if (kindNameToken.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(kindNameToken, [TOK_IDENTIFIER]);
+		}
+		let varName = null;
+		if (this.peekToken() === TOK_BEGIN_GROUP) {
+			this.readToken();
+			let varNameToken = this.readToken();
+			if (varNameToken.tag !== TOK_IDENTIFIER) {
+				return ParserError.unexpectedToken(varNameToken, [TOK_IDENTIFIER]);
+			}
+			varName = varNameToken.text;
+			let closeToken = this.readToken();
+			if (closeToken.tag !== TOK_END_GROUP) {
+				return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
+			}
+		}
+		let thenBlock = this.readBlockUntil(TOK_THEN, [TOK_WHEN, TOK_ELSE, TOK_END]);
+		if (Parser.isError(thenBlock)) {
+			return thenBlock;
+		}
+		return new AstKindofWhenStmt(kindNameToken.text, varName, thenBlock);
+	}
+
 	readExprGroup() {
 		let openToken = this.readToken();
 		if (openToken.tag !== TOK_BEGIN_GROUP) {

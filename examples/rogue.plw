@@ -1,0 +1,396 @@
+function min(a integer, b integer) integer begin
+	if a < b then
+		return a;
+	end if;
+	return b;
+end min;
+
+function max(a integer, b integer) integer begin
+	if a > b then
+		return a;
+	end if;
+	return b;
+end max;
+
+type point {
+	x integer,
+	y integer
+};
+
+type rect {
+	x1 integer,
+	y1 integer,
+	x2 integer,
+	y2 integer
+};
+
+function make_rect(x integer, y integer, w integer, h integer) rect begin
+	return {x1: x, y1: y, x2: x + w, y2: y + h} as rect;
+end make_rect;
+
+function intersect(r1 rect, r2 rect) boolean begin
+	return r1.x1 <= r2.x2 and r1.x2 >= r2.x1 and r1.y1 <= r2.y2 and r1.y2 >= r2.y1;
+end intersect;
+
+function center(r rect) point begin
+	return {x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2} as point; 
+end center;
+
+generator line_dots(x1 integer, y1 integer, x2 integer, y2 integer) {x integer, y integer} begin
+    var dx := abs(x2 - x1);
+    var sx := case when x1 < x2 then 1 else -1 end;
+    var dy := -abs(y2 - y1);
+    var sy := case when y1 < y2 then 1 else -1 end;
+    var error := dx + dy;
+    var again := true;
+    while again loop
+        yield {x: x1, y: y1};
+        if x1 = x2 and y1 = y2 then
+        	again := false;
+       	else
+		    var e2 := 2 * error;
+		    if e2 >= dy then
+		        if x1 = x2 then
+		        	again := false;
+		        else
+		        	error := error + dy;
+		        	x1 := x1 + sx;
+		        end if;
+		    end if;
+		    if e2 <= dx then
+		        if y1 = y2 then
+		        	again := false;
+		        else
+		        	error := error + dx;
+		        	y1 := y1 + sy;
+		        end if;
+		    end if;
+		end if;
+    end loop;
+end line_dots;
+
+const GLYPH_SPACE := ' ';
+const GLYPH_PLAYER := '@';
+const GLYPH_WALL := '#';
+const GLYPH_FLOOR := '.';
+
+const CHAR_UP := char_code('i', 0) as char;
+const CHAR_DOWN := char_code('k', 0) as char;
+const CHAR_LEFT := char_code('j', 0) as char;
+const CHAR_RIGHT := char_code('l', 0) as char;
+const CHAR_QUIT := char_code('x', 0) as char;
+
+const ANSI_CR := text([13 as char]);
+const ANSI_CSI := text([27 as char]) || '[';
+const ANSI_CLEAR_TERMINAL := ANSI_CSI || '0;0H' || ANSI_CSI || 'J';
+const ANSI_HIDE_CURSOR := ANSI_CSI || '?25l';
+const ANSI_BLACK := '0';
+const ANSI_RED := '1';
+const ANSI_GREEN := '2';
+const ANSI_YELLOW := '3';
+const ANSI_BLUE := '4';
+const ANSI_MAGENTA := '5';
+const ANSI_CYAN := '6';
+const ANSI_WHITE := '7';
+
+
+
+function ansi_color(fg_color text, bg_color text) text begin
+	return ANSI_CSI || '3' || fg_color || ';4' || bg_color || 'm';
+end ansi_color;
+
+type screen_cell {
+	glyph text,
+	fg_color text,
+	bg_color text
+};
+
+const EMPTY_SCREEN_CELL := {glyph: GLYPH_SPACE, fg_color: ANSI_WHITE, bg_color: ANSI_BLACK} as screen_cell;
+const FLOOR_SCREEN_CELL := {glyph: GLYPH_FLOOR, fg_color: ANSI_BLUE, bg_color: ANSI_BLACK} as screen_cell;
+const WALL_SCREEN_CELL := {glyph: GLYPH_WALL, fg_color: ANSI_GREEN, bg_color: ANSI_BLACK} as screen_cell;
+
+type entity_position variant(none, some point);
+type entity_display variant(none, some {glyph text, fg_color text, bg_color text});
+type entity_viewrange variant(none, some {range integer, flags [[boolean]]});
+
+type entity {
+	position entity_position,
+	display entity_display,
+	viewrange entity_viewrange
+};
+
+var entities := [] as [entity];
+
+function new_entity(e entity) integer begin
+	var entity_id := length(entities);
+	entities := entities || [e];
+	return entity_id;
+end new_entity;
+
+procedure print_visibility_flags(flags [[boolean]]) begin
+	for y in 0..length(flags) - 1 loop
+		var line := '';
+		for x in 0..length(flags[y]) - 1 loop
+			line := line || case when flags[y][x] then 'X' else '.' end;
+		end loop;
+		print(line);
+	end loop;
+end print_visibility_flags;
+
+function in_viewrange(p point, entity_id integer) boolean begin
+	kindof entities[entity_id].viewrange
+		when some(vr) then
+			kindof entities[entity_id].position
+				when some(pos) then
+					if p.x >= pos.x - vr.range and
+					   p.x <= pos.x + vr.range and
+					   p.y >= pos.y - vr.range and
+					   p.y <= pos.y + vr.range
+					then
+						var rel_x := vr.range + p.x - pos.x;
+						var rel_y := vr.range + p.y - pos.y;
+						if rel_y < 0 or rel_y >= length(vr.flags) or
+						   rel_x < 0 or rel_x >= length(vr.flags[rel_y])
+						then
+							return false;
+						end if;
+						return vr.flags[rel_y][rel_x];
+					end if;
+					return false;
+			end;
+	end;
+	return false;
+end in_viewrange;
+
+const SCREEN_WIDTH := 90;
+const SCREEN_HEIGHT := 30;
+var screen := EMPTY_SCREEN_CELL ** SCREEN_WIDTH ** SCREEN_HEIGHT;
+
+type tile_type variant(floor, wall);
+
+type map {
+	tiles [[tile_type]],
+	rooms [rect],
+	width integer,
+	height integer
+};
+
+function tiles_with_room(tiles [[tile_type]], room rect) [[tile_type]] begin
+	for y in room.y1 + 1 .. room.y2  loop
+        for x in room.x1 + 1 .. room.x2 loop
+            tiles[y][x] := tile_type_floor();
+        end loop;
+    end loop;
+    return tiles;
+end tiles_with_room;
+
+function tiles_with_horizontal_tunnel(tiles [[tile_type]], x1 integer, x2 integer, y integer) [[tile_type]] begin
+    for x in min(x1, x2) .. max(x1, x2) loop
+		tiles[y][x] := tile_type_floor();
+    end loop;
+    return tiles;
+end tiles_with_horizontal_tunnel;
+
+function tiles_with_vertical_tunnel(tiles [[tile_type]], y1 integer, y2 integer, x integer) [[tile_type]] begin
+    for y in min(y1, y2) .. max(y1, y2) loop
+		tiles[y][x] := tile_type_floor();
+	end loop;
+	return tiles;
+end tiles_with_vertical_tunnel;
+
+function make_map(width integer, height integer) map begin
+	var tiles := tile_type_wall() ** width ** height;
+	var rooms := [] as [rect];
+    const MAX_ROOMS := 10;
+    const MIN_SIZE := 6;
+    const MAX_SIZE := 10;
+    for i in 0 .. MAX_ROOMS - 1 loop
+        var w := random(MIN_SIZE, MAX_SIZE);
+        var h := random(MIN_SIZE, MAX_SIZE);
+        var x := random(1, width - w - 1) - 1;
+        var y := random(1, height - h - 1) - 1;
+        var new_room := make_rect(x, y, w, h);
+        var ok := true;
+        for j in 0 .. length(rooms) - 1 loop
+            if intersect(new_room, rooms[j]) then
+            	ok := false;
+            end if;
+        end loop;
+        if ok then
+            tiles := tiles_with_room(tiles, new_room);
+            if length(rooms) > 0 then
+				var new_center := center(new_room);
+        		var prev_center := center(rooms[length(rooms) - 1]);
+				if random(0, 2) = 1 then
+            		tiles := tiles_with_horizontal_tunnel(tiles, prev_center.x, new_center.x, prev_center.y);
+            		tiles := tiles_with_vertical_tunnel(tiles, prev_center.y, new_center.y, new_center.x);
+				else
+            		tiles := tiles_with_vertical_tunnel(tiles, prev_center.y, new_center.y, prev_center.x);
+            		tiles := tiles_with_horizontal_tunnel(tiles, prev_center.x, new_center.x, new_center.y);
+            	end if;
+			end if;
+            rooms := rooms || [new_room];            
+        end if;
+    end loop;
+	return {tiles: tiles, rooms : rooms, width: width, height: height} as map;
+end make_map;
+
+var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+function visible_tile_flags(tiles [[tile_type]], x integer, y integer, range integer) [[boolean]] begin
+	var flags := false ** (2 * range + 1) ** (2 * range + 1);
+	for dir in 1..4 loop
+		for i in 0 .. range * 2 loop
+			var border_x := case when dir = 1 or dir = 3 then i when dir = 2 then 2 * range else 0 end;
+			var border_y := case when dir = 2 or dir = 4 then i when dir = 3 then 2 * range else 0 end;
+			var is_blocked := false;
+			for d in line_dots(range, range, border_x, border_y) loop
+				if not is_blocked then
+					flags[d.y][d.x] := true;
+					if tiles[y - range + d.y][x - range + d.x] = tile_type_wall() then
+						is_blocked := true;
+					else
+						if d.x > 0 then
+							flags[d.y][d.x - 1] := true;
+						end if;
+						if d.x < 2 * range then
+							flags[d.y][d.x + 1] := true;
+						end if;
+						if d.y > 0 then
+							flags[d.y - 1][d.x] := true;
+						end if;
+						if d.y < 2 * range then
+							flags[d.y + 1][d.x] := true;
+						end if;
+					end if;
+				end if;
+			end loop;
+		end loop;
+	end loop;
+	return flags;
+end visible_tile_flags;
+
+var player_id := new_entity({
+	position: entity_position_some(center(map.rooms[0])),
+	display: entity_display_some({glyph: GLYPH_PLAYER, fg_color: ANSI_YELLOW, bg_color: ANSI_BLACK}),
+	viewrange: entity_viewrange_some({range: 6, flags: [] as [[boolean]]})
+} as entity);
+
+for i in 1 .. length(map.rooms) - 1 loop
+	var monster_id := new_entity({
+		position: entity_position_some(center(map.rooms[i])),
+		display: entity_display_some({glyph: '☺', fg_color: ANSI_RED, bg_color: ANSI_BLACK}),
+		viewrange: entity_viewrange_none()
+	} as entity);
+end loop;
+
+procedure draw_map() begin
+	for y in 0 .. SCREEN_HEIGHT - 1 loop
+		for x in 0 .. SCREEN_WIDTH - 1 loop
+			if in_viewrange({x: x, y: y} as point, player_id) then		
+				screen[y][x] := kindof map.tiles[y][x]
+					when floor then FLOOR_SCREEN_CELL
+					when wall then WALL_SCREEN_CELL
+				end;
+			else
+				screen[y][x] := EMPTY_SCREEN_CELL;
+			end if;
+		end loop;
+	end loop;	
+end draw_map;
+
+procedure render() begin
+	draw_map();
+	for i in 0 .. length(entities) - 1 loop
+		kindof entities[i].display
+			when some(d) then
+				kindof entities[i].position
+					when some(p) then
+						screen[p.y][p.x].glyph := d.glyph;
+						screen[p.y][p.x].fg_color := d.fg_color;
+						screen[p.y][p.x].bg_color := d.bg_color;
+				end;
+		end;
+	end loop;
+end render;
+
+function screen_line_to_text(line [screen_cell]) text begin
+	var t := ansi_color(ANSI_WHITE, ANSI_BLACK);
+	var last_fg := ANSI_WHITE;
+	var last_bg := ANSI_BLACK;
+	for i in 0 .. length(line) - 1 loop
+		var r := line[i];
+		if r.fg_color <> last_fg or r.bg_color <> last_bg then
+			t := t || ansi_color(r.fg_color, r.bg_color);
+			last_fg := r.fg_color;
+			last_bg := r.bg_color;
+		end if;
+		t := t || r.glyph;
+	end loop;
+	return t;
+end screen_line_to_text;
+
+procedure display() begin
+	for i in 0 .. length(screen) - 1 loop
+		if i = 0 then
+			print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || screen_line_to_text(screen[i]) || ANSI_CR);			
+		else
+			print(screen_line_to_text(screen[i]) || ANSI_CR);
+		end if;
+	end loop;
+	for i in length(screen) .. SCREEN_HEIGHT - 1 loop
+		print(ANSI_CR);
+	end loop;
+end display;
+
+procedure move_player(x integer, y integer) begin
+	kindof entities[player_id].position
+		when some(p) then
+			var new_p := {x: p.x + x, y: p.y + y} as point;
+			if map.tiles[new_p.y][new_p.x] <> tile_type_wall() then
+				entities[player_id].position := entity_position_some(new_p);
+			end if;	
+	end;
+end move_player;
+
+procedure compute_viewranges() begin
+	for i in 0 .. length(entities) - 1 loop
+		kindof entities[i].viewrange
+			when some(r) then
+				kindof entities[i].position
+					when some(p) then
+						entities[i].viewrange := entity_viewrange_some({
+							range: r.range,
+							flags: visible_tile_flags(map.tiles, p.x, p.y, r.range)
+						});
+				end;
+			else
+		end;
+	end loop;
+end compute_viewranges;
+
+procedure main_loop() begin
+	var again := true;
+	while again loop
+		compute_viewranges();
+		render();
+		display();
+		var input := get_char();
+		if input = CHAR_UP then
+			move_player(0, -1);
+		elsif input = CHAR_DOWN then
+			move_player(0, 1);
+		elsif input = CHAR_LEFT then
+			move_player(-1, 0);
+		elsif input = CHAR_RIGHT then
+			move_player(1, 0);
+		elsif input = CHAR_QUIT then
+			again := false;
+		end if;
+	end loop;
+end main_loop;
+
+main_loop();
+
+
+

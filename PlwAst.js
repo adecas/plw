@@ -387,6 +387,25 @@ class AstKindofWhen extends AstNode {
 	}
 }
 
+class AstKindofStmt extends AstNode {
+	constructor(caseExpr, whenCount, whens, elseBlock) {
+		super("ast-kindof-stmt");
+		this.caseExpr = caseExpr;
+		this.whenCount = whenCount;
+		this.whens = whens;
+		this.elseBlock = elseBlock;
+	}
+}
+
+class AstKindofWhenStmt extends AstNode {
+	constructor(kindName, varName, thenBlock) {
+		super("ast-kindof-when-stmt");
+		this.kindName = kindName;
+		this.varName = varName;
+		this.thenBlock = thenBlock;
+	}
+}
+
 class AstTypeAbstract extends AstNode {
 	constructor(methodCount, methods) {
 		super("ast-type-abstract");

@@ -86,6 +86,7 @@ class EvalTypeVariantField {
 	constructor(fieldName, fieldType) {
 		this.fieldName = fieldName;
 		this.fieldType = fieldType;
+		this.builder = null;
 	}
 }
 
@@ -232,6 +233,7 @@ class EvalResultFunction extends EvalResult {
 	static fromNative(functionName, parameterList, returnType, nativeIndex) {
 		let nativeFunc = new EvalResultFunction(functionName, parameterList, returnType, false);
 		nativeFunc.nativeIndex = nativeIndex;
+		// console.log("Native function " + nativeIndex + ": " + nativeFunc.functionKey());
 		return nativeFunc;
 	}
 
@@ -257,6 +259,7 @@ class EvalResultProcedure extends EvalResult {
 	static fromNative(procedureName, parameterList, nativeIndex) {
 		let nativeProc = new EvalResultProcedure(procedureName, parameterList);
 		nativeProc.nativeIndex = nativeIndex;
+		// console.log("Native procedure " + nativeIndex + ": " + nativeProc.procedureKey());
 		return nativeProc;
 	}
 	
@@ -389,6 +392,10 @@ class EvalError extends EvalResult {
 		return new EvalError("Variant kind " + kindName + " not managed");
 	}
 	
+	static unknownVariantKind(kindName) {
+		return new EvalError("Unknown kind " + kindName);
+	}
+	
 	static fieldAlreadyExists(fieldName) {
 		return new EvalError("Field " + fieldName + " already exists");
 	}
@@ -401,10 +408,12 @@ const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
 const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
+const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
 
 class CodeBlock {
 
-	constructor() {
+	constructor(blockName) {
+		this.blockName = blockName;
 		this.codes = [];
 		this.codeSize = 0;
 		this.strConsts = [];
@@ -477,6 +486,18 @@ class CodeBlock {
 	
 	codeCreateObject(itemCount) {
 		this.code2("create_object", itemCount);
+	}
+	
+	codeCreatePrimarray(itemCount) {
+		this.code2("create_primarray", itemCount);
+	}
+	
+	codeArrayTimes() {
+		this.code1("array_times");
+	}
+	
+	codePrimarrayTimes() {
+		this.code1("primarray_times");
 	}
 	
 	codeCreateString(strId) {
@@ -687,7 +708,8 @@ class CompilerContext {
 			"integer": EVAL_TYPE_INTEGER,
 			"real": EVAL_TYPE_REAL,
 			"boolean": EVAL_TYPE_BOOLEAN,
-			"text": EVAL_TYPE_TEXT
+			"text": EVAL_TYPE_TEXT,
+			"char": EVAL_TYPE_CHAR
 		};
 		this.functions = {};
 		this.procedures = {};
@@ -748,9 +770,10 @@ class CompilerContext {
 		delete this.types[typeKey];		
 	}
 	
-	addCodeBlock() {
+	addCodeBlock(blockName) {
 		let i = this.codeBlocks.length;
-		this.codeBlocks[i] = new CodeBlock();
+		this.codeBlocks[i] = new CodeBlock(blockName);
+		// console.log("Code block " + i + ": " + blockName);
 		return i;
 	}
 			
@@ -861,11 +884,11 @@ class Compiler {
 	constructor(context) {
 		this.context = context;
 		this.scope = this.context.globalScope;
-		this.codeBlock = new CodeBlock();
+		this.codeBlock = new CodeBlock("global");
 	}
 	
 	resetCode() {
-		this.codeBlock = new CodeBlock();
+		this.codeBlock = new CodeBlock("global");
 	}
 	
 	pushScopeBlock() {
@@ -948,50 +971,7 @@ class Compiler {
 			if (existingType !== null) {
 				return existingType;
 			}
-			for (let i = 0; i < variantType.fieldCount; i++) {
-				let paramCount = 0;
-				let params = [];
-				if (variantType.fields[i].fieldType !== null) {
-					paramCount = 1;
-					params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
-				}
-				let evalFunc = new EvalResultFunction(
-					variantType.fields[i].fieldName,
-					new EvalResultParameterList(paramCount, params),
-					null,
-					false
-				);
-				if (this.context.getFunction(evalFunc) !== null) {
-					return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);
-				}
-			}
 			this.context.addType(variantType);
-			for (let i = 0; i < variantType.fieldCount; i++) {
-				let paramCount = 0;
-				let params = [];
-				if (variantType.fields[i].fieldType !== null) {
-					paramCount = 1;
-					params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
-				}
-				let evalFunc = new EvalResultFunction(
-					variantType.fields[i].fieldName,
-					new EvalResultParameterList(paramCount, params),
-					variantType,
-					false
-				);
-				this.context.addFunction(evalFunc);
-				let codeBlockId = this.context.addCodeBlock();
-				let codeBlock = this.context.codeBlocks[codeBlockId];
-				if (paramCount === 0) {
-					codeBlock.codePush(0);
-				} else {
-					codeBlock.codePushLocal(-5);
-				}
-				codeBlock.codePush(i);
-				codeBlock.codeCreateObject(2);
-				codeBlock.codeRetVal();
-				evalFunc.codeBlockIndex = codeBlockId;
-			}
 			return variantType;
 		}
 		if (expr.tag === "ast-type-abstract") {
@@ -1087,7 +1067,57 @@ class Compiler {
 			if (underlyingType.isError()) {
 				return underlyingType;
 			}
-			this.context.addType(new EvalTypeName(expr.typeName, underlyingType));
+			let namedType = new EvalTypeName(expr.typeName, underlyingType);
+			this.context.addType(namedType);
+			if (underlyingType.tag === "res-type-variant") {
+				// generate builders for the variant kinds that returns the named type
+				let variantType = underlyingType;
+				for (let i = 0; i < variantType.fieldCount; i++) {
+					let paramCount = 0;
+					let params = [];
+					if (variantType.fields[i].fieldType !== null) {
+						paramCount = 1;
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+					}
+					let evalFunc = new EvalResultFunction(
+						expr.typeName + "_" + variantType.fields[i].fieldName,
+						new EvalResultParameterList(paramCount, params),
+						null,
+						false
+					);
+					if (this.context.getFunction(evalFunc) !== null) {
+						this.context.removeType(namedType.typeKey());
+						return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);
+					}
+				}
+				for (let i = 0; i < variantType.fieldCount; i++) {
+					let paramCount = 0;
+					let params = [];
+					if (variantType.fields[i].fieldType !== null) {
+						paramCount = 1;
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+					}
+					let evalFunc = new EvalResultFunction(
+						expr.typeName + "_" + variantType.fields[i].fieldName,
+						new EvalResultParameterList(paramCount, params),
+						namedType,
+						false
+					);
+					this.context.addFunction(evalFunc);
+					let codeBlockId = this.context.addCodeBlock(evalFunc.functionKey());
+					let codeBlock = this.context.codeBlocks[codeBlockId];
+					if (paramCount === 0) {
+						codeBlock.codePush(0);
+					} else {
+						codeBlock.codePushLocal(-5);
+					}
+					codeBlock.codePush(i);
+					codeBlock.codeCreateObject(2);
+					codeBlock.codeRetVal();
+					evalFunc.codeBlockIndex = codeBlockId;
+					variantType.fields[i].builder = evalFunc;
+				}
+			}
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-variable-declaration") {
@@ -1350,6 +1380,71 @@ class Compiler {
 			}
 			return EVAL_RESULT_OK;
 		}
+		if (expr.tag === "ast-kindof-stmt") {
+			let caseType = this.eval(expr.caseExpr);
+			if (caseType.isError()) {
+				return caseType;
+			}
+			while (caseType.tag === "res-type-name") {
+				caseType = caseType.underlyingType;
+			}			
+			if (caseType.tag !== "res-type-variant") {
+				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
+			}
+			let kindHasWhen = [];
+			for (let i = 0; i < caseType.fieldCount; i++) {
+				kindHasWhen[i] = false;
+			}
+			this.codeBlock.codeDup();
+			this.codeBlock.codePush(1);
+			this.codeBlock.codePushPtrOffset();
+			let endLocs = [];
+			let endLocCount = 0;
+			for (let i = 0; i < expr.whenCount; i++) {
+				this.codeBlock.codeDup();
+				let fieldIndex = 0;
+				while (fieldIndex < caseType.fieldCount) {
+					if (caseType.fields[fieldIndex].fieldName === expr.whens[i].kindName) {
+						break;
+					}
+					fieldIndex++;
+				}
+				if (fieldIndex === caseType.fieldCount) {
+					return EvalError.unknownVariantKind(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				}
+				if (kindHasWhen[fieldIndex] === true) {
+					return EvalError.variantKindAlreadyManaged(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				}
+				this.codeBlock.codePush(fieldIndex);
+				this.codeBlock.codeEq();						
+				let nextLoc = this.codeBlock.codeJz(0);
+				this.codeBlock.codePopVoid(1);
+				this.pushScopeBlock();
+				this.codeBlock.codePush(0);
+				this.codeBlock.codePushPtrOffset();
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
+				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
+				if (thenRet.isError()) {
+					return thenRet;
+				}
+				this.codeBlock.codePopVoid(1);
+				this.popScope();
+				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
+				endLocCount++;
+				this.codeBlock.setLoc(nextLoc);
+			}
+			this.codeBlock.codePopVoid(2);
+			if (expr.elseBlock !== null) {
+				let elseRet = this.evalStatement(expr.elseBlock);
+				if (elseRet.isError()) {
+					return elseRet;
+				}
+			}
+			for (let i = 0; i < endLocCount; i++) {
+				this.codeBlock.setLoc(endLocs[i]);
+			}
+			return EVAL_RESULT_OK;
+		}
 		if (expr.tag === "ast-while") {
 			let testLoc = this.codeBlock.codeSize;
 			let conditionType = this.eval(expr.condition);
@@ -1521,7 +1616,7 @@ class Compiler {
 			this.context.addFunction(evalFunc);
 			{ // begin Compile function
 				let oldCodeBlock = this.codeBlock;
-				let codeBlockIndex = this.context.addCodeBlock();
+				let codeBlockIndex = this.context.addCodeBlock(evalFunc.functionKey());
 				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
 				evalFunc.codeBlockIndex = codeBlockIndex;
 				this.pushScopeFunction(evalFunc.isGenerator, returnType);
@@ -1568,7 +1663,7 @@ class Compiler {
 			this.context.addProcedure(evalProc);
 			{ // begin Compile procedure
 				let oldCodeBlock = this.codeBlock;
-				let codeBlockIndex = this.context.addCodeBlock();
+				let codeBlockIndex = this.context.addCodeBlock(evalProc.procedureKey());
 				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
 				evalProc.codeBlockIndex = codeBlockIndex;
 				this.pushScopeProcedure();
@@ -1700,6 +1795,9 @@ class Compiler {
 			if (valueType === asType) {
 				return asType;
 			}
+			if (valueType.tag === "res-type-name" && asType === valueType.underlyingType) {
+				return asType;
+			}
 			let actAsType = asType;
 			while (actAsType.tag === "res-type-name") {
 				actAsType = actAsType.underlyingType;
@@ -1773,7 +1871,11 @@ class Compiler {
 				}
 			}
 			// Allocate the array
-			this.codeBlock.codeCreateObject(expr.itemCount);
+			if (itemType === null || itemType.isRef === false) {
+				this.codeBlock.codeCreatePrimarray(expr.itemCount);
+			} else {
+				this.codeBlock.codeCreateObject(expr.itemCount);
+			}
 			if (expr.itemCount === 0) {
 				return EVAL_TYPE_EMPTY_ARRAY;
 			}
@@ -1832,10 +1934,31 @@ class Compiler {
 				this.codeBlock.codePush(2);
 				if (leftType === EVAL_TYPE_TEXT) {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
+				} else if (leftType.underlyingType.isRef === false) {
+					this.codeBlock.codeCallNative(this.context.getFunction("concat_primarray(ref,ref)").nativeIndex)
 				} else {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
 				}
 				return leftType;
+			}
+			if (expr.operator === TOK_TIMES) {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				if (rightType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(right, "integer").fromExpr(expr.right);
+				}
+				if (leftType.isRef) {
+					this.codeBlock.codeArrayTimes();
+				} else {
+					this.codeBlock.codePrimarrayTimes();
+				}
+				return this.context.addType(new EvalTypeArray(leftType));
 			}
 			if (expr.operator === TOK_REM) {
 				let leftType = this.eval(expr.left);
@@ -2029,7 +2152,11 @@ class Compiler {
 				return EvalError.wrongType(indexToType, "integer").fromExpr(expr.indexTo);
 			}
 			this.codeBlock.codePush(3);
-			this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
+			if (indexedType.underlyingType.isRef === false) {
+				this.codeBlock.codeCallNative(this.context.getFunction("slice_primarray(ref,integer,integer)").nativeIndex);
+			} else {
+				this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
+			}
 			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {
@@ -2166,6 +2293,9 @@ class Compiler {
 			let caseType = this.eval(expr.caseExpr);
 			if (caseType.isError()) {
 				return caseType;
+			}
+			while (caseType.tag === "res-type-name") {
+				caseType = caseType.underlyingType;
 			}
 			if (caseType.tag !== "res-type-variant") {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);

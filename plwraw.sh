@@ -9,4 +9,4 @@ ${PLW_HOME}/PlwRefManager.js \
 ${PLW_HOME}/PlwStackMachine.js \
 ${PLW_HOME}/PlwNativeFunctionManager.js \
 ${PLW_HOME}/PlwNode.js > PlwBundle.js
-node -- PlwBundle.js $*
+stty raw -echo && node -- PlwBundle.js $* && reset

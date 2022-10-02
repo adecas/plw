@@ -20,6 +20,7 @@ const TOK_GTE = "tok-gte";
 const TOK_NE = "tok-ne";
 const TOK_TO = "tok-to";
 const TOK_CONCAT = "tok-concat";
+const TOK_TIMES = "tok-times";
 const TOK_VAR = "tok-var";
 const TOK_CONST = "tok-const";
 const TOK_TYPE = "tok-type";
@@ -384,6 +385,12 @@ class TokenReader {
 			this.col += 2;
 			return new Token(TOK_CONCAT, "||", line, col);
 		}
+		
+		if (c === "*" && nc !== null && nc === "*") {
+			this.pos += 2;
+			this.col += 2;
+			return new Token(TOK_TIMES, "||", line, col);
+		}		
 		
 		if (c === ")") {
 			this.allowSignedInteger = false;

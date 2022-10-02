@@ -43,7 +43,7 @@ class StackMachineError {
 		this.ip = ip;
 		return this;
 	}
-	
+		
 	static stackAccessOutOfBound() {
 		return new StackMachineError("stack access out of bound");
 	}
@@ -62,6 +62,10 @@ class StackMachineError {
 	
 	static refAccessOutOfBound() {
 		return new StackMachineError("ref access out of bound");
+	}
+	
+	static invalidSize() {
+		return new StackMachineError("invalid size");
 	}
 	
 	static divByZero() {
@@ -114,7 +118,7 @@ class StackMachine {
 				if (refManError.hasError()) {
 					return false;
 				}
-				if (ref.tag === "ref-exception-handler") {
+				if (ref.tag === TAG_REF_EXCEPTION_HANDLER) {
 					this.bp = ref.bp;
 					this.ip = ref.ip;
 					this.codeBlockId = ref.codeBlockId;
@@ -360,27 +364,37 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}
 				let refId = this.stack[this.sp - 2];
-				let ref = this.refMan.getRefOfType(refId, "ref-object", refManError);
+				let ref = this.refMan.getRef(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
 				let offset = this.stack[this.sp - 1];
-				if (offset < 0 || offset >= ref.totalSize) {
-					return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-				}
-				if (code === "push_ptr_offset_for_mutate") {
-					ref.ptr[offset] = this.refMan.makeMutable(ref.ptr[offset], refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
-					}				
-				}
-				this.stack[this.sp - 2] = ref.ptr[offset];
-				this.stackMap[this.sp - 2] = ref.isOffsetRef(offset);
-				if (this.stackMap[this.sp - 2] === true) {
-					this.refMan.incRefCount(this.stack[this.sp - 2], refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+				if (ref.tag === TAG_REF_PRIMARRAY) {
+					if (offset < 0 || offset >= ref.arraySize) {
+						return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
+					this.stack[this.sp - 2] = ref.ptr[offset];
+					this.stackMap[this.sp - 2] = false;
+				} else if (ref.tag === TAG_REF_OBJECT) {
+					if (offset < 0 || offset >= ref.totalSize) {
+						return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					if (code === "push_ptr_offset_for_mutate") {
+						ref.ptr[offset] = this.refMan.makeMutable(ref.ptr[offset], refManError);
+						if (refManError.hasError()) {
+							return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+						}				
+					}
+					this.stack[this.sp - 2] = ref.ptr[offset];
+					this.stackMap[this.sp - 2] = ref.isOffsetRef(offset);
+					if (this.stackMap[this.sp - 2] === true) {
+						this.refMan.incRefCount(this.stack[this.sp - 2], refManError);
+						if (refManError.hasError()) {
+							return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+						}
+					}
+				} else {
+					return StackMachineError.invalidRefType().fromCode(this.codeBlockId, this.ip);
 				}
 				this.sp--;
 				this.refMan.decRefCount(refId, refManError);
@@ -392,22 +406,31 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}				
 				let refId = this.stack[this.sp - 3];
-				let ref = this.refMan.getRefOfType(refId, "ref-object", refManError);
+				let ref = this.refMan.getRef(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
 				let offset = this.stack[this.sp - 2];
 				let val = this.stack[this.sp - 1];
-				if (offset < 0 || offset >= ref.totalSize) {
-					return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-				}
-				if (ref.isOffsetRef(offset)) {
-					this.refMan.decRefCount(ref.ptr[offset], refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+				if (ref.tag === TAG_REF_PRIMARRAY) {
+					if (offset < 0 || offset >= ref.arraySize) {
+						return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
+					ref.ptr[offset] = val;
+				} else if (ref.tag === TAG_REF_OBJECT) {
+					if (offset < 0 || offset >= ref.totalSize) {
+						return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					if (ref.isOffsetRef(offset)) {
+						this.refMan.decRefCount(ref.ptr[offset], refManError);
+						if (refManError.hasError()) {
+							return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+						}
+					}
+					ref.ptr[offset] = val;
+				} else {
+					return StackMachineError.invalidRefType().fromCode(this.codeBlockId, this.ip);
 				}
-				ref.ptr[offset] = val;
 				this.sp -= 3;
 				this.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
@@ -479,7 +502,7 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}
 				let refId = this.stack[this.bp - 4];
-				let ref = this.refMan.getRefOfType(refId, "ref-frame", refManError);
+				let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
@@ -512,7 +535,7 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}
 				let refId = this.stack[this.bp - 4];
-				let ref = this.refMan.getRefOfType(refId, "ref-frame", refManError);
+				let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
@@ -540,7 +563,7 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}
 				let refId = this.stack[this.sp - 1];
-				let ref = this.refMan.getRefOfType(refId, "ref-frame", refManError);
+				let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
@@ -567,7 +590,7 @@ class StackMachine {
 					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 				}
 				let refId = this.stack[this.sp - 1];
-				let ref = this.refMan.getRefOfType(refId, "ref-frame", refManError);
+				let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
@@ -577,6 +600,42 @@ class StackMachine {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 				}
 				this.stack[this.sp - 1] = ended;
+			} else if (code === "primarray_times") {
+				if (this.sp < 2) {
+					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+				}
+				let val = this.stack[this.sp - 2];
+				let count = this.stack[this.sp - 1];
+				if (count < 0) {
+					count = 0;
+				}
+				let ptr = new Array(count).fill(val);
+				let refId = this.refMan.createPrimarray(count, ptr);
+				this.stack[this.sp - 2] = refId;
+				this.stackMap[this.sp - 2] = true;
+				this.sp--;
+			} else if (code === "array_times") {
+				if (this.sp < 2) {
+					return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+				}
+				let val = this.stack[this.sp - 2];
+				let count = this.stack[this.sp - 1];
+				if (count < 0) {
+					count = 0;
+				}
+				let ptr = new Array(count).fill(val);
+				let refId = this.refMan.createObject(count, count, ptr);
+				if (count === 0) {
+					this.refMan.decRefCount(val, refManError);
+				} else {
+					this.refMan.addRefCount(val, count - 1, refManError);
+				}
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+				}
+				this.stack[this.sp - 2] = refId;
+				this.stackMap[this.sp - 2] = true;
+				this.sp--;
 			} else {
 				//
 				// 1 operand (in arg1)
@@ -699,7 +758,7 @@ class StackMachine {
 					if (arg1 < 0 || arg1 > this.sp) {
 						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
-					let ptr = [];
+					let ptr = new Array(arg1);
 					let offset = 0;
 					for (let i = 0; i < arg1; i++) {
 						if (this.stackMap[this.sp - arg1 + i] === true) {
@@ -717,6 +776,15 @@ class StackMachine {
 						}
 					}
 					let refId = this.refMan.createObject(refSize, arg1, ptr);
+					this.sp = this.sp - arg1 + 1;
+					this.stack[this.sp - 1] = refId; 
+					this.stackMap[this.sp - 1] = true;
+				} else if (code === "create_primarray") {
+					if (arg1 < 0 || arg1 > this.sp) {
+						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+					}
+					let ptr = this.stack.slice(this.sp - arg1, this.sp);
+					let refId = this.refMan.createPrimarray(arg1, ptr);
 					this.sp = this.sp - arg1 + 1;
 					this.stack[this.sp - 1] = refId; 
 					this.stackMap[this.sp - 1] = true;
@@ -741,7 +809,7 @@ class StackMachine {
 						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
 					let refId = this.stack[this.sp - 2];
-					let ref = this.refMan.getRefOfType(refId, "ref-object", refManError);
+					let ref = this.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 					}
@@ -790,9 +858,10 @@ class StackMachine {
 					if (this.sp < 1 + argCount) {
 						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}
-					let result = this.natives[arg1](this);
-					if (result !== null) {
-						return result;
+					let error = this.natives[arg1](this);
+					if (error !== null) {
+						console.log("error from native function " + arg1);
+						return error.fromCode(this.codeBlockId, this.ip);
 					}
 				} else if (code === "init_generator") {
 					// stack is:
@@ -810,8 +879,8 @@ class StackMachine {
 					if (nbParam < 0 || this.sp < nbParam + 1) {
 						return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 					}					
-					let ptr = [];
-					let mapPtr = [];
+					let ptr = new Array(nbParam + 2);
+					let mapPtr = new Array(nbParam + 2);
 					ptr[0] = arg1;
 					ptr[1] = 0;
 					for (let i = 0; i < nbParam; i++) {

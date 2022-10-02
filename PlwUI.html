@@ -233,7 +233,7 @@ function isprime(n integer) boolean begin
   end loop;
   return true;
 end isprime;
-var first_primes := array(0, primes_count);
+var first_primes := 0 ** primes_count;
 begin
   var i := 1;
   var index := 0;
@@ -411,19 +411,33 @@ end if;
 # a variant record type automatically create a variable and a function
 # for each variant. the variable is numeric, and represents the kind
 # of the variant. The function is a constructor for the variant
-procedure print(status variant(none, error text, done integer)) begin
-  print(kindof status
+type status variant(none, error text, done integer);
+procedure print(s status ) begin
+  print(kindof s
     when none then 'none'
     when error(msg) then 'error: ' || msg
     when done(row_count) then 'done: ' || text(row_count)
   end);
 end print;
-var vr := done(5) as variant(none, error text, done integer);
+procedure print2(s status) begin
+  kindof s
+    when none then
+    	print('none');
+    when error(msg) then
+    	print('error: ' || msg);
+    when done(row_count) then
+    	print('done: ' || text(row_count));
+  end;
+end print2;
+var vr := status_done(5);
 print(vr);
-vr := none();
+print2(vr);
+vr := status_none();
 print(vr);
-vr := error('file not found');
+print2(vr);
+vr := status_error('file not found');
 print(vr);
+print2(vr);
 </pre>
 
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>

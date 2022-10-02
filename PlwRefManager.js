@@ -15,6 +15,12 @@
 
 ******************************************************************************************************************************************/
 
+const TAG_REF_EXCEPTION_HANDLER = 1;
+const TAG_REF_OBJECT = 2;
+const TAG_REF_FRAME = 3;
+const TAG_REF_STRING = 4;
+const TAG_REF_PRIMARRAY = 5;
+
 class CountedRef {
 	constructor(tag) {
 		this.tag = tag;
@@ -24,7 +30,7 @@ class CountedRef {
 
 class CountedRefExceptionHandler extends CountedRef {
 	constructor(codeBlockId, ip, bp) {
-		super("ref-exception-handler");
+		super(TAG_REF_EXCEPTION_HANDLER);
 		this.codeBlockId = codeBlockId;
 		this.ip = ip;
 		this.bp = bp;
@@ -33,7 +39,7 @@ class CountedRefExceptionHandler extends CountedRef {
 
 class CountedRefObject extends CountedRef {
 	constructor(refSize, totalSize, ptr) {
-		super("ref-object");
+		super(TAG_REF_OBJECT);
 		this.refSize = refSize;
 		this.totalSize = totalSize;
 		this.ptr = ptr;
@@ -44,9 +50,17 @@ class CountedRefObject extends CountedRef {
 	}
 }
 
+class CountedRefPrimarray extends CountedRef {
+	constructor(arraySize, ptr) {
+		super(TAG_REF_PRIMARRAY);
+		this.arraySize = arraySize;
+		this.ptr = ptr;
+	}
+}
+
 class CountedRefFrame extends CountedRef {
 	constructor(totalSize, ptr, mapPtr) {
-		super("ref-frame");
+		super(TAG_REF_FRAME);
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 		this.mapPtr = mapPtr;
@@ -63,10 +77,11 @@ class CountedRefFrame extends CountedRef {
 
 class CountedRefString extends CountedRef {
 	constructor(str) {
-		super("ref-string");
+		super(TAG_REF_STRING);
 		this.str = str;
 	}
 }
+
 
 class RefManagerError {
 	constructor() {
@@ -140,6 +155,10 @@ class RefManager {
 		return refId;
 	}
 	
+	createPrimarray(arraySize, ptr) {
+		return this.addRef(new CountedRefPrimarray(arraySize, ptr));
+	}
+	
 	createString(str) {
 		return this.addRef(new CountedRefString(str));
 	}
@@ -183,12 +202,17 @@ class RefManager {
 	}
 	
 	destroyRef(ref, refManError) {
-		if (ref.tag === "ref-object") { 
+		if (ref.tag === TAG_REF_OBJECT) { 
 			this.destroyObject(ref, refManError);
-		} else if (ref.tag === "ref-frame") {
+		} else if (ref.tag === TAG_REF_FRAME) {
 			this.destroyFrame(ref, refManError);
-		} else if (ref.tag === "ref-string") {
+		} else if (ref.tag === TAG_REF_STRING) {
 			this.destroyString(ref);
+		} else if (ref.tag === TAG_REF_PRIMARRAY || TAG_REF_EXCEPTION_HANDLER) {
+			// nothing to do
+		} else {
+			// TODO have a more meaningful error
+			refManError.invalidRefType(-1);
 		}
 	}
 	
@@ -198,6 +222,14 @@ class RefManager {
 			return;	
 		}
 		this.refs[refId].refCount++;
+	}
+	
+	addRefCount(refId, count, refManError) {
+		if (!this.isValidRefId(refId)) {
+			refManError.invalidRefId(refId);
+			return;	
+		}
+		this.refs[refId].refCount += count;
 	}
 	
 	decRefCount(refId, refManError) {
@@ -216,7 +248,6 @@ class RefManager {
 			this.freeRefIds[this.freeRefIdCount] = refId;
 			this.freeRefIdCount++;
 		}
-		return;
 	}
 	
 	compareRefs(refId1, refId2, refManError) {
@@ -236,10 +267,21 @@ class RefManager {
 		if (ref1.tag !== ref2.tag) {
 			return false;
 		}
-		if (ref1.tag === "ref-string") {
+		if (ref1.tag === TAG_REF_STRING) {
 			return ref1.str === ref2.str;
 		}
-		if (ref1.tag === "ref-object") {
+		if (ref1.tag === TAG_REF_PRIMARRAY) {
+			if (ref1.arraySize !== ref2.arraySize) {
+				return false;
+			}
+			for (let i = 0; i < ref1.arraySize; i++) {
+				if (ref1.ptr[i] !== ref2.ptr[i]) {
+					return false;
+				}
+			}
+			return true;
+		}
+		if (ref1.tag === TAG_REF_OBJECT) {
 			if (ref1.totalSize !== ref2.totalSize || ref1.refSize != ref2.refSize) {
 				return false;
 			}
@@ -268,20 +310,24 @@ class RefManager {
 			return -1;
 		}
 		let ref = this.refs[refId];
-		if (ref.tag !== "ref-object") {
-			refManError.cantCopyRef(refId);
-		}
-		let newPtr = [];
-		for (let i = 0; i < ref.ptr.length; i++) {
-			newPtr[i] = ref.ptr[i];
-			if (i < ref.refSize) {
-				this.incRefCount(newPtr[i], refManError);
-				if (refManError.hasError()) {
-					return -1;
+		if (ref.tag === TAG_REF_OBJECT) {
+			let newPtr = new Array(ref.totalSize);
+			for (let i = 0; i < ref.ptr.length; i++) {
+				newPtr[i] = ref.ptr[i];
+				if (i < ref.refSize) {
+					this.incRefCount(newPtr[i], refManError);
+					if (refManError.hasError()) {
+						return -1;
+					}
 				}
 			}
+			return this.createObject(ref.refSize, ref.totalSize, newPtr);
 		}
-		return this.createObject(ref.refSize, ref.totalSize, newPtr);
+		if (ref.tag === TAG_REF_PRIMARRAY) {
+			return this.createPrimarray(ref.arraySize, [...ref.ptr]);
+		}
+		refManError.cantCopyRef(refId);
+		return -1;
 	}
 	
 	makeMutable(refId, refManError) {
