@@ -22,6 +22,7 @@ const TOK_TO = "tok-to";
 const TOK_CONCAT = "tok-concat";
 const TOK_TIMES = "tok-times";
 const TOK_VAR = "tok-var";
+const TOK_ALIAS = "tok-alias";
 const TOK_CONST = "tok-const";
 const TOK_TYPE = "tok-type";
 const TOK_IF = "tok-if";
@@ -180,6 +181,9 @@ class TokenReader {
 		let token = this.exprStr.substr(beginPos, this.pos - beginPos);
 		if (token === "var") {
 			return new Token(TOK_VAR, token, line, col);
+		}
+		if (token === "alias") {
+			return new Token(TOK_ALIAS, token, line, col);
 		}
 		if (token === "const") {
 			return new Token(TOK_CONST, token, line, col);

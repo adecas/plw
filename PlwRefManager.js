@@ -20,72 +20,13 @@ const TAG_REF_OBJECT = 2;
 const TAG_REF_FRAME = 3;
 const TAG_REF_STRING = 4;
 const TAG_REF_PRIMARRAY = 5;
-
-class CountedRef {
-	constructor(tag) {
-		this.tag = tag;
-		this.refCount = 1;
-	}
-}
-
-class CountedRefExceptionHandler extends CountedRef {
-	constructor(codeBlockId, ip, bp) {
-		super(TAG_REF_EXCEPTION_HANDLER);
-		this.codeBlockId = codeBlockId;
-		this.ip = ip;
-		this.bp = bp;
-	}
-}
-
-class CountedRefObject extends CountedRef {
-	constructor(refSize, totalSize, ptr) {
-		super(TAG_REF_OBJECT);
-		this.refSize = refSize;
-		this.totalSize = totalSize;
-		this.ptr = ptr;
-	}
-	
-	isOffsetRef(offset) {
-		return offset < this.refSize;
-	}
-}
-
-class CountedRefPrimarray extends CountedRef {
-	constructor(arraySize, ptr) {
-		super(TAG_REF_PRIMARRAY);
-		this.arraySize = arraySize;
-		this.ptr = ptr;
-	}
-}
-
-class CountedRefFrame extends CountedRef {
-	constructor(totalSize, ptr, mapPtr) {
-		super(TAG_REF_FRAME);
-		this.totalSize = totalSize;
-		this.ptr = ptr;
-		this.mapPtr = mapPtr;
-	}
-	
-	resizeFrame(newSize) {
-		for (let i = this.totalSize; i < newSize; i++) {
-			this.ptr[i] = 0;
-			this.mapPtr[i] = false;
-		}
-		this.totalSize = newSize;
-	}
-}
-
-class CountedRefString extends CountedRef {
-	constructor(str) {
-		super(TAG_REF_STRING);
-		this.str = str;
-	}
-}
-
+const TAG_REF_ARRAY = 6;
 
 class RefManagerError {
 	constructor() {
 		this.refId = -1;
+		this.refTag = -1;
+		this.offset = -1;
 		this.errorMsg = null;
 	}
 	
@@ -99,10 +40,298 @@ class RefManagerError {
 		this.errorMsg = "invalid ref type";
 	}
 	
+	invalidRefTag(refTag) {
+		this.refTag = refTag;
+		this.errorMsg = "invalid ref tag";
+	}
+	
+	invalidOffset(offset) {
+		this.offset = offset;
+		this.errorMsg = "invalid ref offset";
+	}
+	
 	hasError() {
 		return this.errorMsg !== null;
 	}
 }
+
+class OffsetValue {
+	constructor(val, isRef) {
+		this.val = val;
+		this.isRef = isRef
+	}
+}
+
+class CountedRef {
+	constructor(tag) {
+		this.tag = tag;
+		this.refCount = 1;
+	}
+	
+	getOffsetValue(refMan, offset, isForMutate, refManError) {
+		refManError.invalidRefTag(this.tag);
+		return null;
+	}
+	
+	setOffsetValue(refMan, offset, val, refManError) {
+		refManError.invalidRefTag(this.tag);
+	}
+	
+	shallowCopy(refMan, refManError) {
+		refManError.invalidRefTag(this.tag);
+		return -1;
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		refManError.invalidRefTag(this.tag);
+		return false;
+	}
+	
+	destroy(refMan, refManError) {
+		refManError.invalidRefTag(this.tag);
+	}
+}
+
+class CountedRefExceptionHandler extends CountedRef {
+	constructor(codeBlockId, ip, bp) {
+		super(TAG_REF_EXCEPTION_HANDLER);
+		this.codeBlockId = codeBlockId;
+		this.ip = ip;
+		this.bp = bp;
+	}
+	
+	static make(refMan, codeBlockId, ip, bp) {
+		return refMan.addRef(new CountedRefExceptionHandler(codeBlockId, ip, bp));
+	}			
+	
+	destroy(refMan, refManError) {
+	}
+
+}
+
+class CountedRefObject extends CountedRef {
+	constructor(refSize, totalSize, ptr) {
+		super(TAG_REF_OBJECT);
+		this.refSize = refSize;
+		this.totalSize = totalSize;
+		this.ptr = ptr;
+	}
+	
+	static make(refMan, refSize, totalSize, ptr) {
+		return refMan.addRef(new CountedRefObject(refSize, totalSize, ptr));
+	}
+	
+	getOffsetValue(refMan, offset, isForMutate, refManError) {
+		if (offset < 0 || offset >= this.totalSize) {
+			refManError.invalidRefOffset(offset);
+			return null;
+		}
+		if (isForMutate === true) {
+			this.ptr[offset] = refMan.makeMutable(this.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return null;
+			}				
+		}
+		return new OffsetValue(this.ptr[offset], offset < this.refSize);
+	}
+	
+	setOffsetValue(refMan, offset, val, refManError) {
+		if (offset < 0 || offset >= this.totalSize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		if (offset < this.refSize) {
+			refMan.decRefCount(this.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return;
+			}
+		}
+		this.ptr[offset] = val;
+	}
+	
+	shallowCopy(refMan, refManError) {
+		let newPtr = [...this.ptr];
+		for (let i = 0; i < this.refSize; i++) {
+			refMan.incRefCount(newPtr[i], refManError);
+			if (refManError.hasError()) {
+				return -1;
+			}
+		}
+		return CountedRefObject.make(refMan, this.refSize, this.totalSize, newPtr);
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		if (this.totalSize !== ref.totalSize || this.refSize !== ref.refSize) {
+			return false;
+		}
+		for (let i = 0; i < this.totalSize; i++) {
+			if (i < this.refSize) {
+				if (!refMan.compareRefs(this.ptr[i], ref.ptr[i], refManError)) {
+					return false;
+				}
+				if (refManError.hasError()) {
+					return false;
+				}
+			} else {
+				if (this.ptr[i] !== ref.ptr[i]) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	destroy(refMan, refManError) {
+		for (let i = 0; i < this.refSize; i++) {
+			refMan.decRefCount(this.ptr[i], refManError);
+			if (refManError.hasError()) {
+				return;
+			}
+		}
+		this.ptr = null
+	}
+	
+}
+
+class CountedRefPrimarray extends CountedRef {
+	constructor(arraySize, ptr) {
+		super(TAG_REF_PRIMARRAY);
+		this.arraySize = arraySize;
+		this.ptr = ptr;
+	}
+	
+	static make(refMan, arraySize, ptr) {
+		return refMan.addRef(new CountedRefPrimarray(arraySize, ptr));
+	}
+	
+	getOffsetValue(refMan, offset, isForMutate, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return null;
+		}
+		return new OffsetValue(this.ptr[offset], false);
+	}
+	
+	setOffsetValue(refMan, offset, val, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		this.ptr[offset] = val;
+	}
+	
+	shallowCopy(refMan, refManError) {
+		return CountedRefPrimarray.make(refMan, this.arraySize, [...this.ptr]);
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		if (this.arraySize !== ref.arraySize) {
+			return false;
+		}
+		for (let i = 0; i < this.arraySize; i++) {
+			if (this.ptr[i] !== ref.ptr[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	destroy(refMan, refManError) {
+		this.ptr = null;
+	}
+
+}
+
+class CountedRefArray extends CountedRef {
+	constructor(arraySize, ptr) {
+		super(TAG_REF_ARRAY);
+		this.arraySize = arraySize;
+		this.ptr = ptr;
+	}
+	
+	static make(refMan, arraySize, ptr) {
+		return this.addRef(new CountedRefArray(arraySize, ptr));
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		if (this.arraySize !== ref.arraySize) {
+			return false;
+		}
+		for (let i = 0; i < this.arraySize; i++) {
+			if (!refMan.compareRefs(this.ptr[i], ref.ptr[i], refManError)) {
+				return false;
+			}
+			if (refManError.hasError()) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	destroy(refMan, refManError) {
+		for (let i = 0; i < this.arraySize; i++) {
+			refMan.decRefCount(this.ptr[i], refManError);
+			if (refManError.hasError()) {
+				return;
+			}
+		}
+		this.ptr = null
+	}
+
+}
+
+class CountedRefFrame extends CountedRef {
+	constructor(totalSize, ptr, mapPtr) {
+		super(TAG_REF_FRAME);
+		this.totalSize = totalSize;
+		this.ptr = ptr;
+		this.mapPtr = mapPtr;
+	}
+	
+	static make(refMan, totalSize, ptr, mapPtr) {
+		return refMan.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
+	}
+	
+	resizeFrame(newSize) {
+		for (let i = this.totalSize; i < newSize; i++) {
+			this.ptr[i] = 0;
+			this.mapPtr[i] = false;
+		}
+		this.totalSize = newSize;
+	}
+	
+	destroy(refMan, refManError) {
+		for (let i = this.totalSize - 1; i >= 0; i--) {
+			if (this.mapPtr[i] === true) {
+				refMan.decRefCount(this.ptr[i], refManError);
+				if (refManError.hasError()) {
+					return;
+				}
+			}
+		}
+		this.ptr = null;
+	}
+	
+}
+
+class CountedRefString extends CountedRef {
+	constructor(str) {
+		super(TAG_REF_STRING);
+		this.str = str;
+	}
+	
+	static make(refMan, str) {
+		return refMan.addRef(new CountedRefString(str));
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		return this.str === ref.str;
+	}
+	destroy(refMan, refManError) {
+		this.str = null;
+	}
+}
+
 
 class RefManager {
 
@@ -114,7 +343,7 @@ class RefManager {
 	}
 	
 	isValidRefId(refId) {
-		return refId >= 0 && refId < this.refCount && this.refs[refId] !== null;
+		return refId >= 0 && refId < this.refCount && this.refs[refId] !== -1;
 	}
 	
 	getRef(refId, refManError) {
@@ -154,68 +383,7 @@ class RefManager {
 		this.refs[refId] = ref;
 		return refId;
 	}
-	
-	createPrimarray(arraySize, ptr) {
-		return this.addRef(new CountedRefPrimarray(arraySize, ptr));
-	}
-	
-	createString(str) {
-		return this.addRef(new CountedRefString(str));
-	}
-	
-	createObject(refSize, totalSize, ptr) {
-		return this.addRef(new CountedRefObject(refSize, totalSize, ptr));
-	}
-	
-	createFrame(totalSize, ptr, mapPtr) {
-		return this.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
-	}
-	
-	createExceptionHandler(codeBlockId, ip, bp) {
-		return this.addRef(new CountedRefExceptionHandler(codeBlockId, ip, bp));
-	}	
-		
-	destroyObject(ref, refManError) {
-		for (let i = 0; i < ref.refSize; i++) {
-			this.decRefCount(ref.ptr[i], refManError);
-			if (refManError.hasError()) {
-				return;
-			}
-		}
-		ref.ptr = null
-	}
-	
-	destroyFrame(ref, refManError) {
-		for (let i = ref.totalSize - 1; i >= 0; i--) {
-			if (ref.mapPtr[i] === true) {
-				this.decRefCount(ref.ptr[i], refManError);
-				if (refManError.hasError()) {
-					return;
-				}
-			}
-		}
-		ref.ptr = null;
-	}
-	
-	destroyString(ref) {
-		ref.str = null;
-	}
-	
-	destroyRef(ref, refManError) {
-		if (ref.tag === TAG_REF_OBJECT) { 
-			this.destroyObject(ref, refManError);
-		} else if (ref.tag === TAG_REF_FRAME) {
-			this.destroyFrame(ref, refManError);
-		} else if (ref.tag === TAG_REF_STRING) {
-			this.destroyString(ref);
-		} else if (ref.tag === TAG_REF_PRIMARRAY || TAG_REF_EXCEPTION_HANDLER) {
-			// nothing to do
-		} else {
-			// TODO have a more meaningful error
-			refManError.invalidRefType(-1);
-		}
-	}
-	
+							
 	incRefCount(refId, refManError) {
 		if (!this.isValidRefId(refId)) {
 			refManError.invalidRefId(refId);
@@ -240,11 +408,11 @@ class RefManager {
 		let ref = this.refs[refId];
 		ref.refCount--;
 		if (ref.refCount === 0) {
-			this.destroyRef(ref, refManError);
+			ref.destroy(this, refManError);
 			if (refManError.hasError()) {
 				return;
 			}
-			this.refs[refId] = null;
+			this.refs[refId] = -1;
 			this.freeRefIds[this.freeRefIdCount] = refId;
 			this.freeRefIdCount++;
 		}
@@ -267,69 +435,9 @@ class RefManager {
 		if (ref1.tag !== ref2.tag) {
 			return false;
 		}
-		if (ref1.tag === TAG_REF_STRING) {
-			return ref1.str === ref2.str;
-		}
-		if (ref1.tag === TAG_REF_PRIMARRAY) {
-			if (ref1.arraySize !== ref2.arraySize) {
-				return false;
-			}
-			for (let i = 0; i < ref1.arraySize; i++) {
-				if (ref1.ptr[i] !== ref2.ptr[i]) {
-					return false;
-				}
-			}
-			return true;
-		}
-		if (ref1.tag === TAG_REF_OBJECT) {
-			if (ref1.totalSize !== ref2.totalSize || ref1.refSize != ref2.refSize) {
-				return false;
-			}
-			for (let i = 0; i < ref1.totalSize; i++) {
-				if (i < ref1.refSize) {
-					if (!this.compareRefs(ref1.ptr[i], ref2.ptr[i], refManError)) {
-						return false;
-					}
-					if (refManError.hasError()) {
-						return false;
-					}
-				} else {
-					if (ref1.ptr[i] !== ref2.ptr[i]) {
-						return false;
-					}
-				}
-			}
-			return true;
-		}
-		return false;
+		return ref1.compareTo(this, ref2, refManError);
 	}
-	
-	shallowCopy(refId, refManError) {
-		if (!this.isValidRefId(refId)) {
-			refManError.invalidRefId(refId);
-			return -1;
-		}
-		let ref = this.refs[refId];
-		if (ref.tag === TAG_REF_OBJECT) {
-			let newPtr = new Array(ref.totalSize);
-			for (let i = 0; i < ref.ptr.length; i++) {
-				newPtr[i] = ref.ptr[i];
-				if (i < ref.refSize) {
-					this.incRefCount(newPtr[i], refManError);
-					if (refManError.hasError()) {
-						return -1;
-					}
-				}
-			}
-			return this.createObject(ref.refSize, ref.totalSize, newPtr);
-		}
-		if (ref.tag === TAG_REF_PRIMARRAY) {
-			return this.createPrimarray(ref.arraySize, [...ref.ptr]);
-		}
-		refManError.cantCopyRef(refId);
-		return -1;
-	}
-	
+		
 	makeMutable(refId, refManError) {
 		if (!this.isValidRefId(refId)) {
 			refManError.invalidRefId(refId);
@@ -339,13 +447,29 @@ class RefManager {
 		if (ref.refCount === 1) {
 			return refId;
 		}
-		let newRefId = this.shallowCopy(refId, refManError);
+		let newRefId = ref.shallowCopy(this, refManError);
 		if (refManError.hasError()) {
 			return -1;
 		}
 		ref.refCount--;
 		return newRefId;
-	}		
+	}
+	
+	setOffsetValue(refId, offset, val, refManError) {
+		let ref = this.getRef(refId, refManError);
+		if (refManError.hasError()) {
+			return;
+		}
+		ref.setOffsetValue(this, offset, val, refManError);
+	}
+	
+	getOffsetValue(refId, offset, isForMutate, refManError) {
+		let ref = this.getRef(refId, refManError);
+		if (refManError.hasError()) {
+			return null;
+		}
+		return ref.getOffsetValue(this, offset, isForMutate, refManError);
+	}
 
 }
 

@@ -5,6 +5,7 @@
 <script src="PlwTokenReader.js"></script>
 <script src="PlwAst.js"></script>
 <script src="PlwParser.js"></script>
+<script src="PlwOpcodes.js"></script>
 <script src="PlwCompiler.js"></script>
 <script src="PlwRefManager.js"></script>
 <script src="PlwStackMachine.js"></script>
@@ -66,6 +67,17 @@ t := t || 'World';
 print('t = ' || t || ', expected Hello World');
 t := subtext(t, 3, 5);
 print('t = ' || t || ', expected lo Wo');
+</pre>
+
+<p id="snippet-alias-title" class="snippet">Alias</p>
+<pre id="snippet-alias">
+const point := {x: 0, y: 0};
+var points := [point];
+alias first_point := points[0];  # an alias contains a refId and an offset, here refId of points and offset 0
+first_point.x := 1;              # equivalent to point[0].x := 1
+# alias points_ref := points     # illegal, no offset to store
+alias point_y := point.y         # refId = point, offset = 1, inherit the constness of point
+# point_y := 1;					 # illegal, point_y is const 
 </pre>
 
 <p id="snippet-real-title" class="snippet">Real</p>

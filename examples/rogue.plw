@@ -111,7 +111,7 @@ const WALL_SCREEN_CELL := {glyph: GLYPH_WALL, fg_color: ANSI_GREEN, bg_color: AN
 
 type entity_position variant(none, some point);
 type entity_display variant(none, some {glyph text, fg_color text, bg_color text});
-type entity_viewrange variant(none, some {range integer, flags [[boolean]]});
+type entity_viewrange variant(none, some {range integer, flags [[boolean]], dirty boolean});
 
 type entity {
 	position entity_position,
@@ -138,26 +138,24 @@ procedure print_visibility_flags(flags [[boolean]]) begin
 end print_visibility_flags;
 
 function in_viewrange(p point, entity_id integer) boolean begin
-	kindof entities[entity_id].viewrange
-		when some(vr) then
-			kindof entities[entity_id].position
-				when some(pos) then
-					if p.x >= pos.x - vr.range and
-					   p.x <= pos.x + vr.range and
-					   p.y >= pos.y - vr.range and
-					   p.y <= pos.y + vr.range
-					then
-						var rel_x := vr.range + p.x - pos.x;
-						var rel_y := vr.range + p.y - pos.y;
-						if rel_y < 0 or rel_y >= length(vr.flags) or
-						   rel_x < 0 or rel_x >= length(vr.flags[rel_y])
-						then
-							return false;
-						end if;
-						return vr.flags[rel_y][rel_x];
-					end if;
+	kindof entities[entity_id].viewrange when some(vr) then
+		kindof entities[entity_id].position when some(pos) then
+			if p.x >= pos.x - vr.range and
+			   p.x <= pos.x + vr.range and
+			   p.y >= pos.y - vr.range and
+			   p.y <= pos.y + vr.range
+			then
+				var rel_x := vr.range + p.x - pos.x;
+				var rel_y := vr.range + p.y - pos.y;
+				if rel_y < 0 or rel_y >= length(vr.flags) or
+				   rel_x < 0 or rel_x >= length(vr.flags[rel_y])
+				then
 					return false;
-			end;
+				end if;
+				return vr.flags[rel_y][rel_x];
+			end if;
+			return false;
+		end;
 	end;
 	return false;
 end in_viewrange;
@@ -170,6 +168,8 @@ type tile_type variant(floor, wall);
 
 type map {
 	tiles [[tile_type]],
+	revealed_tiles [[boolean]],
+	visible_tiles [[boolean]],
 	rooms [rect],
 	width integer,
 	height integer
@@ -200,6 +200,8 @@ end tiles_with_vertical_tunnel;
 
 function make_map(width integer, height integer) map begin
 	var tiles := tile_type_wall() ** width ** height;
+	var revealed_tiles := false ** width ** height;
+	var visible_tiles := false ** width ** height;
 	var rooms := [] as [rect];
     const MAX_ROOMS := 10;
     const MIN_SIZE := 6;
@@ -232,7 +234,7 @@ function make_map(width integer, height integer) map begin
             rooms := rooms || [new_room];            
         end if;
     end loop;
-	return {tiles: tiles, rooms : rooms, width: width, height: height} as map;
+	return {tiles: tiles, revealed_tiles: revealed_tiles, visible_tiles: visible_tiles, rooms: rooms, width: width, height: height} as map;
 end make_map;
 
 var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -273,25 +275,30 @@ end visible_tile_flags;
 var player_id := new_entity({
 	position: entity_position_some(center(map.rooms[0])),
 	display: entity_display_some({glyph: GLYPH_PLAYER, fg_color: ANSI_YELLOW, bg_color: ANSI_BLACK}),
-	viewrange: entity_viewrange_some({range: 6, flags: [] as [[boolean]]})
+	viewrange: entity_viewrange_some({range: 6, flags: [] as [[boolean]], dirty: true})
 } as entity);
 
 for i in 1 .. length(map.rooms) - 1 loop
+	var monster_type := random(0, 1);
+	var glyph := case when monster_type = 0 then 'g' else 'o' end;
 	var monster_id := new_entity({
 		position: entity_position_some(center(map.rooms[i])),
-		display: entity_display_some({glyph: '☺', fg_color: ANSI_RED, bg_color: ANSI_BLACK}),
-		viewrange: entity_viewrange_none()
+		display: entity_display_some({glyph: glyph, fg_color: ANSI_RED, bg_color: ANSI_BLACK}),
+		viewrange: entity_viewrange_some({range: 4, flags: [] as [[boolean]], dirty: true})
 	} as entity);
 end loop;
 
 procedure draw_map() begin
 	for y in 0 .. SCREEN_HEIGHT - 1 loop
 		for x in 0 .. SCREEN_WIDTH - 1 loop
-			if in_viewrange({x: x, y: y} as point, player_id) then		
+			if map.visible_tiles[y][x] or map.revealed_tiles[y][x] then
 				screen[y][x] := kindof map.tiles[y][x]
 					when floor then FLOOR_SCREEN_CELL
 					when wall then WALL_SCREEN_CELL
 				end;
+				if not map.visible_tiles[y][x] then
+					screen[y][x].fg_color := ANSI_WHITE;
+				end if;
 			else
 				screen[y][x] := EMPTY_SCREEN_CELL;
 			end if;
@@ -302,14 +309,14 @@ end draw_map;
 procedure render() begin
 	draw_map();
 	for i in 0 .. length(entities) - 1 loop
-		kindof entities[i].display
-			when some(d) then
-				kindof entities[i].position
-					when some(p) then
-						screen[p.y][p.x].glyph := d.glyph;
-						screen[p.y][p.x].fg_color := d.fg_color;
-						screen[p.y][p.x].bg_color := d.bg_color;
-				end;
+		kindof entities[i].display when some(d) then
+			kindof entities[i].position when some(p) then
+				if map.visible_tiles[p.y][p.x] then
+					screen[p.y][p.x].glyph := d.glyph;
+					screen[p.y][p.x].fg_color := d.fg_color;
+					screen[p.y][p.x].bg_color := d.bg_color;
+				end if;
+			end;
 		end;
 	end loop;
 end render;
@@ -330,6 +337,9 @@ function screen_line_to_text(line [screen_cell]) text begin
 	return t;
 end screen_line_to_text;
 
+var view_range_time := 0;
+var render_time := 0;
+
 procedure display() begin
 	for i in 0 .. length(screen) - 1 loop
 		if i = 0 then
@@ -344,27 +354,46 @@ procedure display() begin
 end display;
 
 procedure move_player(x integer, y integer) begin
-	kindof entities[player_id].position
-		when some(p) then
-			var new_p := {x: p.x + x, y: p.y + y} as point;
-			if map.tiles[new_p.y][new_p.x] <> tile_type_wall() then
-				entities[player_id].position := entity_position_some(new_p);
-			end if;	
+	kindof entities[player_id].position when some(p) then
+		var new_p := {x: p.x + x, y: p.y + y} as point;
+		if map.tiles[new_p.y][new_p.x] <> tile_type_wall() then
+			entities[player_id].position := entity_position_some(new_p);
+			kindof entities[player_id].viewrange when some(vr) then
+				vr.dirty := true;
+				entities[player_id].viewrange := entity_viewrange_some(vr);
+			end;
+		end if;	
 	end;
 end move_player;
 
 procedure compute_viewranges() begin
 	for i in 0 .. length(entities) - 1 loop
-		kindof entities[i].viewrange
-			when some(r) then
-				kindof entities[i].position
-					when some(p) then
-						entities[i].viewrange := entity_viewrange_some({
-							range: r.range,
-							flags: visible_tile_flags(map.tiles, p.x, p.y, r.range)
-						});
+		alias entity := entities[i];
+		kindof entity.viewrange when some(r) then
+			if r.dirty then
+				kindof entity.position when some(p) then
+					r.flags := visible_tile_flags(map.tiles, p.x, p.y, r.range);
+					r.dirty := false;
+					entity.viewrange := entity_viewrange_some(r);
+					if i = player_id then
+						for y in 0 .. map.height - 1 loop
+							for x in 0 .. map.width - 1 loop
+								map.visible_tiles[y][x] := false;
+							end loop;
+						end loop;
+						for y in 0 .. 2 * r.range loop
+							for x in 0 .. 2 * r.range loop
+								var map_y := p.y + y - r.range;
+								var map_x := p.x + x - r.range;
+								if r.flags[y][x] and map_x >= 0 and map_x < map.width and map_y >= 0 and map_y < map.height then
+									map.revealed_tiles[map_y][map_x] := true;
+									map.visible_tiles[map_y][map_x] := true;
+								end if;
+							end loop;
+						end loop; 
+					end if;
 				end;
-			else
+			end if;
 		end;
 	end loop;
 end compute_viewranges;

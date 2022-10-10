@@ -77,7 +77,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = sm.refMan.createString("" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -92,7 +92,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = sm.refMan.createString("" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -107,7 +107,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = sm.refMan.createString(sm.stack[sm.sp - 2] === 1 ? "true" : "false");
+				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, sm.stack[sm.sp - 2] === 1 ? "true" : "false");
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -187,7 +187,7 @@ class NativeFunctionManager {
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = sm.refMan.createString(String.fromCharCode(...ref.ptr));
+				let resultId = CountedRefString.make(sm.refMan, String.fromCharCode(...ref.ptr));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -213,7 +213,7 @@ class NativeFunctionManager {
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = sm.refMan.createString("[" + ref.ptr + "]");
+				let resultId = CountedRefString.make(sm.refMan, "[" + ref.ptr + "]");
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -248,7 +248,7 @@ class NativeFunctionManager {
 					str += (i > 0 ? ", " : "") + subRef.str;
 				}
 				str += "]";
-				let resultId = sm.refMan.createString(str);
+				let resultId = CountedRefString.make(sm.refMan, str);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -289,7 +289,7 @@ class NativeFunctionManager {
 						return StackMachineError.referenceManagerError(refManError);
 					}
 				} else {
-					let resultRefId = sm.refMan.createString(ref1.str + ref2.str);
+					let resultRefId = CountedRefString.make(sm.refMan, ref1.str + ref2.str);
 					sm.refMan.decRefCount(refId1, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
@@ -336,7 +336,7 @@ class NativeFunctionManager {
 				if (beginIndex + length > ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();
 				}
-				let resultRefId = sm.refMan.createString(length === 0 ? "" : ref.str.substr(beginIndex, length));
+				let resultRefId = CountedRefString.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -409,7 +409,7 @@ class NativeFunctionManager {
 					arraySize = 0;
 				}
 				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
-				let resultRefId = sm.refMan.createPrimarray(arraySize, ptr);
+				let resultRefId = CountedRefPrimarray.make(sm.refMan, arraySize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -467,7 +467,7 @@ class NativeFunctionManager {
 						return -1;
 					}
 				}
-				let resultRefId = sm.refMan.createObject(refSize, totalSize, ptr);
+				let resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -503,7 +503,7 @@ class NativeFunctionManager {
 				}
 				let newArraySize = ref1.arraySize + ref2.arraySize;
 				let ptr = ref1.ptr.concat(ref2.ptr);
-				let resultRefId = sm.refMan.createPrimarray(newArraySize, ptr);
+				let resultRefId = CountedRefPrimarray.make(sm.refMan, newArraySize, ptr);
 				sm.refMan.decRefCount(refId1, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -577,7 +577,7 @@ class NativeFunctionManager {
 							return StackMachineError.referenceManagerError(refManError);
 						}
 					}
-					resultRefId = sm.refMan.createObject(refSize, totalSize, ptr);
+					resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
 					sm.refMan.decRefCount(refId1, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
@@ -684,7 +684,7 @@ class NativeFunctionManager {
 				}
 				let lowBound = sm.stack[sm.sp - 3];
 				let highBound = sm.stack[sm.sp - 2];
-				sm.stack[sm.sp - 3] = Math.floor(Math.random() * (highBound - lowBound) + 1) + lowBound;
+				sm.stack[sm.sp - 3] = Math.floor(Math.random() * (highBound - lowBound + 1)) + lowBound;
 				sm.stackMap[sm.sp - 3] = false;
 				sm.sp -= 2;
 				return null;

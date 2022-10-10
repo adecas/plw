@@ -29,7 +29,14 @@ class EvalResultType extends EvalResult {
 	typeKey() {
 		return "not managed " + evalType;
 	}
-	
+}
+
+class EvalResultAlias extends EvalResult {
+	constructor(aliasedType, isConst) {
+		super("res-alias");
+		this.aliasedType = aliasedType;
+		this.isConst = isConst;
+	}	
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
@@ -449,251 +456,251 @@ class CodeBlock {
 	}
 	
 	codeDup() {
-		this.code1("dup");
+		this.code1(OPCODE_DUP);
 	}
 	
 	codeSwap() {
-		this.code1("swap");
+		this.code1(OPCODE_SWAP);
 	}
 	
 	codePush(val) {
-		this.code2("push", val);
+		this.code2(OPCODE_PUSH, val);
 	}
 		
 	codePushGlobal(offset) {
-		this.code2("push_global", offset);
+		this.code2(OPCODE_PUSH_GLOBAL, offset);
 	}
 	
 	codePushGlobalForMutate(offset) {
-		this.code2("push_global_for_mutate", offset);
+		this.code2(OPCODE_PUSH_GLOBAL_FOR_MUTATE, offset);
 	}
 	
 	codePushLocal(offset) {
-		this.code2("push_local", offset);
+		this.code2(OPCODE_PUSH_LOCAL, offset);
 	}
 	
 	codePushLocalForMutate(offset) {
-		this.code2("push_local_for_mutate", offset);
+		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
 	}	
 	
 	codePushPtrOffset() {
-		this.code1("push_ptr_offset");
+		this.code1(OPCODE_PUSH_PTR_OFFSET);
 	}
 	
 	codePushPtrOffsetForMutate() {
-		this.code1("push_ptr_offset_for_mutate");
+		this.code1(OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE);
 	}
 	
 	codeCreateObject(itemCount) {
-		this.code2("create_object", itemCount);
+		this.code2(OPCODE_CREATE_OBJECT, itemCount);
 	}
 	
 	codeCreatePrimarray(itemCount) {
-		this.code2("create_primarray", itemCount);
+		this.code2(OPCODE_CREATE_PRIMARRAY, itemCount);
 	}
 	
 	codeArrayTimes() {
-		this.code1("array_times");
+		this.code1(OPCODE_ARRAY_TIMES);
 	}
 	
 	codePrimarrayTimes() {
-		this.code1("primarray_times");
+		this.code1(OPCODE_PRIMARRAY_TIMES);
 	}
 	
 	codeCreateString(strId) {
-		this.code2("create_string", strId);
+		this.code2(OPCODE_CREATE_STRING, strId);
 	}
 	
 	codePopGlobal(offset) {
-		this.code2("pop_global", offset);
+		this.code2(OPCODE_POP_GLOBAL, offset);
 	}
 	
 	codePopLocal(offset) {
-		this.code2("pop_local", offset);
+		this.code2(OPCODE_POP_LOCAL, offset);
 	}
 	
 	codePopPtrOffset() {
-		this.code1("pop_ptr_offset");
+		this.code1(OPCODE_POP_PTR_OFFSET);
 	}
 		
 	codePopVoid(count) {
-		this.code2("pop_void", count);
+		this.code2(OPCODE_POP_VOID, count);
 	}
 	
 	codeAdd() {
-		this.code1("add");
+		this.code1(OPCODE_ADD);
 	}
 	
 	codeSub() {
-		this.code1("sub");
+		this.code1(OPCODE_SUB);
 	}
 
 	codeDiv() {
-		this.code1("div");
+		this.code1(OPCODE_DIV);
 	}
 
 	codeRem() {
-		this.code1("rem");
+		this.code1(OPCODE_REM);
 	}
 
 	codeMul() {
-		this.code1("mul");
+		this.code1(OPCODE_MUL);
 	}
 	
 	codeNeg() {
-		this.code1("neg");
+		this.code1(OPCODE_NEG);
 	}
 	
 	codeGt() {
-		this.code1("gt");
+		this.code1(OPCODE_GT);
 	}
 
 	codeGte() {
-		this.code1("gte");
+		this.code1(OPCODE_GTE);
 	}
 
 	codeLt() {
-		this.code1("lt");
+		this.code1(OPCODE_LT);
 	}
 
 	codeLte() {
-		this.code1("lte");
+		this.code1(OPCODE_LTE);
 	}
 	
 	codeEq() {
-		this.code1("eq");
+		this.code1(OPCODE_EQ);
 	}
 	
 	codeNe() {
-		this.code1("ne");
+		this.code1(OPCODE_NE);
 	}
 
 	// real
 
 	codeAddf() {
-		this.code1("addf");
+		this.code1(OPCODE_ADDF);
 	}
 	
 	codeSubf() {
-		this.code1("subf");
+		this.code1(OPCODE_SUBF);
 	}
 
 	codeDivf() {
-		this.code1("divf");
+		this.code1(OPCODE_DIVF);
 	}
 
 	codeMulf() {
-		this.code1("mulf");
+		this.code1(OPCODE_MULF);
 	}
 	
 	codeNegf() {
-		this.code1("negf");
+		this.code1(OPCODE_NEGF);
 	}
 	
 	codeGtf() {
-		this.code1("gtf");
+		this.code1(OPCODE_GTF);
 	}
 
 	codeGtef() {
-		this.code1("gtef");
+		this.code1(OPCODE_GTEF);
 	}
 
 	codeLtf() {
-		this.code1("ltf");
+		this.code1(OPCODE_LTF);
 	}
 
 	codeLtef() {
-		this.code1("ltef");
+		this.code1(OPCODE_LTEF);
 	}
 	
 	codeEqf() {
-		this.code1("eqf");
+		this.code1(OPCODE_EQF);
 	}
 	
 	codeNef() {
-		this.code1("nef");
+		this.code1(OPCODE_NEF);
 	}
 	
 	// real
 
 
 	codeAnd() {
-		this.code1("and");
+		this.code1(OPCODE_AND);
 	}
 	
 	codeOr() {
-		this.code1("or");
+		this.code1(OPCODE_OR);
 	}
 	
 	codeNot() {
-		this.code1("not");
+		this.code1(OPCODE_NOT);
 	}
 		
 	codeNext() {
-		this.code1("next");
+		this.code1(OPCODE_NEXT);
 	}
 	
 	codeEnded() {
-		this.code1("ended");
+		this.code1(OPCODE_ENDED);
 	}
 	
 	codeEqRef() {
-		this.code1("eq_ref");
+		this.code1(OPCODE_EQ_REF);
 	}
 	
 	codeJz(offset) {
-		this.code2("jz", offset);
+		this.code2(OPCODE_JZ, offset);
 		return this.codeSize - 1;
 	}
 	
 	codeJnz(offset) {
-		this.code2("jnz", offset);
+		this.code2(OPCODE_JNZ, offset);
 		return this.codeSize - 1;
 	}
 	
 	codeJmp(offset) {
-		this.code2("jmp", offset);
+		this.code2(OPCODE_JMP, offset);
 		return this.codeSize - 1;
 	}
 	
 	codeRaise() {
-		this.code1("raise");
+		this.code1(OPCODE_RAISE);
 	}
 			
 	codeRet() {
-		this.code1("ret");
+		this.code1(OPCODE_RET);
 	}
 
 	codeRetVal() {
-		this.code1("ret_val");
+		this.code1(OPCODE_RET_VAL);
 	}
 	
 	codeYield() {
-		this.code1("yield");
+		this.code1(OPCODE_YIELD);
 	}
 	
 	codeYieldDone() {
-		this.code1("yield_done");
+		this.code1(OPCODE_YIELD_DONE);
 	}
 	
 	codeCall(ptr) {
-		this.code2("call", ptr);
+		this.code2(OPCODE_CALL, ptr);
 	}
 		
 	codeCallNative(ptr) {
-		this.code2("call_native", ptr);
+		this.code2(OPCODE_CALL_NATIVE, ptr);
 	}
 	
 	codeCallAbstract(methodIndex) {
-		this.code2("call_abstract", methodIndex);
+		this.code2(OPCODE_CALL_ABSTRACT, methodIndex);
 	}
 	
 	codeInitGenerator(ptr) {
-		this.code2("init_generator", ptr);
+		this.code2(OPCODE_INIT_GENERATOR, ptr);
 	}
 	
 	codeCreateExceptionHandler(offset) {
-		this.code2("create_exception_handler", offset);
+		this.code2(OPCODE_CREATE_EXCEPTION_HANDLER, offset);
 		return this.codeSize - 1;
 	}
 		
@@ -781,9 +788,10 @@ class CompilerContext {
 
 
 class CompilerVariable {
-	constructor(varName, varType, isConst, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isAlias, isConst, isGlobal, isParameter, offset) {
 		this.varName = varName;
 		this.varType = varType;
+		this.isAlias = isAlias;
 		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
@@ -862,15 +870,15 @@ class CompilerScope {
 	}
 	
 	addParameter(varName, varType, offset) {
-		let newVar = new CompilerVariable(varName, varType, false, false, true, offset);
+		let newVar = new CompilerVariable(varName, varType, false, false, false, true, offset);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
 	}
 
 
-	addVariable(varName, varType, isConst) {
-		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableCount);
+	addVariable(varName, varType, isConst, isAlias) {
+		let newVar = new CompilerVariable(varName, varType, isAlias, isConst, this.isGlobal, false, this.offset + this.variableCount);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -1128,7 +1136,21 @@ class Compiler {
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			this.scope.addVariable(expr.varName, initValueType, expr.isConst);
+			this.scope.addVariable(expr.varName, initValueType, expr.isConst, false);
+			return EVAL_RESULT_OK;
+		}
+		if (expr.tag === "ast-alias-declaration") {
+			if (this.scope.getLocalVariable(expr.varName) !== null) {
+				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
+			}
+			let aliasResult = this.evalForAlias(expr.valueExpr, 0);
+			if (aliasResult.isError()) {
+				return aliasResult;
+			}
+			if (aliasResult.aliasedType.isRef === false) {
+				return EvalError.unaliasable().fromExpr(exr.valueExpr);
+			}
+			this.scope.addVariable(expr.aliasName, aliasResult.aliasedType, aliasResult.isConst, true);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-assign") {
@@ -1141,6 +1163,9 @@ class Compiler {
 				if (variable.isConst) {
 					return EvalError.cantMutateConst(expr.left.varName).fromExpr(expr.left);
 				}
+				if (variable.isAlias) {
+					return EvalError.cantMutateAlias(expr.left.varName).fromExpr(expr.left);
+				}
 				// evaluate the value
 				let valueType = this.eval(expr.right);
 				if (valueType.isError()) {
@@ -1150,7 +1175,9 @@ class Compiler {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
-				if (variable.isGlobal) {
+				if (variable.isAlias) {
+					this.codeBlock.codePopPtrOffset();
+				} else if (variable.isGlobal) {
 					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
@@ -1238,7 +1265,7 @@ class Compiler {
 			this.pushScopeBlock();
 			if (expr.exception !== null) {
 				exceptionLoc = this.codeBlock.codeCreateExceptionHandler(0);
-				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true);
+				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true, false);
 			}
 			for (let i = 0; i < expr.statementCount; i++) {
 				if (ret !== EVAL_RESULT_OK) {
@@ -1280,7 +1307,7 @@ class Compiler {
 		}
 		if (expr.tag === "ast-exception") {
 			this.pushScopeBlock();
-			let exceptionVar = this.scope.addVariable("_exception_value", EVAL_TYPE_INTEGER, false);
+			let exceptionVar = this.scope.addVariable("_exception_value", EVAL_TYPE_INTEGER, false, false);
 			let endLocs = [];
 			let endLocCount = 0;
 			let ret = null;
@@ -1422,7 +1449,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, false, false);
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
 				if (thenRet.isError()) {
 					return thenRet;
@@ -1475,7 +1502,7 @@ class Compiler {
 				if (endBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
 				}
-				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false);
+				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false, false);
 				let startBoundType = this.eval(startBoundExpr);
 				if (startBoundType.isError()) {
 					return startBoundType;
@@ -1483,7 +1510,7 @@ class Compiler {
 				if (startBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
 				}
-				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false);
+				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(indexVar.offset);
 				this.codeBlock.codePushLocal(endBoundVar.offset);
@@ -1517,10 +1544,10 @@ class Compiler {
 				if (sequence.tag !== "res-type-sequence") {
 					return EvalError.wrongType(sequence, "sequence").fromExpr(expr.sequence);
 				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
+				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false, false);
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeEnded();
@@ -1625,13 +1652,15 @@ class Compiler {
 						this.scope.addVariable(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
+							false,
 							false
 						);
 					} else {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
-							i - parameterList.parameterCount - 4
+							i - parameterList.parameterCount - 4,
+							false
 						);
 					}
 				}
@@ -1725,7 +1754,13 @@ class Compiler {
 			if (v.isConst) {
 				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
-			if (v.isGlobal) {
+			if (v.isAlias) {
+				if (v.isGlobal) {
+					this.codeBlock.codePushGlobal(v.offset);
+				} else {
+					this.codeBlock.codePushLocal(v.offset);
+				}
+			} else if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
@@ -1760,7 +1795,7 @@ class Compiler {
 			return indexedType.underlyingType;
 		}
 		if (expr.tag === "ast-field") {
-			let recordType = this.eval(expr.expr);
+			let recordType = this.evalForMutate(expr.expr);
 			if (recordType.isError()) {
 				return recordType;
 			}
@@ -1780,6 +1815,88 @@ class Compiler {
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
+	}
+	
+	// After this function, there must be a refId
+	evalForAlias(expr) {
+		if (expr.tag === "ast-variable") {
+			let v = this.scope.getVariable(expr.varName);
+			if (v === null) {
+				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
+			}
+			if (v.isConst) {
+				if (v.isGlobal) {
+					this.codeBlock.codePushGlobal(v.offset);
+				} else {
+					this.codeBlock.codePushLocal(v.offset);
+				}
+			} else {
+				if (v.isGlobal) {
+					this.codeBlock.codePushGlobalForMutate(v.offset);
+				} else {
+					this.codeBlock.codePushLocalForMutate(v.offset);
+				}
+			}
+			return new EvalResultAlias(v.varType, v.isConst);
+		}
+		if (expr.tag === "ast-index") {
+			// evaluate the array ref
+			let aliasIndexedType = this.evalForAlias(expr.indexed);
+			if (aliasIndexedType.isError()) {
+				return aliasIndexedType;
+			}
+			let indexedType = aliasIndexedType.aliasedType; 
+			while (indexedType.tag === "res-type-name") {
+				indexedType = indexedType.underlyingType;
+			}
+			if (indexedType.tag !== "res-type-array") {
+				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
+			}
+			// evaluate the index
+			let indexType = this.eval(expr.index);
+			if (indexType.isError()) {
+				return indexType;
+			}
+			if (indexType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
+			}
+			if (expr.indexTo !== null) {
+				return EvalError.unassignable(expr.tag).fromExpr(expr);
+			}
+			// push the result on the stack
+			if (aliasIndexedType.isConst) {
+				this.codeBlock.codePushPtrOffset();
+			} else {
+				this.codeBlock.codePushPtrOffsetForMutate();
+			}
+			return new EvalResultAlias(indexedType.underlyingType, aliasIndexedType.isConst);
+		}
+		if (expr.tag === "ast-field") {
+			let aliasRecordType = this.evalForAlias(expr.expr);
+			if (aliasRecordType.isError()) {
+				return aliasRecordType;
+			}
+			let recordType = aliasRecordType.aliasedType;
+			while (recordType.tag === "res-type-name") {
+				recordType = recordType.underlyingType;
+			}
+			if (recordType.tag != "res-type-record") {
+				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
+			}
+			for (let i = 0; i < recordType.fieldCount; i++) {
+				if (recordType.fields[i].fieldName === expr.fieldName) {
+					this.codeBlock.codePush(recordType.fields[i].offset);
+					if (aliasRecordType.isConst) {
+						this.codeBlock.codePushPtrOffset();							
+					} else {
+						this.codeBlock.codePushPtrOffsetForMutate();
+					}
+					return new EvalResultAlias(recordType.fields[i].fieldType, aliasRecordType.isConst);
+				}
+			}
+			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+		}
+		return EvalError.unaliasable(expr.tag).fromExpr(expr);
 	}
 	
 	eval(expr) {
@@ -2333,7 +2450,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true, false);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
 					return thenType;

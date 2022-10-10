@@ -51,6 +51,8 @@ class Parser {
 		let stmt = null;
 		if (this.peekToken() === TOK_VAR || this.peekToken() == TOK_CONST) {
 			stmt = this.readVariableDeclaration();
+		} else if (this.peekToken() === TOK_ALIAS) {
+			stmt = this.readAliasDeclaration();
 		} else if (this.peekToken() === TOK_IF) {
 			stmt = this.readIf();
 		} else if (this.peekToken() === TOK_KINDOF) {
@@ -863,6 +865,26 @@ class Parser {
 			return expr;
 		}
 		return new AstVariableDeclaration(varName.text, expr, varToken.tag === TOK_CONST).fromToken(varToken);
+	}
+	
+	readAliasDeclaration() {
+		let aliasToken = this.readToken();
+		if (aliasToken.tag !== TOK_ALIAS) {
+			return ParserError.unexpectedToken(aliasToken, [TOK_ALIAS]);
+		}
+		let aliasName = this.readToken();
+		if (aliasName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(aliasName, [TOK_IDENTIFIER])
+		}
+		let assign = this.readToken();
+		if (assign.tag !== TOK_ASSIGN) {
+			return ParserError.unexpectedToken(assign, [TOK_ASSIGN]);
+		}
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		return new AstAliasDeclaration(aliasName.text, expr).fromToken(aliasToken);
 	}
 	
 	readIf() {
