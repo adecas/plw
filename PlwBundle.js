@@ -2232,9 +2232,10 @@ class EvalResult {
 }
 
 class EvalResultType extends EvalResult {
-	constructor(tag, isRef) {
+	constructor(tag, isRef, isMutable) {
 		super(tag);
 		this.isRef = isRef;
+		this.isMutable = isMutable;
 	}
 	
 	typeKey() {
@@ -2252,7 +2253,7 @@ class EvalResultAlias extends EvalResult {
 
 class EvalTypeBuiltIn extends EvalResultType {
 	constructor(typeName, isRef) {
-		super("res-type-built-in", isRef);
+		super("res-type-built-in", isRef, false);
 		this.typeName = typeName;
 	}
 	
@@ -2272,7 +2273,7 @@ class EvalTypeRecordField {
 
 class EvalTypeRecord extends EvalResultType {
 	constructor(fieldCount, fields) {
-		super("res-type-record", true);
+		super("res-type-record", true, true);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 		this.refFieldCount = 0;
@@ -2310,7 +2311,7 @@ class EvalTypeVariantField {
 
 class EvalTypeVariant extends EvalResultType {
 	constructor(fieldCount, fields) {
-		super("res-type-variant", true);
+		super("res-type-variant", true, false);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 	}
@@ -2329,7 +2330,7 @@ class EvalTypeVariant extends EvalResultType {
 
 class EvalTypeArray extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-array", true);
+		super("res-type-array", true, true);
 		this.underlyingType = underlyingType;
 	}
 	
@@ -2340,7 +2341,7 @@ class EvalTypeArray extends EvalResultType {
 
 class EvalTypeSequence extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-sequence", true);
+		super("res-type-sequence", true, false);
 		this.underlyingType = underlyingType;
 	}
 	
@@ -2351,7 +2352,7 @@ class EvalTypeSequence extends EvalResultType {
 
 class EvalTypeAbstract extends EvalResultType {
 	constructor(methodCount, methods) {
-		super("res-type-abstract");
+		super("res-type-abstract", true, false);
 		this.methodCount = methodCount;
 		this.methods = methods;
 	}
@@ -2410,7 +2411,7 @@ class EvalTypeAbstractParam {
 
 class EvalTypeName extends EvalResultType {
 	constructor(typeName, underlyingType) {
-		super("res-type-name", underlyingType.isRef);
+		super("res-type-name", underlyingType.isRef, underlyingType.isMutable);
 		this.typeName = typeName;
 		this.underlyingType = underlyingType;
 	}
@@ -2616,6 +2617,10 @@ class EvalError extends EvalResult {
 	
 	static fieldAlreadyExists(fieldName) {
 		return new EvalError("Field " + fieldName + " already exists");
+	}
+	
+	static cantAliasImmutableType(typeKey) {
+		return new EvalError("Immutable type " + typeKey + " can't be aliased");
 	}
 		
 }
@@ -3007,7 +3012,6 @@ class CompilerVariable {
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
 		this.offset = offset;
-		this.resolvedVariant = -1;
 	}
 }
 
@@ -3358,8 +3362,8 @@ class Compiler {
 			if (aliasResult.isError()) {
 				return aliasResult;
 			}
-			if (aliasResult.aliasedType.isRef === false) {
-				return EvalError.unaliasable().fromExpr(exr.valueExpr);
+			if (aliasResult.aliasedType.isMutable === false) {
+				return EvalError.cantAliasImmutableType(aliasResult.aliasedType.typeKey()).fromExpr(expr.valueExpr);
 			}
 			this.scope.addVariable(expr.aliasName, aliasResult.aliasedType, aliasResult.isConst, true);
 			return EVAL_RESULT_OK;
@@ -5066,6 +5070,7 @@ class CountedRefString extends CountedRef {
 	compareTo(refMan, ref, refManError) {
 		return this.str === ref.str;
 	}
+	
 	destroy(refMan, refManError) {
 		this.str = null;
 	}
@@ -6181,7 +6186,6 @@ class StackMachine {
 
 	
 	opcode2(code, arg1) {
-		let refManError = new RefManagerError();
 		switch(code) {
 		case OPCODE_JZ:
 			if (this.sp < 1) {

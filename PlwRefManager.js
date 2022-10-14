@@ -327,6 +327,7 @@ class CountedRefString extends CountedRef {
 	compareTo(refMan, ref, refManError) {
 		return this.str === ref.str;
 	}
+	
 	destroy(refMan, refManError) {
 		this.str = null;
 	}

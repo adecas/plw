@@ -73,11 +73,20 @@ print('t = ' || t || ', expected lo Wo');
 <pre id="snippet-alias">
 const point := {x: 0, y: 0};
 var points := [point];
-alias first_point := points[0];  # an alias contains a refId and an offset, here refId of points and offset 0
-first_point.x := 1;              # equivalent to point[0].x := 1
-# alias points_ref := points     # illegal, no offset to store
-alias point_y := point.y         # refId = point, offset = 1, inherit the constness of point
-# point_y := 1;					 # illegal, point_y is const 
+alias first_point := points[0];
+first_point.x := 1; 
+if point.x = 0 and points[0].x = 1 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
+points[0] := {x: 2, y: 0};
+first_point.x := 3;
+if point.x = 0 and points[0].x = 2 and first_point.x = 3 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
 </pre>
 
 <p id="snippet-real-title" class="snippet">Real</p>
