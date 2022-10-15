@@ -32,14 +32,6 @@ class EvalResultType extends EvalResult {
 	}
 }
 
-class EvalResultAlias extends EvalResult {
-	constructor(aliasedType, isConst) {
-		super("res-alias");
-		this.aliasedType = aliasedType;
-		this.isConst = isConst;
-	}	
-}
-
 class EvalTypeBuiltIn extends EvalResultType {
 	constructor(typeName, isRef) {
 		super("res-type-built-in", isRef, false);
@@ -406,10 +398,6 @@ class EvalError extends EvalResult {
 	
 	static fieldAlreadyExists(fieldName) {
 		return new EvalError("Field " + fieldName + " already exists");
-	}
-	
-	static cantAliasImmutableType(typeKey) {
-		return new EvalError("Immutable type " + typeKey + " can't be aliased");
 	}
 		
 }
@@ -793,10 +781,9 @@ class CompilerContext {
 
 
 class CompilerVariable {
-	constructor(varName, varType, isAlias, isConst, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isConst, isGlobal, isParameter, offset) {
 		this.varName = varName;
 		this.varType = varType;
-		this.isAlias = isAlias;
 		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
@@ -874,15 +861,15 @@ class CompilerScope {
 	}
 	
 	addParameter(varName, varType, offset) {
-		let newVar = new CompilerVariable(varName, varType, false, false, false, true, offset);
+		let newVar = new CompilerVariable(varName, varType, false, false, true, offset);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
 	}
 
 
-	addVariable(varName, varType, isConst, isAlias) {
-		let newVar = new CompilerVariable(varName, varType, isAlias, isConst, this.isGlobal, false, this.offset + this.variableCount);
+	addVariable(varName, varType, isConst) {
+		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableCount);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -1140,21 +1127,7 @@ class Compiler {
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			this.scope.addVariable(expr.varName, initValueType, expr.isConst, false);
-			return EVAL_RESULT_OK;
-		}
-		if (expr.tag === "ast-alias-declaration") {
-			if (this.scope.getLocalVariable(expr.varName) !== null) {
-				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
-			}
-			let aliasResult = this.evalForAlias(expr.valueExpr, 0);
-			if (aliasResult.isError()) {
-				return aliasResult;
-			}
-			if (aliasResult.aliasedType.isMutable === false) {
-				return EvalError.cantAliasImmutableType(aliasResult.aliasedType.typeKey()).fromExpr(expr.valueExpr);
-			}
-			this.scope.addVariable(expr.aliasName, aliasResult.aliasedType, aliasResult.isConst, true);
+			this.scope.addVariable(expr.varName, initValueType, expr.isConst);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-assign") {
@@ -1167,9 +1140,6 @@ class Compiler {
 				if (variable.isConst) {
 					return EvalError.cantMutateConst(expr.left.varName).fromExpr(expr.left);
 				}
-				if (variable.isAlias) {
-					return EvalError.cantMutateAlias(expr.left.varName).fromExpr(expr.left);
-				}
 				// evaluate the value
 				let valueType = this.eval(expr.right);
 				if (valueType.isError()) {
@@ -1179,9 +1149,7 @@ class Compiler {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
-				if (variable.isAlias) {
-					this.codeBlock.codePopPtrOffset();
-				} else if (variable.isGlobal) {
+				if (variable.isGlobal) {
 					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
@@ -1269,7 +1237,7 @@ class Compiler {
 			this.pushScopeBlock();
 			if (expr.exception !== null) {
 				exceptionLoc = this.codeBlock.codeCreateExceptionHandler(0);
-				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true, false);
+				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true);
 			}
 			for (let i = 0; i < expr.statementCount; i++) {
 				if (ret !== EVAL_RESULT_OK) {
@@ -1311,7 +1279,7 @@ class Compiler {
 		}
 		if (expr.tag === "ast-exception") {
 			this.pushScopeBlock();
-			let exceptionVar = this.scope.addVariable("_exception_value", EVAL_TYPE_INTEGER, false, false);
+			let exceptionVar = this.scope.addVariable("_exception_value", EVAL_TYPE_INTEGER, false);
 			let endLocs = [];
 			let endLocCount = 0;
 			let ret = null;
@@ -1453,7 +1421,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, false, false);
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, false);
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
 				if (thenRet.isError()) {
 					return thenRet;
@@ -1506,7 +1474,7 @@ class Compiler {
 				if (endBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
 				}
-				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false, false);
+				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false);
 				let startBoundType = this.eval(startBoundExpr);
 				if (startBoundType.isError()) {
 					return startBoundType;
@@ -1514,7 +1482,7 @@ class Compiler {
 				if (startBoundType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
 				}
-				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false, false);
+				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(indexVar.offset);
 				this.codeBlock.codePushLocal(endBoundVar.offset);
@@ -1548,10 +1516,10 @@ class Compiler {
 				if (sequence.tag !== "res-type-sequence") {
 					return EvalError.wrongType(sequence, "sequence").fromExpr(expr.sequence);
 				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false, false);
+				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false, false);
+				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
 				let testLoc = this.codeBlock.codeSize;
 				this.codeBlock.codePushLocal(sequenceVar.offset);
 				this.codeBlock.codeEnded();
@@ -1656,7 +1624,6 @@ class Compiler {
 						this.scope.addVariable(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
-							false,
 							false
 						);
 					} else {
@@ -1758,13 +1725,7 @@ class Compiler {
 			if (v.isConst) {
 				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
-			if (v.isAlias) {
-				if (v.isGlobal) {
-					this.codeBlock.codePushGlobal(v.offset);
-				} else {
-					this.codeBlock.codePushLocal(v.offset);
-				}
-			} else if (v.isGlobal) {
+			if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
@@ -1819,88 +1780,6 @@ class Compiler {
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
-	}
-	
-	// After this function, there must be a refId
-	evalForAlias(expr) {
-		if (expr.tag === "ast-variable") {
-			let v = this.scope.getVariable(expr.varName);
-			if (v === null) {
-				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
-			}
-			if (v.isConst) {
-				if (v.isGlobal) {
-					this.codeBlock.codePushGlobal(v.offset);
-				} else {
-					this.codeBlock.codePushLocal(v.offset);
-				}
-			} else {
-				if (v.isGlobal) {
-					this.codeBlock.codePushGlobalForMutate(v.offset);
-				} else {
-					this.codeBlock.codePushLocalForMutate(v.offset);
-				}
-			}
-			return new EvalResultAlias(v.varType, v.isConst);
-		}
-		if (expr.tag === "ast-index") {
-			// evaluate the array ref
-			let aliasIndexedType = this.evalForAlias(expr.indexed);
-			if (aliasIndexedType.isError()) {
-				return aliasIndexedType;
-			}
-			let indexedType = aliasIndexedType.aliasedType; 
-			while (indexedType.tag === "res-type-name") {
-				indexedType = indexedType.underlyingType;
-			}
-			if (indexedType.tag !== "res-type-array") {
-				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
-			}
-			// evaluate the index
-			let indexType = this.eval(expr.index);
-			if (indexType.isError()) {
-				return indexType;
-			}
-			if (indexType !== EVAL_TYPE_INTEGER) {
-				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
-			}
-			if (expr.indexTo !== null) {
-				return EvalError.unassignable(expr.tag).fromExpr(expr);
-			}
-			// push the result on the stack
-			if (aliasIndexedType.isConst) {
-				this.codeBlock.codePushPtrOffset();
-			} else {
-				this.codeBlock.codePushPtrOffsetForMutate();
-			}
-			return new EvalResultAlias(indexedType.underlyingType, aliasIndexedType.isConst);
-		}
-		if (expr.tag === "ast-field") {
-			let aliasRecordType = this.evalForAlias(expr.expr);
-			if (aliasRecordType.isError()) {
-				return aliasRecordType;
-			}
-			let recordType = aliasRecordType.aliasedType;
-			while (recordType.tag === "res-type-name") {
-				recordType = recordType.underlyingType;
-			}
-			if (recordType.tag != "res-type-record") {
-				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
-			}
-			for (let i = 0; i < recordType.fieldCount; i++) {
-				if (recordType.fields[i].fieldName === expr.fieldName) {
-					this.codeBlock.codePush(recordType.fields[i].offset);
-					if (aliasRecordType.isConst) {
-						this.codeBlock.codePushPtrOffset();							
-					} else {
-						this.codeBlock.codePushPtrOffsetForMutate();
-					}
-					return new EvalResultAlias(recordType.fields[i].fieldType, aliasRecordType.isConst);
-				}
-			}
-			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
-		}
-		return EvalError.unaliasable(expr.tag).fromExpr(expr);
 	}
 	
 	eval(expr) {
@@ -2454,7 +2333,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true, false);
+				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
 					return thenType;

@@ -140,14 +140,6 @@ class AstVariableDeclaration extends AstNode {
 	}
 }
 
-class AstAliasDeclaration extends AstNode {
-	constructor(aliasName, valueExpr) {
-		super("ast-alias-declaration");
-		this.aliasName = aliasName;
-		this.valueExpr = valueExpr;
-	}
-}
-
 class AstVariable extends AstNode {
 	constructor(varName) {
 		super("ast-variable");

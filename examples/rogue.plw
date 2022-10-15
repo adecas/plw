@@ -562,14 +562,14 @@ end move_player;
 
 procedure viewrange_tick() begin
 	for i in 0 .. length(entities) - 1 loop
-		alias entity := entities[i];
+		const entity := entities[i];
 		if entity.is_active then
 			kindof entity.viewrange when some(r) then
 				if r.dirty then
 					kindof entity.position when some(p) then
 						r.flags := visible_tile_flags(map.tiles, p.x, p.y, r.range);
 						r.dirty := false;
-						entity.viewrange := entity_viewrange_some(r);
+						entities[i].viewrange := entity_viewrange_some(r);
 						if i = player_id then
 							for y in 0 .. map.height - 1 loop
 								for x in 0 .. map.width - 1 loop
@@ -596,7 +596,7 @@ end viewrange_tick;
 
 procedure monster_tick() begin
 	for i in 0 .. length(entities) - 1 loop
-		var entity := entities[i];
+		const entity := entities[i];
 		if entity.is_active and entity.is_monster then
 			kindof entity.position when some(p) then
 				kindof entities[player_id].position when some(player_pos) then

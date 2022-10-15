@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <meta charset="UTF-8">
-<html><head><title>PL/W</title></head><body>
+<html>
+<head>
+<title>PL/W</title>
+<style>#textin { border-style: solid; border-width: 1px }</style>
+</head>
+<body>
 
 <script src="PlwTokenReader.js"></script>
 <script src="PlwAst.js"></script>
@@ -10,13 +15,27 @@
 <script src="PlwRefManager.js"></script>
 <script src="PlwStackMachine.js"></script>
 <script src="PlwNativeFunctionManager.js"></script>
-<script src="PlwUI.js"></script>
+<script src="PlwUIace.js"></script>
 
 <input type="button" value="exec" onclick="onExecClick(false)">
 <input type="button" value="debug" onclick="onExecClick(true)">
 <input type="button" value="eval" onclick="onEvalClick()">
 <label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select><br>
-<textarea id="textin" rows="10" cols="100"></textarea><br>
+
+<div id="textin"></div>
+<script src="../ace-builds-1.5.0/src-min/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="PlwAceMode.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    var textinEditor = ace.edit("textin");
+    textinEditor.setOptions({
+    	minLines: 20,
+    	maxLines: 20,
+    	autoScrollEditorIntoView: true
+    });
+    textinEditor.setTheme("ace/theme/eclipse");
+    textinEditor.session.setMode("ace/mode/plw");
+</script>
+
 <input type="button" value="clear messages" onclick="onClearMessageClick()">
 <input type="button" value="display context" onclick="onDisplayContextClick()">
 <input type="button" value="display stack machine" onclick="onDisplayStackMachineClick()">
