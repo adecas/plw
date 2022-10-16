@@ -2148,7 +2148,7 @@ const OPCODE_YIELD										= 37;
 const OPCODE_YIELD_DONE									= 38;
 const OPCODE_NEXT										= 39;
 const OPCODE_ENDED										= 40;
-const OPCODE_PRIMARRAY_TIMES							= 41;
+const OPCODE_BASIC_ARRAY_TIMES							= 41;
 const OPCODE_ARRAY_TIMES								= 42;
 
 const OPCODE1_MAX										= 99;
@@ -2167,13 +2167,14 @@ const OPCODE_POP_GLOBAL									= 108;
 const OPCODE_POP_LOCAL									= 109;
 const OPCODE_POP_VOID									= 110;
 const OPCODE_CREATE_STRING								= 111;
-const OPCODE_CREATE_OBJECT								= 112;
-const OPCODE_CREATE_PRIMARRAY							= 113;
-const OPCODE_CALL										= 114;
-const OPCODE_CALL_ABSTRACT								= 115;
-const OPCODE_CALL_NATIVE								= 116;
-const OPCODE_INIT_GENERATOR								= 117;
-const OPCODE_CREATE_EXCEPTION_HANDLER					= 118;
+const OPCODE_CREATE_RECORD								= 112;
+const OPCODE_CREATE_BASIC_ARRAY							= 113;
+const OPCODE_CREATE_ARRAY							 	= 114;
+const OPCODE_CALL										= 115;
+const OPCODE_CALL_ABSTRACT								= 116;
+const OPCODE_CALL_NATIVE								= 117;
+const OPCODE_INIT_GENERATOR								= 118;
+const OPCODE_CREATE_EXCEPTION_HANDLER					= 119;
 
 "use strict";
 /******************************************************************************************************************************************
@@ -2576,11 +2577,14 @@ class EvalError extends EvalResult {
 	static fieldAlreadyExists(fieldName) {
 		return new EvalError("Field " + fieldName + " already exists");
 	}
+	
+	static emptyArrayMustBeTyped() {
+		return new EvalError("Empty array must be typed with the as operator");
+	}
 		
 }
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
-const EVAL_TYPE_EMPTY_ARRAY = new EvalTypeBuiltIn("empty_array", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
@@ -2661,20 +2665,24 @@ class CodeBlock {
 		this.code1(OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE);
 	}
 	
-	codeCreateObject(itemCount) {
-		this.code2(OPCODE_CREATE_OBJECT, itemCount);
+	codeCreateRecord(itemCount) {
+		this.code2(OPCODE_CREATE_RECORD, itemCount);
 	}
 	
-	codeCreatePrimarray(itemCount) {
-		this.code2(OPCODE_CREATE_PRIMARRAY, itemCount);
+	codeCreateBasicArray(itemCount) {
+		this.code2(OPCODE_CREATE_BASIC_ARRAY, itemCount);
+	}
+	
+	codeCreateArray(itemCount) {
+		this.code2(OPCODE_CREATE_ARRAY, itemCount);
 	}
 	
 	codeArrayTimes() {
 		this.code1(OPCODE_ARRAY_TIMES);
 	}
 	
-	codePrimarrayTimes() {
-		this.code1(OPCODE_PRIMARRAY_TIMES);
+	codeBasicArrayTimes() {
+		this.code1(OPCODE_BASIC_ARRAY_TIMES);
 	}
 	
 	codeCreateString(strId) {
@@ -2935,7 +2943,11 @@ class CompilerContext {
 					EVAL_TYPE_INTEGER, 
 					false
 				);
-				lengthFunc.nativeIndex = this.getFunction("length(ref)").nativeIndex;
+				if (evalType.underlyingType.isRef) {
+					lengthFunc.nativeIndex = this.getFunction("length_array(ref)").nativeIndex;
+				} else {
+					lengthFunc.nativeIndex = this.getFunction("length_basic_array(ref)").nativeIndex;
+				}
 				this.addFunction(lengthFunc);
 			}
 			return evalType;
@@ -3288,7 +3300,7 @@ class Compiler {
 						codeBlock.codePushLocal(-5);
 					}
 					codeBlock.codePush(i);
-					codeBlock.codeCreateObject(2);
+					codeBlock.codeCreateRecord(2);
 					codeBlock.codeRetVal();
 					evalFunc.codeBlockIndex = codeBlockId;
 					variantType.fields[i].builder = evalFunc;
@@ -3965,6 +3977,24 @@ class Compiler {
 			if (asType.isError()) {
 				return asType;
 			}
+			if (expr.expr.tag === "ast-value-array" && expr.expr.itemCount === 0) {
+				// special case when the left expression is an empty array
+				// we don't want to eval it, but directly create a basic array or array
+				// depending on the as type
+				let actAsType = asType;
+				while (actAsType.tag === "res-type-name") {
+					actAsType = actAsType.underlyingType;
+				}
+				if (actAsType.tag !== "res-type-array") {
+					return EvalError.wrongType("empty array", asType.typeKey()).fromExpr(expr.expr);				
+				}
+				if (actAsType.underlyingType.isRef === true) {
+					this.codeBlock.codeCreateArray(0);
+				} else {
+					this.codeBlock.codeCreateBasicArray(0);
+				}
+				return asType;
+			}
 			let valueType = this.eval(expr.expr);
 			if (valueType.isError()) {
 				return valueType;
@@ -3981,9 +4011,6 @@ class Compiler {
 				if (valueType === actAsType) {
 					return asType;
 				}
-			}
-			if (valueType === EVAL_TYPE_EMPTY_ARRAY && actAsType.tag === "res-type-array") {
-				return asType;
 			}
 			if (actAsType.tag === "res-type-abstract") {
 				for (let i = 0; i < actAsType.methodCount; i++) {
@@ -4011,7 +4038,7 @@ class Compiler {
 						this.codeBlock.codePush(proc.nativeIndex);
 					}
 				}
-				this.codeBlock.codeCreateObject(1 + actAsType.methodCount * 2);
+				this.codeBlock.codeCreateRecord(1 + actAsType.methodCount * 2);
 				return asType;
 			}
 			return EvalError.wrongType(valueType, asType.typeKey()).fromExpr(expr.expr);				
@@ -4034,6 +4061,9 @@ class Compiler {
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-array") {
+			if (expr.itemCount === 0) {
+				return EvalError.emptyArrayMustBeTyped().fromExpr(expr);
+			}
 			let itemType = null;
 			// Evalute the next items
 			for (let i = 0; i < expr.itemCount; i++) {
@@ -4048,13 +4078,10 @@ class Compiler {
 				}
 			}
 			// Allocate the array
-			if (itemType === null || itemType.isRef === false) {
-				this.codeBlock.codeCreatePrimarray(expr.itemCount);
+			if (itemType.isRef === false) {
+				this.codeBlock.codeCreateBasicArray(expr.itemCount);
 			} else {
-				this.codeBlock.codeCreateObject(expr.itemCount);
-			}
-			if (expr.itemCount === 0) {
-				return EVAL_TYPE_EMPTY_ARRAY;
+				this.codeBlock.codeCreateArray(expr.itemCount);
 			}
 			return this.context.addType(new EvalTypeArray(itemType));
 		}
@@ -4067,7 +4094,7 @@ class Compiler {
 				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
 			}
-			this.codeBlock.codeCreateObject(expr.fieldCount);
+			this.codeBlock.codeCreateRecord(expr.fieldCount);
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-operator-binary") {
@@ -4112,7 +4139,7 @@ class Compiler {
 				if (leftType === EVAL_TYPE_TEXT) {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
 				} else if (leftType.underlyingType.isRef === false) {
-					this.codeBlock.codeCallNative(this.context.getFunction("concat_primarray(ref,ref)").nativeIndex)
+					this.codeBlock.codeCallNative(this.context.getFunction("concat_basic_array(ref,ref)").nativeIndex)
 				} else {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
 				}
@@ -4133,7 +4160,7 @@ class Compiler {
 				if (leftType.isRef) {
 					this.codeBlock.codeArrayTimes();
 				} else {
-					this.codeBlock.codePrimarrayTimes();
+					this.codeBlock.codeBasicArrayTimes();
 				}
 				return this.context.addType(new EvalTypeArray(leftType));
 			}
@@ -4330,7 +4357,7 @@ class Compiler {
 			}
 			this.codeBlock.codePush(3);
 			if (indexedType.underlyingType.isRef === false) {
-				this.codeBlock.codeCallNative(this.context.getFunction("slice_primarray(ref,integer,integer)").nativeIndex);
+				this.codeBlock.codeCallNative(this.context.getFunction("slice_basic_array(ref,integer,integer)").nativeIndex);
 			} else {
 				this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
 			}
@@ -4603,14 +4630,14 @@ class Compiler {
 
 ******************************************************************************************************************************************/
 
-const TAG_REF_EXCEPTION_HANDLER = 1;
-const TAG_REF_OBJECT = 2;
-const TAG_REF_FRAME = 3;
-const TAG_REF_STRING = 4;
-const TAG_REF_PRIMARRAY = 5;
-const TAG_REF_ARRAY = 6;
+const PLW_TAG_REF_EXCEPTION_HANDLER = 1;
+const PLW_TAG_REF_RECORD = 2;
+const PLW_TAG_REF_MAPPED_RECORD = 3;
+const PLW_TAG_REF_STRING = 4;
+const PLW_TAG_REF_BASIC_ARRAY = 5;
+const PLW_TAG_REF_ARRAY = 6;
 
-class RefManagerError {
+class PlwRefManagerError {
 	constructor() {
 		this.refId = -1;
 		this.refTag = -1;
@@ -4643,14 +4670,14 @@ class RefManagerError {
 	}
 }
 
-class OffsetValue {
+class PlwOffsetValue {
 	constructor(val, isRef) {
 		this.val = val;
 		this.isRef = isRef
 	}
 }
 
-class CountedRef {
+class PlwAbstractRef {
 	constructor(tag) {
 		this.tag = tag;
 		this.refCount = 1;
@@ -4680,16 +4707,16 @@ class CountedRef {
 	}
 }
 
-class CountedRefExceptionHandler extends CountedRef {
+class PlwExceptionHandlerRef extends PlwAbstractRef {
 	constructor(codeBlockId, ip, bp) {
-		super(TAG_REF_EXCEPTION_HANDLER);
+		super(PLW_TAG_REF_EXCEPTION_HANDLER);
 		this.codeBlockId = codeBlockId;
 		this.ip = ip;
 		this.bp = bp;
 	}
 	
 	static make(refMan, codeBlockId, ip, bp) {
-		return refMan.addRef(new CountedRefExceptionHandler(codeBlockId, ip, bp));
+		return refMan.addRef(new PlwExceptionHandlerRef(codeBlockId, ip, bp));
 	}			
 	
 	destroy(refMan, refManError) {
@@ -4697,16 +4724,16 @@ class CountedRefExceptionHandler extends CountedRef {
 
 }
 
-class CountedRefObject extends CountedRef {
+class PlwRecordRef extends PlwAbstractRef {
 	constructor(refSize, totalSize, ptr) {
-		super(TAG_REF_OBJECT);
+		super(PLW_TAG_REF_RECORD);
 		this.refSize = refSize;
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, refSize, totalSize, ptr) {
-		return refMan.addRef(new CountedRefObject(refSize, totalSize, ptr));
+		return refMan.addRef(new PlwRecordRef(refSize, totalSize, ptr));
 	}
 	
 	getOffsetValue(refMan, offset, isForMutate, refManError) {
@@ -4720,7 +4747,7 @@ class CountedRefObject extends CountedRef {
 				return null;
 			}				
 		}
-		return new OffsetValue(this.ptr[offset], offset < this.refSize);
+		return new PlwOffsetValue(this.ptr[offset], offset < this.refSize);
 	}
 	
 	setOffsetValue(refMan, offset, val, refManError) {
@@ -4745,7 +4772,7 @@ class CountedRefObject extends CountedRef {
 				return -1;
 			}
 		}
-		return CountedRefObject.make(refMan, this.refSize, this.totalSize, newPtr);
+		return PlwRecordRef.make(refMan, this.refSize, this.totalSize, newPtr);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -4781,15 +4808,15 @@ class CountedRefObject extends CountedRef {
 	
 }
 
-class CountedRefPrimarray extends CountedRef {
+class PlwBasicArrayRef extends PlwAbstractRef {
 	constructor(arraySize, ptr) {
-		super(TAG_REF_PRIMARRAY);
+		super(PLW_TAG_REF_BASIC_ARRAY);
 		this.arraySize = arraySize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, arraySize, ptr) {
-		return refMan.addRef(new CountedRefPrimarray(arraySize, ptr));
+		return refMan.addRef(new PlwBasicArrayRef(arraySize, ptr));
 	}
 	
 	getOffsetValue(refMan, offset, isForMutate, refManError) {
@@ -4797,7 +4824,7 @@ class CountedRefPrimarray extends CountedRef {
 			refManError.invalidRefOffset(offset);
 			return null;
 		}
-		return new OffsetValue(this.ptr[offset], false);
+		return new PlwOffsetValue(this.ptr[offset], false);
 	}
 	
 	setOffsetValue(refMan, offset, val, refManError) {
@@ -4809,7 +4836,7 @@ class CountedRefPrimarray extends CountedRef {
 	}
 	
 	shallowCopy(refMan, refManError) {
-		return CountedRefPrimarray.make(refMan, this.arraySize, [...this.ptr]);
+		return PlwBasicArrayRef.make(refMan, this.arraySize, [...this.ptr]);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -4830,15 +4857,52 @@ class CountedRefPrimarray extends CountedRef {
 
 }
 
-class CountedRefArray extends CountedRef {
+class PlwArrayRef extends PlwAbstractRef {
 	constructor(arraySize, ptr) {
-		super(TAG_REF_ARRAY);
+		super(PLW_TAG_REF_ARRAY);
 		this.arraySize = arraySize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, arraySize, ptr) {
-		return this.addRef(new CountedRefArray(arraySize, ptr));
+		return refMan.addRef(new PlwArrayRef(arraySize, ptr));
+	}
+	
+	getOffsetValue(refMan, offset, isForMutate, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return null;
+		}
+		if (isForMutate === true) {
+			this.ptr[offset] = refMan.makeMutable(this.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return null;
+			}				
+		}
+		return new PlwOffsetValue(this.ptr[offset], true);
+	}
+	
+	setOffsetValue(refMan, offset, val, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		refMan.decRefCount(this.ptr[offset], refManError);
+		if (refManError.hasError()) {
+			return;
+		}
+		this.ptr[offset] = val;
+	}
+	
+	shallowCopy(refMan, refManError) {
+		let newPtr = [...this.ptr];
+		for (let i = 0; i < this.arraySize; i++) {
+			refMan.incRefCount(newPtr[i], refManError);
+			if (refManError.hasError()) {
+				return -1;
+			}
+		}
+		return PlwArrayRef.make(refMan, this.arraySize, newPtr);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -4855,7 +4919,7 @@ class CountedRefArray extends CountedRef {
 		}
 		return true;
 	}
-	
+
 	destroy(refMan, refManError) {
 		for (let i = 0; i < this.arraySize; i++) {
 			refMan.decRefCount(this.ptr[i], refManError);
@@ -4868,16 +4932,16 @@ class CountedRefArray extends CountedRef {
 
 }
 
-class CountedRefFrame extends CountedRef {
+class PlwMappedRecordRef extends PlwAbstractRef {
 	constructor(totalSize, ptr, mapPtr) {
-		super(TAG_REF_FRAME);
+		super(PLW_TAG_REF_MAPPED_RECORD);
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 		this.mapPtr = mapPtr;
 	}
 	
 	static make(refMan, totalSize, ptr, mapPtr) {
-		return refMan.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
+		return refMan.addRef(new PlwMappedRecordRef(totalSize, ptr, mapPtr));
 	}
 	
 	resizeFrame(newSize) {
@@ -4902,14 +4966,14 @@ class CountedRefFrame extends CountedRef {
 	
 }
 
-class CountedRefString extends CountedRef {
+class PlwStringRef extends PlwAbstractRef {
 	constructor(str) {
-		super(TAG_REF_STRING);
+		super(PLW_TAG_REF_STRING);
 		this.str = str;
 	}
 	
 	static make(refMan, str) {
-		return refMan.addRef(new CountedRefString(str));
+		return refMan.addRef(new PlwStringRef(str));
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -4922,7 +4986,7 @@ class CountedRefString extends CountedRef {
 }
 
 
-class RefManager {
+class PlwRefManager {
 
 	constructor() {
 		this.refs = [];
@@ -5168,7 +5232,7 @@ class StackMachine {
 		this.codeBlockId = -1;
 		this.codeBlocks = null;
 		this.natives = null;
-		this.refMan = new RefManager();
+		this.refMan = new PlwRefManager();
 	}
 	
 	popResult() {
@@ -5184,7 +5248,7 @@ class StackMachine {
 				if (refManError.hasError()) {
 					return false;
 				}
-				if (ref.tag === TAG_REF_EXCEPTION_HANDLER) {
+				if (ref.tag === PLW_TAG_REF_EXCEPTION_HANDLER) {
 					this.bp = ref.bp;
 					this.ip = ref.ip;
 					this.codeBlockId = ref.codeBlockId;
@@ -5233,7 +5297,7 @@ class StackMachine {
 		}
 		let divisor = this.stack[this.sp - 1];
 		if (divisor === 0) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			if (!this.raiseError(0, refManError)) {
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5266,7 +5330,7 @@ class StackMachine {
 		}
 		let refId = this.stack[this.sp - 2];
 		let offset = this.stack[this.sp - 1];
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		let offsetVal = this.refMan.getOffsetValue(refId, offset, isForMutate, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5291,7 +5355,7 @@ class StackMachine {
 		if (this.sp < 2) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		let result = this.refMan.compareRefs(this.stack[this.sp - 2], this.stack[this.sp - 1], refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5315,7 +5379,7 @@ class StackMachine {
 		let refId = this.stack[this.sp - 3];
 		let offset = this.stack[this.sp - 2];
 		let val = this.stack[this.sp - 1];
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		this.refMan.setOffsetValue(refId, offset, val, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5333,7 +5397,7 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let errorCode = this.stack[this.sp - 1];
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		if(!this.raiseError(errorCode, refManError)) {
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5356,7 +5420,7 @@ class StackMachine {
 		if (this.bp < 4 + argCount) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		for (let i = this.sp - 2; i >= this.bp - 4 - argCount; i--) {
 			if (this.stackMap[i] === true) {
 				this.refMan.decRefCount(this.stack[i], refManError);
@@ -5385,7 +5449,7 @@ class StackMachine {
 		if (this.bp < 4 + argCount) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		for (let i = this.sp - 1; i >= this.bp - 4 - argCount; i--) {
 			if (this.stackMap[i] === true) {
 				this.refMan.decRefCount(this.stack[i], refManError);
@@ -5406,8 +5470,8 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.bp - 4];
-		let refManError = new RefManagerError();
-		let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
+		let refManError = new PlwRefManagerError();
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -5443,8 +5507,8 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.bp - 4];
-		let refManError = new RefManagerError();
-		let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
+		let refManError = new PlwRefManagerError();
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -5475,8 +5539,8 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.sp - 1];
-		let refManError = new RefManagerError();
-		let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
+		let refManError = new PlwRefManagerError();
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -5506,8 +5570,8 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.sp - 1];
-		let refManError = new RefManagerError();
-		let ref = this.refMan.getRefOfType(refId, TAG_REF_FRAME, refManError);
+		let refManError = new PlwRefManagerError();
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -5520,7 +5584,7 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodePrimarrayTimes() {
+	opcodeBasicArrayTimes() {
 		if (this.sp < 2) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
@@ -5530,7 +5594,7 @@ class StackMachine {
 			count = 0;
 		}
 		let ptr = new Array(count).fill(val);
-		let refId = CountedRefPrimarray.make(this.refMan, count, ptr);
+		let refId = PlwBasicArrayRef.make(this.refMan, count, ptr);
 		this.stack[this.sp - 2] = refId;
 		this.stackMap[this.sp - 2] = true;
 		this.sp--;
@@ -5547,8 +5611,8 @@ class StackMachine {
 			count = 0;
 		}
 		let ptr = new Array(count).fill(val);
-		let refId = CountedRefObject.make(this.refMan, count, count, ptr);
-		let refManError = new RefManagerError();
+		let refId = PlwArrayRef.make(this.refMan, count, ptr);
+		let refManError = new PlwRefManagerError();
 		if (count === 0) {
 			this.refMan.decRefCount(val, refManError);
 		} else {
@@ -5771,8 +5835,8 @@ class StackMachine {
 			return this.opcodeNext();
 		case OPCODE_ENDED:
 			return this.opcodeEnded();
-		case OPCODE_PRIMARRAY_TIMES:
-			return this.opcodePrimarrayTimes();
+		case OPCODE_BASIC_ARRAY_TIMES:
+			return this.opcodeBasicArrayTimes();
 		case OPCODE_ARRAY_TIMES:
 			return this.opcodeArrayTimes();
 		default:
@@ -5784,7 +5848,7 @@ class StackMachine {
 		if (cellCount < 0 || cellCount > this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		let refManError = new RefManagerError();
+		let refManError = new PlwRefManagerError();
 		for (let i = this.sp - 1; i >= this.sp - cellCount; i--) {
 			if (this.stackMap[i] === true) {
 				this.refMan.decRefCount(this.stack[i], refManError);
@@ -5802,13 +5866,13 @@ class StackMachine {
 			return StackMachineError.constAccessOutOfBound().fromCode(this.codeBlockId, this.ip);						
 		}
 		let str = this.codeBlocks[this.codeBlockId].strConsts[strId];
-		this.stack[this.sp] = CountedRefString.make(this.refMan, str);
+		this.stack[this.sp] = PlwStringRef.make(this.refMan, str);
 		this.stackMap[this.sp] = true;
 		this.sp++;
 		return null;
 	}
 	
-	opcodeCreateObject(cellCount) {
+	opcodeCreateRecord(cellCount) {
 		if (cellCount < 0 || cellCount > this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
@@ -5829,19 +5893,31 @@ class StackMachine {
 				}
 			}
 		}
-		let refId = CountedRefObject.make(this.refMan, refSize, cellCount, ptr);
+		let refId = PlwRecordRef.make(this.refMan, refSize, cellCount, ptr);
 		this.sp = this.sp - cellCount + 1;
 		this.stack[this.sp - 1] = refId; 
 		this.stackMap[this.sp - 1] = true;
 		return null;
 	}
 
-	opcodeCreatePrimarray(cellCount) {
+	opcodeCreateBasicArray(cellCount) {
 		if (cellCount < 0 || cellCount > this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let ptr = this.stack.slice(this.sp - cellCount, this.sp);
-		let refId = CountedRefPrimarray.make(this.refMan, cellCount, ptr);
+		let refId = PlwBasicArrayRef.make(this.refMan, cellCount, ptr);
+		this.sp = this.sp - cellCount + 1;
+		this.stack[this.sp - 1] = refId; 
+		this.stackMap[this.sp - 1] = true;
+		return null;
+	}
+	
+	opcodeCreateArray(cellCount) {
+		if (cellCount < 0 || cellCount > this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let ptr = this.stack.slice(this.sp - cellCount, this.sp);
+		let refId = PlwArrayRef.make(this.refMan, cellCount, ptr);
 		this.sp = this.sp - cellCount + 1;
 		this.stack[this.sp - 1] = refId; 
 		this.stackMap[this.sp - 1] = true;
@@ -5853,8 +5929,8 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.sp - 2];
-		let refManError = new RefManagerError();
-		let ref = this.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
+		let refManError = new PlwRefManagerError();
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_RECORD, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -5938,7 +6014,7 @@ class StackMachine {
 			ptr[i + 2] = this.stack[this.sp - nbParam - 1 + i];
 			mapPtr[i + 2] = this.stackMap[this.sp - nbParam - 1 + i];
 		}
-		let refId = CountedRefFrame.make(this.refMan, nbParam + 2, ptr, mapPtr);
+		let refId = PlwMappedRecordRef.make(this.refMan, nbParam + 2, ptr, mapPtr);
 		this.stack[this.sp - nbParam - 1] = refId;
 		this.stackMap[this.sp - nbParam - 1] = true;
 		this.sp -= nbParam;
@@ -5950,7 +6026,7 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (isForMutate) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.stack[offset] = this.refMan.makeMutable(this.stack[offset], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5960,7 +6036,7 @@ class StackMachine {
 		this.stack[this.sp] = this.stack[offset];
 		this.stackMap[this.sp] = this.stackMap[offset];
 		if (this.stackMap[this.sp] === true) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.refMan.incRefCount(this.stack[this.sp], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5975,7 +6051,7 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (isForMutate) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.stack[this.bp + offset] = this.refMan.makeMutable(this.stack[this.bp + offset], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -5985,7 +6061,7 @@ class StackMachine {
 		this.stack[this.sp] = this.stack[this.bp + offset];
 		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
 		if (this.stackMap[this.sp] === true) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.refMan.incRefCount(this.stack[this.sp], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -6000,7 +6076,7 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (this.stackMap[offset] === true) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.refMan.decRefCount(this.stack[offset], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -6017,7 +6093,7 @@ class StackMachine {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (this.stackMap[this.bp + offset] === true) {
-			let refManError = new RefManagerError();
+			let refManError = new PlwRefManagerError();
 			this.refMan.decRefCount(this.stack[this.bp + offset], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
@@ -6072,10 +6148,12 @@ class StackMachine {
 			return this.opcodePopVoid(arg1);
 		case OPCODE_CREATE_STRING:
 			return this.opcodeCreateString(arg1);
-		case OPCODE_CREATE_OBJECT:
-			return this.opcodeCreateObject(arg1);
-		case OPCODE_CREATE_PRIMARRAY:
-			return this.opcodeCreatePrimarray(arg1);
+		case OPCODE_CREATE_RECORD:
+			return this.opcodeCreateRecord(arg1);
+		case OPCODE_CREATE_BASIC_ARRAY:
+			return this.opcodeCreateBasicArray(arg1);
+		case OPCODE_CREATE_ARRAY:
+			return this.opcodeCreateArray(arg1);
 		case OPCODE_CALL:
 			if (arg1 < 0 || arg1 > this.codeBlocks.length) {
 				return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -6100,7 +6178,7 @@ class StackMachine {
 		case OPCODE_INIT_GENERATOR:
 			return this.opcodeInitGenerator(arg1);
 		case OPCODE_CREATE_EXCEPTION_HANDLER:
-			this.stack[this.sp] = CountedRefExceptionHandler.make(this.refMan, this.codeBlockId, arg1, this.bp);
+			this.stack[this.sp] = PlwExceptionHandlerRef.make(this.refMan, this.codeBlockId, arg1, this.bp);
 			this.stackMap[this.sp] = true;
 			this.sp++;
 			return null;
@@ -6171,8 +6249,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6195,8 +6273,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6214,7 +6292,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -6229,7 +6307,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -6244,7 +6322,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, sm.stack[sm.sp - 2] === 1 ? "true" : "false");
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, sm.stack[sm.sp - 2] === 1 ? "true" : "false");
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -6252,7 +6330,7 @@ class NativeFunctionManager {
 		));
 				
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"length",
+			"length_basic_array",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
 			EVAL_TYPE_INTEGER,
 			nativeFunctionManager.addFunction(function(sm) {
@@ -6260,19 +6338,38 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRef(refId, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let len = 0;
-				if (ref.tag === TAG_REF_PRIMARRAY) {
-					len = ref.arraySize;
-				} else if (ref.tag === TAG_REF_OBJECT) {
-					len = ref.totalSize;
-				} else {
-					return StackMachineError.invalidRefType();
+				let len = ref.arraySize;
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
 				}
+				sm.stack[sm.sp - 2] = len;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"length_array",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let len = ref.arraySize;
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6293,8 +6390,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6319,12 +6416,12 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = CountedRefString.make(sm.refMan, String.fromCharCode(...ref.ptr));
+				let resultId = PlwStringRef.make(sm.refMan, String.fromCharCode(...ref.ptr));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6345,12 +6442,12 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = CountedRefString.make(sm.refMan, "[" + ref.ptr + "]");
+				let resultId = PlwStringRef.make(sm.refMan, "[" + ref.ptr + "]");
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6371,21 +6468,21 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
 				let str = "[";
-				for (let i = 0; i < ref.totalSize; i++) {
-					let subRef = sm.refMan.getRefOfType(ref.ptr[i], TAG_REF_STRING, refManError);
+				for (let i = 0; i < ref.arraySize; i++) {
+					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
 					}
 					str += (i > 0 ? ", " : "") + subRef.str;
 				}
 				str += "]";
-				let resultId = CountedRefString.make(sm.refMan, str);
+				let resultId = PlwStringRef.make(sm.refMan, str);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6408,14 +6505,14 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, TAG_REF_STRING, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let ref2 = sm.refMan.getRefOfType(refId2, TAG_REF_STRING, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6426,7 +6523,7 @@ class NativeFunctionManager {
 						return StackMachineError.referenceManagerError(refManError);
 					}
 				} else {
-					let resultRefId = CountedRefString.make(sm.refMan, ref1.str + ref2.str);
+					let resultRefId = PlwStringRef.make(sm.refMan, ref1.str + ref2.str);
 					sm.refMan.decRefCount(refId1, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
@@ -6456,11 +6553,11 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let length = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6473,7 +6570,7 @@ class NativeFunctionManager {
 				if (beginIndex + length > ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();
 				}
-				let resultRefId = CountedRefString.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
+				let resultRefId = PlwStringRef.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6496,10 +6593,10 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let index = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6519,7 +6616,7 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"slice_primarray",
+			"slice_basic_array",
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("array", EVAL_TYPE_REF),
 				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
@@ -6530,11 +6627,11 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -6546,7 +6643,7 @@ class NativeFunctionManager {
 					arraySize = 0;
 				}
 				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
-				let resultRefId = CountedRefPrimarray.make(sm.refMan, arraySize, ptr);
+				let resultRefId = PlwBasicArrayRef.make(sm.refMan, arraySize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6570,41 +6667,29 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				if (beginIndex < 0) {
+				if (beginIndex < 0 || endIndex >= ref.arraySize) {
 					return StackMachineError.refAccessOutOfBound();
 				}
-				if (endIndex >= ref.totalSize) {
-					return StackMachineError.refAccessOutOfBound();
+				let arraySize = endIndex - beginIndex + 1;
+				if (arraySize < 0) {
+					arraySize = 0;
 				}
-				let totalSize = endIndex - beginIndex + 1;
-				if (totalSize < 0) {
-					totalSize = 0;
-				}
-				let refSize = ref.refSize - beginIndex;
-				if (refSize < 0) {
-					refSize = 0;
-				} else if (refSize > totalSize) {
-					refSize = totalSize;
-				}
-				let ptr = new Array(totalSize);
-				for (let i = 0; i < totalSize; i++) {
-					ptr[i] = ref.ptr[beginIndex + i];
-				}
-				for (let i = 0; i < refSize; i++) {
+				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
+				for (let i = 0; i < arraySize; i++) {
 					sm.refMan.incRefCount(ptr[i], refManError);
 					if (refManError.hasError()) {
-						return -1;
+						return StackMachineError.referenceManagerError(refManError);
 					}
 				}
-				let resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
+				let resultRefId = PlwArrayRef.make(sm.refMan, arraySize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6617,7 +6702,7 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"concat_primarray",
+			"concat_basic_array",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("a1", EVAL_TYPE_REF),
 				new EvalResultParameter("a2", EVAL_TYPE_REF)
@@ -6627,20 +6712,20 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, TAG_REF_PRIMARRAY, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}		
-				let ref2 = sm.refMan.getRefOfType(refId2, TAG_REF_PRIMARRAY, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
 				let newArraySize = ref1.arraySize + ref2.arraySize;
 				let ptr = ref1.ptr.concat(ref2.ptr);
-				let resultRefId = CountedRefPrimarray.make(sm.refMan, newArraySize, ptr);
+				let resultRefId = PlwBasicArrayRef.make(sm.refMan, newArraySize, ptr);
 				sm.refMan.decRefCount(refId1, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -6668,62 +6753,33 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRef(refId1, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}		
-				let ref2 = sm.refMan.getRef(refId2, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultRefId = -1;
-				if (ref1.tag === TAG_REF_PRIMARRAY && ref1.arraySize === 0) {
-					sm.refMan.decRefCount(refId1, refManError);
+				let newArraySize = ref1.arraySize + ref2.arraySize;
+				let ptr = ref1.ptr.concat(ref2.ptr);
+				for (let i = 0; i < newArraySize; i++) {
+					sm.refMan.incRefCount(ptr[i], refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
 					}
-					resultRefId = refId2;
-				} else if(ref2.tag === TAG_REF_PRIMARRAY && ref2.arraySize === 0) {
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					resultRefId = refId1;
-				} else if (ref1.tag === TAG_REF_OBJECT && ref2.tag === TAG_REF_OBJECT) {
-					let totalSize = ref1.totalSize + ref2.totalSize;
-					let refSize = ref1.refSize + ref2.refSize;
-					let ptr = [];
-					for (let i = 0; i < ref1.refSize; i++) {
-						ptr[i] = ref1.ptr[i];
-					}
-					for (let i = 0; i < ref2.refSize; i++) {
-						ptr[ref1.refSize + i] = ref2.ptr[i];
-					}
-					for (let i = 0; i < ref1.totalSize - ref1.refSize; i++) {
-						ptr[refSize + i] = ref1.ptr[ref1.refSize + i];
-					}
-					for (let i = 0; i < ref2.totalSize - ref2.refSize; i++) {
-						ptr[refSize + ref1.totalSize - ref1.refSize + i] = ref2.ptr[ref2.refSize + i];
-					}
-					for (let i = 0; i < refSize; i++) {
-						sm.refMan.incRefCount(ptr[i], refManError);
-						if (refManError.hasError()) {
-							return StackMachineError.referenceManagerError(refManError);
-						}
-					}
-					resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
-					sm.refMan.decRefCount(refId1, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}				
-				} else {
+				}
+				let resultRefId = PlwArrayRef.make(sm.refMan, newArraySize, ptr);
+				sm.refMan.decRefCount(refId1, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(refId2, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
 				}
 				sm.stack[sm.sp - 3] = resultRefId;
 				sm.stackMap[sm.sp - 3] = true;
@@ -6858,7 +6914,28 @@ compilerContext.addFunction(EvalResultFunction.fromNative(
 	})
 ));
 
-
+compilerContext.addProcedure(EvalResultProcedure.fromNative(
+	"write",
+	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+	nativeFunctionManager.addFunction(function(sm) {
+		if (sm.stack[sm.sp - 1] !== 1) {
+			return StackMachineError.nativeArgCountMismatch();
+		}
+		let refId = sm.stack[sm.sp - 2];
+		let refManError = new PlwRefManagerError();
+		let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError);
+		}
+		process.stdout.write(ref.str);
+		sm.refMan.decRefCount(refId, refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError);
+		}
+		sm.sp -= 2;
+		return null;
+	})
+));
 
 let stackMachine = new StackMachine();
 

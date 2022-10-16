@@ -34,8 +34,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -58,8 +58,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -77,7 +77,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -92,7 +92,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, "" + sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -107,7 +107,7 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				sm.stack[sm.sp - 2] = CountedRefString.make(sm.refMan, sm.stack[sm.sp - 2] === 1 ? "true" : "false");
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, sm.stack[sm.sp - 2] === 1 ? "true" : "false");
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
@@ -115,7 +115,7 @@ class NativeFunctionManager {
 		));
 				
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"length",
+			"length_basic_array",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
 			EVAL_TYPE_INTEGER,
 			nativeFunctionManager.addFunction(function(sm) {
@@ -123,19 +123,38 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRef(refId, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let len = 0;
-				if (ref.tag === TAG_REF_PRIMARRAY) {
-					len = ref.arraySize;
-				} else if (ref.tag === TAG_REF_OBJECT) {
-					len = ref.totalSize;
-				} else {
-					return StackMachineError.invalidRefType();
+				let len = ref.arraySize;
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
 				}
+				sm.stack[sm.sp - 2] = len;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"length_array",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let len = ref.arraySize;
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -156,8 +175,8 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -182,12 +201,12 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = CountedRefString.make(sm.refMan, String.fromCharCode(...ref.ptr));
+				let resultId = PlwStringRef.make(sm.refMan, String.fromCharCode(...ref.ptr));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -208,12 +227,12 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultId = CountedRefString.make(sm.refMan, "[" + ref.ptr + "]");
+				let resultId = PlwStringRef.make(sm.refMan, "[" + ref.ptr + "]");
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -234,21 +253,21 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new RefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
 				let str = "[";
-				for (let i = 0; i < ref.totalSize; i++) {
-					let subRef = sm.refMan.getRefOfType(ref.ptr[i], TAG_REF_STRING, refManError);
+				for (let i = 0; i < ref.arraySize; i++) {
+					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
 					}
 					str += (i > 0 ? ", " : "") + subRef.str;
 				}
 				str += "]";
-				let resultId = CountedRefString.make(sm.refMan, str);
+				let resultId = PlwStringRef.make(sm.refMan, str);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -271,14 +290,14 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, TAG_REF_STRING, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let ref2 = sm.refMan.getRefOfType(refId2, TAG_REF_STRING, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -289,7 +308,7 @@ class NativeFunctionManager {
 						return StackMachineError.referenceManagerError(refManError);
 					}
 				} else {
-					let resultRefId = CountedRefString.make(sm.refMan, ref1.str + ref2.str);
+					let resultRefId = PlwStringRef.make(sm.refMan, ref1.str + ref2.str);
 					sm.refMan.decRefCount(refId1, refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
@@ -319,11 +338,11 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let length = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -336,7 +355,7 @@ class NativeFunctionManager {
 				if (beginIndex + length > ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();
 				}
-				let resultRefId = CountedRefString.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
+				let resultRefId = PlwStringRef.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -359,10 +378,10 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let index = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_STRING, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -382,7 +401,7 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"slice_primarray",
+			"slice_basic_array",
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("array", EVAL_TYPE_REF),
 				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
@@ -393,11 +412,11 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_PRIMARRAY, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
@@ -409,7 +428,7 @@ class NativeFunctionManager {
 					arraySize = 0;
 				}
 				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
-				let resultRefId = CountedRefPrimarray.make(sm.refMan, arraySize, ptr);
+				let resultRefId = PlwBasicArrayRef.make(sm.refMan, arraySize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -433,41 +452,29 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, TAG_REF_OBJECT, refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				if (beginIndex < 0) {
+				if (beginIndex < 0 || endIndex >= ref.arraySize) {
 					return StackMachineError.refAccessOutOfBound();
 				}
-				if (endIndex >= ref.totalSize) {
-					return StackMachineError.refAccessOutOfBound();
+				let arraySize = endIndex - beginIndex + 1;
+				if (arraySize < 0) {
+					arraySize = 0;
 				}
-				let totalSize = endIndex - beginIndex + 1;
-				if (totalSize < 0) {
-					totalSize = 0;
-				}
-				let refSize = ref.refSize - beginIndex;
-				if (refSize < 0) {
-					refSize = 0;
-				} else if (refSize > totalSize) {
-					refSize = totalSize;
-				}
-				let ptr = new Array(totalSize);
-				for (let i = 0; i < totalSize; i++) {
-					ptr[i] = ref.ptr[beginIndex + i];
-				}
-				for (let i = 0; i < refSize; i++) {
+				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
+				for (let i = 0; i < arraySize; i++) {
 					sm.refMan.incRefCount(ptr[i], refManError);
 					if (refManError.hasError()) {
-						return -1;
+						return StackMachineError.referenceManagerError(refManError);
 					}
 				}
-				let resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
+				let resultRefId = PlwArrayRef.make(sm.refMan, arraySize, ptr);
 				sm.refMan.decRefCount(refId, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -480,7 +487,7 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"concat_primarray",
+			"concat_basic_array",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("a1", EVAL_TYPE_REF),
 				new EvalResultParameter("a2", EVAL_TYPE_REF)
@@ -490,20 +497,20 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, TAG_REF_PRIMARRAY, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}		
-				let ref2 = sm.refMan.getRefOfType(refId2, TAG_REF_PRIMARRAY, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
 				let newArraySize = ref1.arraySize + ref2.arraySize;
 				let ptr = ref1.ptr.concat(ref2.ptr);
-				let resultRefId = CountedRefPrimarray.make(sm.refMan, newArraySize, ptr);
+				let resultRefId = PlwBasicArrayRef.make(sm.refMan, newArraySize, ptr);
 				sm.refMan.decRefCount(refId1, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
@@ -531,62 +538,33 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new RefManagerError();
+				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRef(refId1, refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}		
-				let ref2 = sm.refMan.getRef(refId2, refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}
-				let resultRefId = -1;
-				if (ref1.tag === TAG_REF_PRIMARRAY && ref1.arraySize === 0) {
-					sm.refMan.decRefCount(refId1, refManError);
+				let newArraySize = ref1.arraySize + ref2.arraySize;
+				let ptr = ref1.ptr.concat(ref2.ptr);
+				for (let i = 0; i < newArraySize; i++) {
+					sm.refMan.incRefCount(ptr[i], refManError);
 					if (refManError.hasError()) {
 						return StackMachineError.referenceManagerError(refManError);
 					}
-					resultRefId = refId2;
-				} else if(ref2.tag === TAG_REF_PRIMARRAY && ref2.arraySize === 0) {
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					resultRefId = refId1;
-				} else if (ref1.tag === TAG_REF_OBJECT && ref2.tag === TAG_REF_OBJECT) {
-					let totalSize = ref1.totalSize + ref2.totalSize;
-					let refSize = ref1.refSize + ref2.refSize;
-					let ptr = [];
-					for (let i = 0; i < ref1.refSize; i++) {
-						ptr[i] = ref1.ptr[i];
-					}
-					for (let i = 0; i < ref2.refSize; i++) {
-						ptr[ref1.refSize + i] = ref2.ptr[i];
-					}
-					for (let i = 0; i < ref1.totalSize - ref1.refSize; i++) {
-						ptr[refSize + i] = ref1.ptr[ref1.refSize + i];
-					}
-					for (let i = 0; i < ref2.totalSize - ref2.refSize; i++) {
-						ptr[refSize + ref1.totalSize - ref1.refSize + i] = ref2.ptr[ref2.refSize + i];
-					}
-					for (let i = 0; i < refSize; i++) {
-						sm.refMan.incRefCount(ptr[i], refManError);
-						if (refManError.hasError()) {
-							return StackMachineError.referenceManagerError(refManError);
-						}
-					}
-					resultRefId = CountedRefObject.make(sm.refMan, refSize, totalSize, ptr);
-					sm.refMan.decRefCount(refId1, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}				
-				} else {
+				}
+				let resultRefId = PlwArrayRef.make(sm.refMan, newArraySize, ptr);
+				sm.refMan.decRefCount(refId1, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(refId2, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
 				}
 				sm.stack[sm.sp - 3] = resultRefId;
 				sm.stackMap[sm.sp - 3] = true;

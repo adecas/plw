@@ -15,14 +15,14 @@
 
 ******************************************************************************************************************************************/
 
-const TAG_REF_EXCEPTION_HANDLER = 1;
-const TAG_REF_OBJECT = 2;
-const TAG_REF_FRAME = 3;
-const TAG_REF_STRING = 4;
-const TAG_REF_PRIMARRAY = 5;
-const TAG_REF_ARRAY = 6;
+const PLW_TAG_REF_EXCEPTION_HANDLER = 1;
+const PLW_TAG_REF_RECORD = 2;
+const PLW_TAG_REF_MAPPED_RECORD = 3;
+const PLW_TAG_REF_STRING = 4;
+const PLW_TAG_REF_BASIC_ARRAY = 5;
+const PLW_TAG_REF_ARRAY = 6;
 
-class RefManagerError {
+class PlwRefManagerError {
 	constructor() {
 		this.refId = -1;
 		this.refTag = -1;
@@ -55,14 +55,14 @@ class RefManagerError {
 	}
 }
 
-class OffsetValue {
+class PlwOffsetValue {
 	constructor(val, isRef) {
 		this.val = val;
 		this.isRef = isRef
 	}
 }
 
-class CountedRef {
+class PlwAbstractRef {
 	constructor(tag) {
 		this.tag = tag;
 		this.refCount = 1;
@@ -92,16 +92,16 @@ class CountedRef {
 	}
 }
 
-class CountedRefExceptionHandler extends CountedRef {
+class PlwExceptionHandlerRef extends PlwAbstractRef {
 	constructor(codeBlockId, ip, bp) {
-		super(TAG_REF_EXCEPTION_HANDLER);
+		super(PLW_TAG_REF_EXCEPTION_HANDLER);
 		this.codeBlockId = codeBlockId;
 		this.ip = ip;
 		this.bp = bp;
 	}
 	
 	static make(refMan, codeBlockId, ip, bp) {
-		return refMan.addRef(new CountedRefExceptionHandler(codeBlockId, ip, bp));
+		return refMan.addRef(new PlwExceptionHandlerRef(codeBlockId, ip, bp));
 	}			
 	
 	destroy(refMan, refManError) {
@@ -109,16 +109,16 @@ class CountedRefExceptionHandler extends CountedRef {
 
 }
 
-class CountedRefObject extends CountedRef {
+class PlwRecordRef extends PlwAbstractRef {
 	constructor(refSize, totalSize, ptr) {
-		super(TAG_REF_OBJECT);
+		super(PLW_TAG_REF_RECORD);
 		this.refSize = refSize;
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, refSize, totalSize, ptr) {
-		return refMan.addRef(new CountedRefObject(refSize, totalSize, ptr));
+		return refMan.addRef(new PlwRecordRef(refSize, totalSize, ptr));
 	}
 	
 	getOffsetValue(refMan, offset, isForMutate, refManError) {
@@ -132,7 +132,7 @@ class CountedRefObject extends CountedRef {
 				return null;
 			}				
 		}
-		return new OffsetValue(this.ptr[offset], offset < this.refSize);
+		return new PlwOffsetValue(this.ptr[offset], offset < this.refSize);
 	}
 	
 	setOffsetValue(refMan, offset, val, refManError) {
@@ -157,7 +157,7 @@ class CountedRefObject extends CountedRef {
 				return -1;
 			}
 		}
-		return CountedRefObject.make(refMan, this.refSize, this.totalSize, newPtr);
+		return PlwRecordRef.make(refMan, this.refSize, this.totalSize, newPtr);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -193,15 +193,15 @@ class CountedRefObject extends CountedRef {
 	
 }
 
-class CountedRefPrimarray extends CountedRef {
+class PlwBasicArrayRef extends PlwAbstractRef {
 	constructor(arraySize, ptr) {
-		super(TAG_REF_PRIMARRAY);
+		super(PLW_TAG_REF_BASIC_ARRAY);
 		this.arraySize = arraySize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, arraySize, ptr) {
-		return refMan.addRef(new CountedRefPrimarray(arraySize, ptr));
+		return refMan.addRef(new PlwBasicArrayRef(arraySize, ptr));
 	}
 	
 	getOffsetValue(refMan, offset, isForMutate, refManError) {
@@ -209,7 +209,7 @@ class CountedRefPrimarray extends CountedRef {
 			refManError.invalidRefOffset(offset);
 			return null;
 		}
-		return new OffsetValue(this.ptr[offset], false);
+		return new PlwOffsetValue(this.ptr[offset], false);
 	}
 	
 	setOffsetValue(refMan, offset, val, refManError) {
@@ -221,7 +221,7 @@ class CountedRefPrimarray extends CountedRef {
 	}
 	
 	shallowCopy(refMan, refManError) {
-		return CountedRefPrimarray.make(refMan, this.arraySize, [...this.ptr]);
+		return PlwBasicArrayRef.make(refMan, this.arraySize, [...this.ptr]);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -242,15 +242,52 @@ class CountedRefPrimarray extends CountedRef {
 
 }
 
-class CountedRefArray extends CountedRef {
+class PlwArrayRef extends PlwAbstractRef {
 	constructor(arraySize, ptr) {
-		super(TAG_REF_ARRAY);
+		super(PLW_TAG_REF_ARRAY);
 		this.arraySize = arraySize;
 		this.ptr = ptr;
 	}
 	
 	static make(refMan, arraySize, ptr) {
-		return this.addRef(new CountedRefArray(arraySize, ptr));
+		return refMan.addRef(new PlwArrayRef(arraySize, ptr));
+	}
+	
+	getOffsetValue(refMan, offset, isForMutate, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return null;
+		}
+		if (isForMutate === true) {
+			this.ptr[offset] = refMan.makeMutable(this.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return null;
+			}				
+		}
+		return new PlwOffsetValue(this.ptr[offset], true);
+	}
+	
+	setOffsetValue(refMan, offset, val, refManError) {
+		if (offset < 0 || offset >= this.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		refMan.decRefCount(this.ptr[offset], refManError);
+		if (refManError.hasError()) {
+			return;
+		}
+		this.ptr[offset] = val;
+	}
+	
+	shallowCopy(refMan, refManError) {
+		let newPtr = [...this.ptr];
+		for (let i = 0; i < this.arraySize; i++) {
+			refMan.incRefCount(newPtr[i], refManError);
+			if (refManError.hasError()) {
+				return -1;
+			}
+		}
+		return PlwArrayRef.make(refMan, this.arraySize, newPtr);
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -267,7 +304,7 @@ class CountedRefArray extends CountedRef {
 		}
 		return true;
 	}
-	
+
 	destroy(refMan, refManError) {
 		for (let i = 0; i < this.arraySize; i++) {
 			refMan.decRefCount(this.ptr[i], refManError);
@@ -280,16 +317,16 @@ class CountedRefArray extends CountedRef {
 
 }
 
-class CountedRefFrame extends CountedRef {
+class PlwMappedRecordRef extends PlwAbstractRef {
 	constructor(totalSize, ptr, mapPtr) {
-		super(TAG_REF_FRAME);
+		super(PLW_TAG_REF_MAPPED_RECORD);
 		this.totalSize = totalSize;
 		this.ptr = ptr;
 		this.mapPtr = mapPtr;
 	}
 	
 	static make(refMan, totalSize, ptr, mapPtr) {
-		return refMan.addRef(new CountedRefFrame(totalSize, ptr, mapPtr));
+		return refMan.addRef(new PlwMappedRecordRef(totalSize, ptr, mapPtr));
 	}
 	
 	resizeFrame(newSize) {
@@ -314,14 +351,14 @@ class CountedRefFrame extends CountedRef {
 	
 }
 
-class CountedRefString extends CountedRef {
+class PlwStringRef extends PlwAbstractRef {
 	constructor(str) {
-		super(TAG_REF_STRING);
+		super(PLW_TAG_REF_STRING);
 		this.str = str;
 	}
 	
 	static make(refMan, str) {
-		return refMan.addRef(new CountedRefString(str));
+		return refMan.addRef(new PlwStringRef(str));
 	}
 	
 	compareTo(refMan, ref, refManError) {
@@ -334,7 +371,7 @@ class CountedRefString extends CountedRef {
 }
 
 
-class RefManager {
+class PlwRefManager {
 
 	constructor() {
 		this.refs = [];

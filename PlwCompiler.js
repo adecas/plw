@@ -399,11 +399,14 @@ class EvalError extends EvalResult {
 	static fieldAlreadyExists(fieldName) {
 		return new EvalError("Field " + fieldName + " already exists");
 	}
+	
+	static emptyArrayMustBeTyped() {
+		return new EvalError("Empty array must be typed with the as operator");
+	}
 		
 }
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
-const EVAL_TYPE_EMPTY_ARRAY = new EvalTypeBuiltIn("empty_array", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
@@ -484,20 +487,24 @@ class CodeBlock {
 		this.code1(OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE);
 	}
 	
-	codeCreateObject(itemCount) {
-		this.code2(OPCODE_CREATE_OBJECT, itemCount);
+	codeCreateRecord(itemCount) {
+		this.code2(OPCODE_CREATE_RECORD, itemCount);
 	}
 	
-	codeCreatePrimarray(itemCount) {
-		this.code2(OPCODE_CREATE_PRIMARRAY, itemCount);
+	codeCreateBasicArray(itemCount) {
+		this.code2(OPCODE_CREATE_BASIC_ARRAY, itemCount);
+	}
+	
+	codeCreateArray(itemCount) {
+		this.code2(OPCODE_CREATE_ARRAY, itemCount);
 	}
 	
 	codeArrayTimes() {
 		this.code1(OPCODE_ARRAY_TIMES);
 	}
 	
-	codePrimarrayTimes() {
-		this.code1(OPCODE_PRIMARRAY_TIMES);
+	codeBasicArrayTimes() {
+		this.code1(OPCODE_BASIC_ARRAY_TIMES);
 	}
 	
 	codeCreateString(strId) {
@@ -758,7 +765,11 @@ class CompilerContext {
 					EVAL_TYPE_INTEGER, 
 					false
 				);
-				lengthFunc.nativeIndex = this.getFunction("length(ref)").nativeIndex;
+				if (evalType.underlyingType.isRef) {
+					lengthFunc.nativeIndex = this.getFunction("length_array(ref)").nativeIndex;
+				} else {
+					lengthFunc.nativeIndex = this.getFunction("length_basic_array(ref)").nativeIndex;
+				}
 				this.addFunction(lengthFunc);
 			}
 			return evalType;
@@ -1111,7 +1122,7 @@ class Compiler {
 						codeBlock.codePushLocal(-5);
 					}
 					codeBlock.codePush(i);
-					codeBlock.codeCreateObject(2);
+					codeBlock.codeCreateRecord(2);
 					codeBlock.codeRetVal();
 					evalFunc.codeBlockIndex = codeBlockId;
 					variantType.fields[i].builder = evalFunc;
@@ -1788,6 +1799,24 @@ class Compiler {
 			if (asType.isError()) {
 				return asType;
 			}
+			if (expr.expr.tag === "ast-value-array" && expr.expr.itemCount === 0) {
+				// special case when the left expression is an empty array
+				// we don't want to eval it, but directly create a basic array or array
+				// depending on the as type
+				let actAsType = asType;
+				while (actAsType.tag === "res-type-name") {
+					actAsType = actAsType.underlyingType;
+				}
+				if (actAsType.tag !== "res-type-array") {
+					return EvalError.wrongType("empty array", asType.typeKey()).fromExpr(expr.expr);				
+				}
+				if (actAsType.underlyingType.isRef === true) {
+					this.codeBlock.codeCreateArray(0);
+				} else {
+					this.codeBlock.codeCreateBasicArray(0);
+				}
+				return asType;
+			}
 			let valueType = this.eval(expr.expr);
 			if (valueType.isError()) {
 				return valueType;
@@ -1804,9 +1833,6 @@ class Compiler {
 				if (valueType === actAsType) {
 					return asType;
 				}
-			}
-			if (valueType === EVAL_TYPE_EMPTY_ARRAY && actAsType.tag === "res-type-array") {
-				return asType;
 			}
 			if (actAsType.tag === "res-type-abstract") {
 				for (let i = 0; i < actAsType.methodCount; i++) {
@@ -1834,7 +1860,7 @@ class Compiler {
 						this.codeBlock.codePush(proc.nativeIndex);
 					}
 				}
-				this.codeBlock.codeCreateObject(1 + actAsType.methodCount * 2);
+				this.codeBlock.codeCreateRecord(1 + actAsType.methodCount * 2);
 				return asType;
 			}
 			return EvalError.wrongType(valueType, asType.typeKey()).fromExpr(expr.expr);				
@@ -1857,6 +1883,9 @@ class Compiler {
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-array") {
+			if (expr.itemCount === 0) {
+				return EvalError.emptyArrayMustBeTyped().fromExpr(expr);
+			}
 			let itemType = null;
 			// Evalute the next items
 			for (let i = 0; i < expr.itemCount; i++) {
@@ -1871,13 +1900,10 @@ class Compiler {
 				}
 			}
 			// Allocate the array
-			if (itemType === null || itemType.isRef === false) {
-				this.codeBlock.codeCreatePrimarray(expr.itemCount);
+			if (itemType.isRef === false) {
+				this.codeBlock.codeCreateBasicArray(expr.itemCount);
 			} else {
-				this.codeBlock.codeCreateObject(expr.itemCount);
-			}
-			if (expr.itemCount === 0) {
-				return EVAL_TYPE_EMPTY_ARRAY;
+				this.codeBlock.codeCreateArray(expr.itemCount);
 			}
 			return this.context.addType(new EvalTypeArray(itemType));
 		}
@@ -1890,7 +1916,7 @@ class Compiler {
 				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
 			}
-			this.codeBlock.codeCreateObject(expr.fieldCount);
+			this.codeBlock.codeCreateRecord(expr.fieldCount);
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-operator-binary") {
@@ -1935,7 +1961,7 @@ class Compiler {
 				if (leftType === EVAL_TYPE_TEXT) {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
 				} else if (leftType.underlyingType.isRef === false) {
-					this.codeBlock.codeCallNative(this.context.getFunction("concat_primarray(ref,ref)").nativeIndex)
+					this.codeBlock.codeCallNative(this.context.getFunction("concat_basic_array(ref,ref)").nativeIndex)
 				} else {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
 				}
@@ -1956,7 +1982,7 @@ class Compiler {
 				if (leftType.isRef) {
 					this.codeBlock.codeArrayTimes();
 				} else {
-					this.codeBlock.codePrimarrayTimes();
+					this.codeBlock.codeBasicArrayTimes();
 				}
 				return this.context.addType(new EvalTypeArray(leftType));
 			}
@@ -2153,7 +2179,7 @@ class Compiler {
 			}
 			this.codeBlock.codePush(3);
 			if (indexedType.underlyingType.isRef === false) {
-				this.codeBlock.codeCallNative(this.context.getFunction("slice_primarray(ref,integer,integer)").nativeIndex);
+				this.codeBlock.codeCallNative(this.context.getFunction("slice_basic_array(ref,integer,integer)").nativeIndex);
 			} else {
 				this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
 			}
