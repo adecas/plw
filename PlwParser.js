@@ -1036,7 +1036,12 @@ class Parser {
 		return new AstWhile(condition, statement).fromToken(whileToken);
 	}
 	
-	readParameter() {
+	readParameter(isGenerator) {
+		let isCtx = false;
+		if (isGenerator === false && this.peekToken() == TOK_CTX) {
+			this.readToken();
+			isCtx = true;
+		}
 		let parameterName = this.readToken();
 		if (parameterName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(parameterName, [TOK_IDENTIFIER])
@@ -1045,10 +1050,10 @@ class Parser {
 		if (Parser.isError(parameterType)) {
 			return parameterType;
 		}
-		return new AstParameter(parameterName.text, parameterType).fromToken(parameterName);	
+		return new AstParameter(parameterName.text, parameterType, isCtx).fromToken(parameterName);	
 	}
 
-	readParameterList() {
+	readParameterList(isGenerator) {
 		let openToken = this.readToken();
 		if (openToken.tag !== TOK_BEGIN_GROUP) {
 			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
@@ -1062,7 +1067,7 @@ class Parser {
 					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
 				}
 			}
-			let parameter = this.readParameter();
+			let parameter = this.readParameter(isGenerator);
 			if (Parser.isError(parameter)) {
 				return parameter;
 			}
@@ -1083,7 +1088,7 @@ class Parser {
 		if (functionName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(functionName, [TOK_IDENTIFIER]);
 		}
-		let parameterList = this.readParameterList();
+		let parameterList = this.readParameterList(isGenerator);
 		if (Parser.isError(parameterList)) {
 			return parameterList;
 		}
@@ -1107,7 +1112,7 @@ class Parser {
 		if (procedureName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(procedureName, [TOK_IDENTIFIER]);
 		}
-		let parameterList = this.readParameterList();
+		let parameterList = this.readParameterList(false);
 		if (Parser.isError(parameterList)) {
 			return parameterList;
 		}
@@ -1171,9 +1176,19 @@ class Parser {
 					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
 				}
 			}
-			let arg = this.readExpression();
-			if (Parser.isError(arg)) {
-				return arg;
+			let arg = null;
+			if (this.peekToken() == TOK_CTX) {
+				this.readToken();
+				let varName = this.readToken();
+				if (varName.tag !== TOK_IDENTIFIER) {
+					return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+				}
+				arg = new AstCtxArg(varName.text).fromToken(varName);
+			} else {
+				arg = this.readExpression();
+				if (Parser.isError(arg)) {
+					return arg;
+				}
 			}
 			args[argIndex] = arg;
 			argIndex++;

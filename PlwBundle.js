@@ -39,6 +39,7 @@ const TOK_LOOP = "tok-loop";
 const TOK_FOR = "tok-for";
 const TOK_IN = "tok-in";
 const TOK_REVERSE = "tok-reverse";
+const TOK_CTX = "tok-ctx";
 const TOK_FUNCTION = "tok-function";
 const TOK_GENERATOR = "tok-generator";
 const TOK_PROCEDURE = "tok-procedure";
@@ -234,6 +235,9 @@ class TokenReader {
 		}
 		if (token === "reverse") {
 			return new Token(TOK_REVERSE, token, line, col);
+		}
+		if (token === "ctx") {
+			return new Token(TOK_CTX, token, line, col);
 		}
 		if (token === "function") {
 			return new Token(TOK_FUNCTION, token, line, col);
@@ -715,10 +719,11 @@ class AstRange extends AstNode {
 }
 
 class AstParameter extends AstNode {
-	constructor(parameterName, parameterType) {
+	constructor(parameterName, parameterType, isCtx) {
 		super("ast-parameter");
 		this.parameterName = parameterName;
 		this.parameterType = parameterType;
+		this.isCtx = isCtx;
 	}
 }
 
@@ -768,6 +773,13 @@ class AstYield extends AstNode {
 	constructor(expr) {
 		super("ast-yield");
 		this.expr = expr;
+	}
+}
+
+class AstCtxArg extends AstNode {
+	constructor(varName) {
+		super("ast-ctx-arg");
+		this.varName = varName;
 	}
 }
 
@@ -1921,7 +1933,12 @@ class Parser {
 		return new AstWhile(condition, statement).fromToken(whileToken);
 	}
 	
-	readParameter() {
+	readParameter(isGenerator) {
+		let isCtx = false;
+		if (isGenerator === false && this.peekToken() == TOK_CTX) {
+			this.readToken();
+			isCtx = true;
+		}
 		let parameterName = this.readToken();
 		if (parameterName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(parameterName, [TOK_IDENTIFIER])
@@ -1930,10 +1947,10 @@ class Parser {
 		if (Parser.isError(parameterType)) {
 			return parameterType;
 		}
-		return new AstParameter(parameterName.text, parameterType).fromToken(parameterName);	
+		return new AstParameter(parameterName.text, parameterType, isCtx).fromToken(parameterName);	
 	}
 
-	readParameterList() {
+	readParameterList(isGenerator) {
 		let openToken = this.readToken();
 		if (openToken.tag !== TOK_BEGIN_GROUP) {
 			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
@@ -1947,7 +1964,7 @@ class Parser {
 					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
 				}
 			}
-			let parameter = this.readParameter();
+			let parameter = this.readParameter(isGenerator);
 			if (Parser.isError(parameter)) {
 				return parameter;
 			}
@@ -1968,7 +1985,7 @@ class Parser {
 		if (functionName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(functionName, [TOK_IDENTIFIER]);
 		}
-		let parameterList = this.readParameterList();
+		let parameterList = this.readParameterList(isGenerator);
 		if (Parser.isError(parameterList)) {
 			return parameterList;
 		}
@@ -1992,7 +2009,7 @@ class Parser {
 		if (procedureName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(procedureName, [TOK_IDENTIFIER]);
 		}
-		let parameterList = this.readParameterList();
+		let parameterList = this.readParameterList(false);
 		if (Parser.isError(parameterList)) {
 			return parameterList;
 		}
@@ -2056,9 +2073,19 @@ class Parser {
 					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
 				}
 			}
-			let arg = this.readExpression();
-			if (Parser.isError(arg)) {
-				return arg;
+			let arg = null;
+			if (this.peekToken() == TOK_CTX) {
+				this.readToken();
+				let varName = this.readToken();
+				if (varName.tag !== TOK_IDENTIFIER) {
+					return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+				}
+				arg = new AstCtxArg(varName.text).fromToken(varName);
+			} else {
+				arg = this.readExpression();
+				if (Parser.isError(arg)) {
+					return arg;
+				}
 			}
 			args[argIndex] = arg;
 			argIndex++;
@@ -2163,18 +2190,22 @@ const OPCODE_PUSH_GLOBAL								= 104;
 const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 105;
 const OPCODE_PUSH_LOCAL									= 106;
 const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 107;
-const OPCODE_POP_GLOBAL									= 108;
-const OPCODE_POP_LOCAL									= 109;
-const OPCODE_POP_VOID									= 110;
-const OPCODE_CREATE_STRING								= 111;
-const OPCODE_CREATE_RECORD								= 112;
-const OPCODE_CREATE_BASIC_ARRAY							= 113;
-const OPCODE_CREATE_ARRAY							 	= 114;
-const OPCODE_CALL										= 115;
-const OPCODE_CALL_ABSTRACT								= 116;
-const OPCODE_CALL_NATIVE								= 117;
-const OPCODE_INIT_GENERATOR								= 118;
-const OPCODE_CREATE_EXCEPTION_HANDLER					= 119;
+const OPCODE_PUSH_INDIRECTION							= 108;
+const OPCODE_PUSH_INDIRECT								= 109;
+const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 110;
+const OPCODE_POP_GLOBAL									= 111;
+const OPCODE_POP_LOCAL									= 112;
+const OPCODE_POP_INDIRECT								= 113;
+const OPCODE_POP_VOID									= 114;
+const OPCODE_CREATE_STRING								= 115;
+const OPCODE_CREATE_RECORD								= 116;
+const OPCODE_CREATE_BASIC_ARRAY							= 117;
+const OPCODE_CREATE_ARRAY							 	= 118;
+const OPCODE_CALL										= 119;
+const OPCODE_CALL_ABSTRACT								= 120;
+const OPCODE_CALL_NATIVE								= 121;
+const OPCODE_INIT_GENERATOR								= 122;
+const OPCODE_CREATE_EXCEPTION_HANDLER					= 123;
 
 "use strict";
 /******************************************************************************************************************************************
@@ -2381,10 +2412,11 @@ class EvalTypeName extends EvalResultType {
 }
 
 class EvalResultParameter extends EvalResult {
-	constructor(parameterName, parameterType) {
+	constructor(parameterName, parameterType, isCtx) {
 		super("res-parameter");
 		this.parameterName = parameterName;
 		this.parameterType = parameterType;
+		this.isCtx = isCtx;
 	}
 }
 
@@ -2418,7 +2450,9 @@ class EvalResultFunction extends EvalResult {
 	functionKey() {
 		let funcKey = this.functionName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
-			funcKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+			funcKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return funcKey + ")";
 	}
@@ -2444,7 +2478,9 @@ class EvalResultProcedure extends EvalResult {
 	procedureKey() {
 		let procKey = this.procedureName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
-			procKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+			procKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return procKey + ")";
 	}
@@ -2500,6 +2536,10 @@ class EvalError extends EvalResult {
 	
 	static variableAlreadyExists(varName) {
 		return new EvalError("Variable " + varName + " already exists");
+	}
+	
+	static parameterAlreadyExists(parameterName) {
+		return new EvalError("Parameter " + parameterName + " already exists");
 	}
 	
 	static functionAlreadyExists(funcName) {
@@ -2657,6 +2697,18 @@ class CodeBlock {
 		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
 	}	
 	
+	codePushIndirection(offset) {
+		this.code2(OPCODE_PUSH_INDIRECTION, offset);
+	}
+	
+	codePushIndirect(offset) {
+		this.code2(OPCODE_PUSH_INDIRECT, offset);
+	}
+	
+	codePushIndirectForMutate(offset) {
+		this.code2(OPCODE_PUSH_INDIRECT_FOR_MUTATE, offset);
+	}
+
 	codePushPtrOffset() {
 		this.code1(OPCODE_PUSH_PTR_OFFSET);
 	}
@@ -2695,6 +2747,10 @@ class CodeBlock {
 	
 	codePopLocal(offset) {
 		this.code2(OPCODE_POP_LOCAL, offset);
+	}
+	
+	codePopIndirect(offset) {
+		this.code2(OPCODE_POP_INDIRECT, offset);
 	}
 	
 	codePopPtrOffset() {
@@ -2881,7 +2937,7 @@ class CodeBlock {
 		this.code2(OPCODE_CREATE_EXCEPTION_HANDLER, offset);
 		return this.codeSize - 1;
 	}
-		
+			
 }
 
 
@@ -2939,7 +2995,7 @@ class CompilerContext {
 			if (evalType.tag === "res-type-array") {
 				var lengthFunc = new EvalResultFunction(
 					"length",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
 					EVAL_TYPE_INTEGER, 
 					false
 				);
@@ -2970,9 +3026,10 @@ class CompilerContext {
 
 
 class CompilerVariable {
-	constructor(varName, varType, isConst, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isCtx, isConst, isGlobal, isParameter, offset) {
 		this.varName = varName;
 		this.varType = varType;
+		this.isCtx = isCtx;
 		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
@@ -3039,18 +3096,22 @@ class CompilerScope {
 	
 	getVariable(varName) {
 		let scope = this;
+		let onlyConst = false;
 		while (scope !== null) {
 		 	let val = scope.getLocalVariable(varName);
-			if (val !== null) {
+			if (val !== null && (onlyConst === false || val.isConst === true)) {
 				return val;
+			}
+			if (scope.isFrame) {
+				onlyConst = true;
 			}
 			scope = scope.parent;
 		}
 		return null;
 	}
 	
-	addParameter(varName, varType, offset) {
-		let newVar = new CompilerVariable(varName, varType, false, false, true, offset);
+	addParameter(varName, varType, isCtx, offset) {
+		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, offset);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
@@ -3058,7 +3119,7 @@ class CompilerScope {
 
 
 	addVariable(varName, varType, isConst) {
-		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableCount);
+		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableCount);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -3209,11 +3270,12 @@ class Compiler {
 			//
 			for (let i = 0; i < abstractType.methodCount; i++) {
 				let method = abstractType.methods[i];
-				let params = [ new EvalResultParameter("self", abstractType) ];
+				let params = [ new EvalResultParameter("self", abstractType, false) ];
 				for (let j = 0; j < method.paramCount; j++) {
 					params[j + 1] = new EvalResultParameter(
 						method.params[j].paramName,
-						method.params[j].paramType === null ? abstractType : method.params[j].paramType
+						method.params[j].paramType === null ? abstractType : method.params[j].paramType,
+						false
 					);
 				}
 				let paramList = new EvalResultParameterList(method.paramCount + 1, params);
@@ -3265,7 +3327,7 @@ class Compiler {
 					let params = [];
 					if (variantType.fields[i].fieldType !== null) {
 						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
 					}
 					let evalFunc = new EvalResultFunction(
 						expr.typeName + "_" + variantType.fields[i].fieldName,
@@ -3283,7 +3345,7 @@ class Compiler {
 					let params = [];
 					if (variantType.fields[i].fieldType !== null) {
 						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
 					}
 					let evalFunc = new EvalResultFunction(
 						expr.typeName + "_" + variantType.fields[i].fieldName,
@@ -3338,7 +3400,9 @@ class Compiler {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
-				if (variable.isGlobal) {
+				if (variable.isCtx) {
+					this.codeBlock.codePopIndirect(variable.offset);
+				} else if (variable.isGlobal) {
 					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
@@ -3819,6 +3883,7 @@ class Compiler {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
+							parameterList.parameters[i].isCtx,
 							i - parameterList.parameterCount - 4,
 							false
 						);
@@ -3860,6 +3925,7 @@ class Compiler {
 					this.scope.addParameter(
 						parameterList.parameters[i].parameterName,
 						parameterList.parameters[i].parameterType,
+						parameterList.parameters[i].isCtx,
 						i - parameterList.parameterCount - 4
 					);
 				}
@@ -3885,7 +3951,7 @@ class Compiler {
 			}
 			let procKey = expr.procedureName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+				procKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
 			}
 			procKey += ")";
 			let proc = this.context.getProcedure(procKey);
@@ -3914,7 +3980,9 @@ class Compiler {
 			if (v.isConst) {
 				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
-			if (v.isGlobal) {
+			if (v.isCtx) {
+				this.codeBlock.codePushIndirectForMutate(v.offset);
+			} else if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
@@ -4315,10 +4383,14 @@ class Compiler {
 			if (v === null) {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
 			}
-			if (v.isGlobal) {
-				this.codeBlock.codePushGlobal(v.offset);
+			if (v.isCtx) {
+				this.codeBlock.codePushIndirect(v.offset);
 			} else {
-				this.codeBlock.codePushLocal(v.offset);
+				if (v.isGlobal) {
+					this.codeBlock.codePushGlobal(v.offset);
+				} else {
+					this.codeBlock.codePushLocal(v.offset);
+				}
 			}
 			return v.varType;
 		}
@@ -4383,6 +4455,18 @@ class Compiler {
 			}
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
+		if (expr.tag === "ast-ctx-arg") {
+			let v = this.scope.getVariable(expr.varName);
+			if (v === null) {
+				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
+			}
+			if (v.isCtx) {
+				this.codeBlock.codePushLocal(v.offset);
+			} else {
+				this.codeBlock.codePushIndirection(v.offset);
+			}
+			return v.varType;
+		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
 			for (let i = 0; i < expr.argList.argCount; i++) {
@@ -4394,7 +4478,7 @@ class Compiler {
 			}
 			let funcKey = expr.functionName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				funcKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+				funcKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
 			}
 			funcKey += ")";
 			let func = this.context.getFunction(funcKey);
@@ -4588,7 +4672,7 @@ class Compiler {
 		if (paramType.isError()) {
 			return paramType;
 		}
-		return new EvalResultParameter(expr.parameterName, paramType);
+		return new EvalResultParameter(expr.parameterName, paramType, expr.isCtx);
 	}
 	
 	evalParameterList(expr) {
@@ -4603,7 +4687,7 @@ class Compiler {
 			}
 			for (let k = 0; k < i; k++) {
 				if (parameters[k].parameterName === parameter.parameterName) {
-					return new EvalError.parameterAlreadyExists(parameterNamer).fromExpr(expr.parameters[i]);
+					return EvalError.parameterAlreadyExists(parameter.parameterName).fromExpr(expr.parameters[i]);
 				}
 			}
 			parameters[i] = parameter;
@@ -6071,6 +6155,35 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushIndirect(offset, isForMutate) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let directOffset = this.stack[this.bp + offset];
+		if (directOffset < 0 || directOffset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}		
+		if (isForMutate) {
+			let refManError = new PlwRefManagerError();
+			this.stack[directOffset] = this.refMan.makeMutable(this.stack[directOffset], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+			this.stackMap[directOffset] = true;
+		}
+		this.stack[this.sp] = this.stack[directOffset];
+		this.stackMap[this.sp] = this.stackMap[directOffset];
+		if (this.stackMap[this.sp] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.incRefCount(this.stack[this.sp], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.sp++;
+		return null;
+	}
+	
 	opcodePopGlobal(offset) {
 		if (this.sp < 1 || offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -6089,7 +6202,7 @@ class StackMachine {
 	}
 	
 	opcodePopLocal(offset) {
-		if (this.sp < 1 || this.bp + offset >= this.sp) {
+		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (this.stackMap[this.bp + offset] === true) {
@@ -6104,7 +6217,27 @@ class StackMachine {
 		this.sp--;
 		return null;
 	}
-
+	
+	opcodePopIndirect(offset) {
+		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let directOffset = this.stack[this.bp + offset];
+		if (directOffset < 0 || directOffset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		if (this.stackMap[directOffset] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.decRefCount(this.stack[directOffset], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.stack[directOffset] = this.stack[this.sp - 1];
+		this.stackMap[directOffset] = this.stackMap[this.sp - 1];
+		this.sp--;
+		return null;
+	}
 	
 	opcode2(code, arg1) {
 		switch(code) {
@@ -6140,10 +6273,20 @@ class StackMachine {
 		case OPCODE_PUSH_LOCAL:
 		case OPCODE_PUSH_LOCAL_FOR_MUTATE:
 			return this.opcodePushLocal(arg1, code === OPCODE_PUSH_GLOBAL_FOR_MUTATE);
+		case OPCODE_PUSH_INDIRECTION:
+			this.stack[this.sp] = this.bp + arg1;
+			this.stackMap[this.sp] = false;
+			this.sp++;
+			return null;
+		case OPCODE_PUSH_INDIRECT:
+		case OPCODE_PUSH_INDIRECT_FOR_MUTATE:
+			return this.opcodePushIndirect(arg1, code === OPCODE_PUSH_INDIRECT_FOR_MUTATE);
 		case OPCODE_POP_GLOBAL:
 			return this.opcodePopGlobal(arg1);
 		case OPCODE_POP_LOCAL:
 			return this.opcodePopLocal(arg1);
+		case OPCODE_POP_INDIRECT:
+			return this.opcodePopIndirect(arg1);
 		case OPCODE_POP_VOID:
 			return this.opcodePopVoid(arg1);
 		case OPCODE_CREATE_STRING:

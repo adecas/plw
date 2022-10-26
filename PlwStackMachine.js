@@ -943,6 +943,35 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushIndirect(offset, isForMutate) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let directOffset = this.stack[this.bp + offset];
+		if (directOffset < 0 || directOffset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}		
+		if (isForMutate) {
+			let refManError = new PlwRefManagerError();
+			this.stack[directOffset] = this.refMan.makeMutable(this.stack[directOffset], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+			this.stackMap[directOffset] = true;
+		}
+		this.stack[this.sp] = this.stack[directOffset];
+		this.stackMap[this.sp] = this.stackMap[directOffset];
+		if (this.stackMap[this.sp] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.incRefCount(this.stack[this.sp], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.sp++;
+		return null;
+	}
+	
 	opcodePopGlobal(offset) {
 		if (this.sp < 1 || offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -961,7 +990,7 @@ class StackMachine {
 	}
 	
 	opcodePopLocal(offset) {
-		if (this.sp < 1 || this.bp + offset >= this.sp) {
+		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		if (this.stackMap[this.bp + offset] === true) {
@@ -976,7 +1005,27 @@ class StackMachine {
 		this.sp--;
 		return null;
 	}
-
+	
+	opcodePopIndirect(offset) {
+		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let directOffset = this.stack[this.bp + offset];
+		if (directOffset < 0 || directOffset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		if (this.stackMap[directOffset] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.decRefCount(this.stack[directOffset], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.stack[directOffset] = this.stack[this.sp - 1];
+		this.stackMap[directOffset] = this.stackMap[this.sp - 1];
+		this.sp--;
+		return null;
+	}
 	
 	opcode2(code, arg1) {
 		switch(code) {
@@ -1012,10 +1061,20 @@ class StackMachine {
 		case OPCODE_PUSH_LOCAL:
 		case OPCODE_PUSH_LOCAL_FOR_MUTATE:
 			return this.opcodePushLocal(arg1, code === OPCODE_PUSH_GLOBAL_FOR_MUTATE);
+		case OPCODE_PUSH_INDIRECTION:
+			this.stack[this.sp] = this.bp + arg1;
+			this.stackMap[this.sp] = false;
+			this.sp++;
+			return null;
+		case OPCODE_PUSH_INDIRECT:
+		case OPCODE_PUSH_INDIRECT_FOR_MUTATE:
+			return this.opcodePushIndirect(arg1, code === OPCODE_PUSH_INDIRECT_FOR_MUTATE);
 		case OPCODE_POP_GLOBAL:
 			return this.opcodePopGlobal(arg1);
 		case OPCODE_POP_LOCAL:
 			return this.opcodePopLocal(arg1);
+		case OPCODE_POP_INDIRECT:
+			return this.opcodePopIndirect(arg1);
 		case OPCODE_POP_VOID:
 			return this.opcodePopVoid(arg1);
 		case OPCODE_CREATE_STRING:

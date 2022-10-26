@@ -203,10 +203,11 @@ class EvalTypeName extends EvalResultType {
 }
 
 class EvalResultParameter extends EvalResult {
-	constructor(parameterName, parameterType) {
+	constructor(parameterName, parameterType, isCtx) {
 		super("res-parameter");
 		this.parameterName = parameterName;
 		this.parameterType = parameterType;
+		this.isCtx = isCtx;
 	}
 }
 
@@ -240,7 +241,9 @@ class EvalResultFunction extends EvalResult {
 	functionKey() {
 		let funcKey = this.functionName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
-			funcKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+			funcKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return funcKey + ")";
 	}
@@ -266,7 +269,9 @@ class EvalResultProcedure extends EvalResult {
 	procedureKey() {
 		let procKey = this.procedureName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
-			procKey += (i > 0 ? "," : "") + this.parameterList.parameters[i].parameterType.typeKey();
+			procKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return procKey + ")";
 	}
@@ -322,6 +327,10 @@ class EvalError extends EvalResult {
 	
 	static variableAlreadyExists(varName) {
 		return new EvalError("Variable " + varName + " already exists");
+	}
+	
+	static parameterAlreadyExists(parameterName) {
+		return new EvalError("Parameter " + parameterName + " already exists");
 	}
 	
 	static functionAlreadyExists(funcName) {
@@ -479,6 +488,18 @@ class CodeBlock {
 		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
 	}	
 	
+	codePushIndirection(offset) {
+		this.code2(OPCODE_PUSH_INDIRECTION, offset);
+	}
+	
+	codePushIndirect(offset) {
+		this.code2(OPCODE_PUSH_INDIRECT, offset);
+	}
+	
+	codePushIndirectForMutate(offset) {
+		this.code2(OPCODE_PUSH_INDIRECT_FOR_MUTATE, offset);
+	}
+
 	codePushPtrOffset() {
 		this.code1(OPCODE_PUSH_PTR_OFFSET);
 	}
@@ -517,6 +538,10 @@ class CodeBlock {
 	
 	codePopLocal(offset) {
 		this.code2(OPCODE_POP_LOCAL, offset);
+	}
+	
+	codePopIndirect(offset) {
+		this.code2(OPCODE_POP_INDIRECT, offset);
 	}
 	
 	codePopPtrOffset() {
@@ -703,7 +728,7 @@ class CodeBlock {
 		this.code2(OPCODE_CREATE_EXCEPTION_HANDLER, offset);
 		return this.codeSize - 1;
 	}
-		
+			
 }
 
 
@@ -761,7 +786,7 @@ class CompilerContext {
 			if (evalType.tag === "res-type-array") {
 				var lengthFunc = new EvalResultFunction(
 					"length",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
 					EVAL_TYPE_INTEGER, 
 					false
 				);
@@ -792,9 +817,10 @@ class CompilerContext {
 
 
 class CompilerVariable {
-	constructor(varName, varType, isConst, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isCtx, isConst, isGlobal, isParameter, offset) {
 		this.varName = varName;
 		this.varType = varType;
+		this.isCtx = isCtx;
 		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
@@ -861,18 +887,22 @@ class CompilerScope {
 	
 	getVariable(varName) {
 		let scope = this;
+		let onlyConst = false;
 		while (scope !== null) {
 		 	let val = scope.getLocalVariable(varName);
-			if (val !== null) {
+			if (val !== null && (onlyConst === false || val.isConst === true)) {
 				return val;
+			}
+			if (scope.isFrame) {
+				onlyConst = true;
 			}
 			scope = scope.parent;
 		}
 		return null;
 	}
 	
-	addParameter(varName, varType, offset) {
-		let newVar = new CompilerVariable(varName, varType, false, false, true, offset);
+	addParameter(varName, varType, isCtx, offset) {
+		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, offset);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
@@ -880,7 +910,7 @@ class CompilerScope {
 
 
 	addVariable(varName, varType, isConst) {
-		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableCount);
+		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableCount);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -1031,11 +1061,12 @@ class Compiler {
 			//
 			for (let i = 0; i < abstractType.methodCount; i++) {
 				let method = abstractType.methods[i];
-				let params = [ new EvalResultParameter("self", abstractType) ];
+				let params = [ new EvalResultParameter("self", abstractType, false) ];
 				for (let j = 0; j < method.paramCount; j++) {
 					params[j + 1] = new EvalResultParameter(
 						method.params[j].paramName,
-						method.params[j].paramType === null ? abstractType : method.params[j].paramType
+						method.params[j].paramType === null ? abstractType : method.params[j].paramType,
+						false
 					);
 				}
 				let paramList = new EvalResultParameterList(method.paramCount + 1, params);
@@ -1087,7 +1118,7 @@ class Compiler {
 					let params = [];
 					if (variantType.fields[i].fieldType !== null) {
 						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
 					}
 					let evalFunc = new EvalResultFunction(
 						expr.typeName + "_" + variantType.fields[i].fieldName,
@@ -1105,7 +1136,7 @@ class Compiler {
 					let params = [];
 					if (variantType.fields[i].fieldType !== null) {
 						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType);
+						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
 					}
 					let evalFunc = new EvalResultFunction(
 						expr.typeName + "_" + variantType.fields[i].fieldName,
@@ -1160,7 +1191,9 @@ class Compiler {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
-				if (variable.isGlobal) {
+				if (variable.isCtx) {
+					this.codeBlock.codePopIndirect(variable.offset);
+				} else if (variable.isGlobal) {
 					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
@@ -1641,6 +1674,7 @@ class Compiler {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
+							parameterList.parameters[i].isCtx,
 							i - parameterList.parameterCount - 4,
 							false
 						);
@@ -1682,6 +1716,7 @@ class Compiler {
 					this.scope.addParameter(
 						parameterList.parameters[i].parameterName,
 						parameterList.parameters[i].parameterType,
+						parameterList.parameters[i].isCtx,
 						i - parameterList.parameterCount - 4
 					);
 				}
@@ -1707,7 +1742,7 @@ class Compiler {
 			}
 			let procKey = expr.procedureName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+				procKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
 			}
 			procKey += ")";
 			let proc = this.context.getProcedure(procKey);
@@ -1736,7 +1771,9 @@ class Compiler {
 			if (v.isConst) {
 				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
-			if (v.isGlobal) {
+			if (v.isCtx) {
+				this.codeBlock.codePushIndirectForMutate(v.offset);
+			} else if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
@@ -2137,10 +2174,14 @@ class Compiler {
 			if (v === null) {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
 			}
-			if (v.isGlobal) {
-				this.codeBlock.codePushGlobal(v.offset);
+			if (v.isCtx) {
+				this.codeBlock.codePushIndirect(v.offset);
 			} else {
-				this.codeBlock.codePushLocal(v.offset);
+				if (v.isGlobal) {
+					this.codeBlock.codePushGlobal(v.offset);
+				} else {
+					this.codeBlock.codePushLocal(v.offset);
+				}
 			}
 			return v.varType;
 		}
@@ -2205,6 +2246,18 @@ class Compiler {
 			}
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
+		if (expr.tag === "ast-ctx-arg") {
+			let v = this.scope.getVariable(expr.varName);
+			if (v === null) {
+				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
+			}
+			if (v.isCtx) {
+				this.codeBlock.codePushLocal(v.offset);
+			} else {
+				this.codeBlock.codePushIndirection(v.offset);
+			}
+			return v.varType;
+		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
 			for (let i = 0; i < expr.argList.argCount; i++) {
@@ -2216,7 +2269,7 @@ class Compiler {
 			}
 			let funcKey = expr.functionName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				funcKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+				funcKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
 			}
 			funcKey += ")";
 			let func = this.context.getFunction(funcKey);
@@ -2410,7 +2463,7 @@ class Compiler {
 		if (paramType.isError()) {
 			return paramType;
 		}
-		return new EvalResultParameter(expr.parameterName, paramType);
+		return new EvalResultParameter(expr.parameterName, paramType, expr.isCtx);
 	}
 	
 	evalParameterList(expr) {
@@ -2425,7 +2478,7 @@ class Compiler {
 			}
 			for (let k = 0; k < i; k++) {
 				if (parameters[k].parameterName === parameter.parameterName) {
-					return new EvalError.parameterAlreadyExists(parameterNamer).fromExpr(expr.parameters[i]);
+					return EvalError.parameterAlreadyExists(parameter.parameterName).fromExpr(expr.parameters[i]);
 				}
 			}
 			parameters[i] = parameter;

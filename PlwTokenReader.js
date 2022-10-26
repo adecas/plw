@@ -39,6 +39,7 @@ const TOK_LOOP = "tok-loop";
 const TOK_FOR = "tok-for";
 const TOK_IN = "tok-in";
 const TOK_REVERSE = "tok-reverse";
+const TOK_CTX = "tok-ctx";
 const TOK_FUNCTION = "tok-function";
 const TOK_GENERATOR = "tok-generator";
 const TOK_PROCEDURE = "tok-procedure";
@@ -234,6 +235,9 @@ class TokenReader {
 		}
 		if (token === "reverse") {
 			return new Token(TOK_REVERSE, token, line, col);
+		}
+		if (token === "ctx") {
+			return new Token(TOK_CTX, token, line, col);
 		}
 		if (token === "function") {
 			return new Token(TOK_FUNCTION, token, line, col);

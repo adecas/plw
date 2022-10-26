@@ -110,8 +110,6 @@ const ANSI_MAGENTA := '5';
 const ANSI_CYAN := '6';
 const ANSI_WHITE := '7';
 
-
-
 function ansi_color(fg_color text, bg_color text) text begin
 	return ANSI_CSI || '3' || fg_color || ';4' || bg_color || 'm';
 end ansi_color;
@@ -145,7 +143,6 @@ type entity {
 	item entity_item
 };
 
-var entities := [] as [entity];
 
 procedure print_visibility_flags(flags [[boolean]]) begin
 	for y in 0..length(flags) - 1 loop
@@ -157,9 +154,9 @@ procedure print_visibility_flags(flags [[boolean]]) begin
 	end loop;
 end print_visibility_flags;
 
-function in_viewrange(p point, entity_id integer) boolean begin
-	kindof entities[entity_id].viewrange when some(vr) then
-		kindof entities[entity_id].position when some(pos) then
+function in_viewrange(p point, entity entity) boolean begin
+	kindof entity.viewrange when some(vr) then
+		kindof entity.position when some(pos) then
 			if p.x >= pos.x - vr.range and
 			   p.x <= pos.x + vr.range and
 			   p.y >= pos.y - vr.range and
@@ -182,12 +179,10 @@ end in_viewrange;
 
 const SCREEN_WIDTH := 130;
 const SCREEN_HEIGHT := 30;
-var screen := EMPTY_SCREEN_CELL ** SCREEN_WIDTH ** SCREEN_HEIGHT;
 
 const MAX_MESSAGES := 20;
-var messages := [] as [text];
 
-procedure add_message(msg text) begin
+procedure add_message(ctx messages [text], msg text) begin
 	if length(messages) = MAX_MESSAGES then
 		messages := messages[1 .. MAX_MESSAGES - 1];
 	end if;
@@ -280,9 +275,8 @@ function make_map(width integer, height integer) map begin
 	} as map;
 end make_map;
 
-var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-function map_is_blocked(pos point) boolean begin
+function map_is_blocked(map map, pos point) boolean begin
 	return map.tiles[pos.y][pos.x] = tile_type_wall() or map.blocking_entities[pos.y][pos.x] >= 0;
 end map_is_blocked;
 
@@ -319,7 +313,7 @@ function visible_tile_flags(tiles [[tile_type]], x integer, y integer, range int
 	return flags;
 end visible_tile_flags;
 
-generator map_neighbors(p point) point begin
+generator map_neighbors(map map, p point) point begin
 	if p.y > 0 then
 		yield {x: p.x, y: p.y - 1} as point;
 	end if;
@@ -334,14 +328,14 @@ generator map_neighbors(p point) point begin
 	end if;
 end map_neighbors;
 
-function find_path(start_pos point, end_pos point) [point] begin
+function find_path(map map, start_pos point, end_pos point) [point] begin
 	var frontier := [start_pos] as [point];
 	var reached := false ** map.width ** map.height;
 	var origins := {x: 0, y: 0} as point ** map.width ** map.height;
 	while length(frontier) > 0 loop
 		var new_frontier := [] as [point];
 		for i in 0..length(frontier) - 1 loop
-			for p in map_neighbors(frontier[i]) loop
+			for p in map_neighbors(map, frontier[i]) loop
 				if p = end_pos then
 					var path := [p];
 					var origin := frontier[i];
@@ -350,7 +344,7 @@ function find_path(start_pos point, end_pos point) [point] begin
 						origin := origins[origin.y][origin.x];
 					end loop;
 					return path;
-				elsif not reached[p.y][p.x] and not map_is_blocked(p) then
+				elsif not reached[p.y][p.x] and not map_is_blocked(map, p) then
 					reached[p.y][p.x] := true;
 					origins[p.y][p.x] := frontier[i];
 					new_frontier := new_frontier || [p];
@@ -362,7 +356,7 @@ function find_path(start_pos point, end_pos point) [point] begin
 	return [] as [point];
 end find_path;
 
-function new_entity(e entity) integer begin
+function new_entity(ctx entities [entity], ctx map map, e entity) integer begin
 	var entity_id := length(entities);
 	entities := entities || [e];
 	kindof e.position when some(p) then
@@ -375,7 +369,7 @@ function new_entity(e entity) integer begin
 	return entity_id;
 end new_entity;
 
-procedure deactivate_entity(entity_id integer) begin
+procedure deactivate_entity(ctx entities [entity], ctx map map, entity_id integer) begin
 	entities[entity_id].is_active := false;
 	if entities[entity_id].blocks_tile then
 		kindof entities[entity_id].position when some(p) then
@@ -386,10 +380,10 @@ procedure deactivate_entity(entity_id integer) begin
 	end if;
 end deactivate_entity;
 
-function spawn_player() integer begin
+function spawn_player(ctx entities [entity], ctx map map) integer begin
 	var first_room := map.rooms[0];
 	var player_pos := {x: random(first_room.x1 + 1, first_room.x2), y: random(first_room.y1 + 1, first_room.y2)} as point;
-	var player_id := new_entity({
+	var player_id := new_entity(ctx entities, ctx map, {
 		name: 'Player',
 		is_active: true,
 		position: entity_position_some(player_pos),
@@ -403,9 +397,7 @@ function spawn_player() integer begin
 	return player_id;
 end spawn_player;
 
-var player_id := spawn_player();
-
-procedure populate_room(room rect) begin
+procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 	var monster_num := random(0, 3);
 	var spawn_points := [] as [point];
 	for i in 1 .. monster_num loop
@@ -413,7 +405,7 @@ procedure populate_room(room rect) begin
 		if not point_in_array(spawn_point, spawn_points) then
 			var monster_type := random(0, 1);
 			var glyph := case when monster_type = 0 then 'g' else 'o' end;
-			var monster_id := new_entity({
+			var monster_id := new_entity(ctx entities, ctx map, {
 				name: case when monster_type = 0 then 'Gnome' else 'Orc' end,
 				is_active: true,
 				position: entity_position_some(spawn_point),
@@ -431,7 +423,7 @@ procedure populate_room(room rect) begin
 	for i in 1 .. potion_num loop
 		var spawn_point := {x: random(room.x1 + 1, room.x2), y: random(room.y1 + 1, room.y2)} as point;
 		if not point_in_array(spawn_point, spawn_points) then
-			var potion_id := new_entity({
+			var potion_id := new_entity(ctx entities, ctx map, {
 				name: 'Potion',
 				is_active: true,
 				position: entity_position_some(spawn_point),
@@ -447,15 +439,14 @@ procedure populate_room(room rect) begin
 	end loop;
 end populate_room;
 
-procedure populate_map() begin
+procedure populate_map(ctx entities [entity], ctx map map) begin
 	for i in 1 .. length(map.rooms) - 1 loop
-		populate_room(map.rooms[i]);
+		populate_room(ctx entities, ctx map, map.rooms[i]);
 	end loop;
 end populate_map;
 
-populate_map();
 
-procedure render() begin
+procedure render(ctx screen [[screen_cell]], entities [entity], map map) begin
 	for y in 0 .. SCREEN_HEIGHT - 1 loop
 		for x in 0 .. SCREEN_WIDTH - 1 loop
 			if map.visible_tiles[y][x] or map.revealed_tiles[y][x] then
@@ -501,10 +492,7 @@ function screen_line_to_text(line [screen_cell]) text begin
 	return t;
 end screen_line_to_text;
 
-var view_range_time := 0;
-var render_time := 0;
-
-procedure display() begin
+procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 	for i in 0 .. length(screen) - 1 loop
 		if i = 0 then
 			print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || screen_line_to_text(screen[i]) || ANSI_CR);			
@@ -512,7 +500,7 @@ procedure display() begin
 			print(screen_line_to_text(screen[i]) || ANSI_CR);
 		end if;
 	end loop;
-	kindof entities[player_id].combat_stat when some(cs) then
+	kindof player.combat_stat when some(cs) then
 		var status_line := 'Heath: ' || text(cs.hp) || '/' || text(cs.max_hp);
 		status_line := status_line || text((char_code(' ', 0) as char) ** (SCREEN_WIDTH - length(status_line)));
 		write(ansi_color(ANSI_YELLOW, ANSI_BLUE) || status_line || ansi_color(ANSI_WHITE, ANSI_BLACK));
@@ -522,9 +510,9 @@ procedure display() begin
 	end loop;
 end display;
 
-procedure move_entity(entity_id integer, pos point) begin
+procedure move_entity(ctx entities [entity], map map, entity_id integer, pos point) begin
 	kindof entities[entity_id].position when some(old_pos) then
-		if not map_is_blocked(pos) then
+		if not map_is_blocked(map, pos) then
 			if map.blocking_entities[old_pos.y][old_pos.x] = entity_id then
 				map.blocking_entities[old_pos.y][old_pos.x] := -1;
 			end if;
@@ -540,7 +528,7 @@ procedure move_entity(entity_id integer, pos point) begin
 	end;
 end move_entity;
 
-procedure attack_entity(attacker_id integer, target_id integer) begin
+procedure attack_entity(ctx entities [entity], ctx map map, ctx messages [text], attacker_id integer, target_id integer) begin
 	var attacker := entities[attacker_id];
 	var target := entities[target_id];
 	kindof attacker.combat_stat when some(attacker_stat) then
@@ -551,47 +539,48 @@ procedure attack_entity(attacker_id integer, target_id integer) begin
 			end if;
 			target_stat.hp := target_stat.hp - damage;
 			entities[target_id].combat_stat := entity_combatstat_some(target_stat);
-			add_message(attacker.name || ' dealt ' || text(damage) || ' damage to ' || target.name);
+			add_message(ctx messages, attacker.name || ' dealt ' || text(damage) || ' damage to ' || target.name);
 			if target_stat.hp <= 0 then
-				deactivate_entity(target_id);
+				deactivate_entity(ctx entities, ctx map, target_id);
 			end if;
 		end;
 	end;
 end attack_entity;
 
-procedure move_player(dx integer, dy integer) begin
+procedure move_player(ctx entities [entity], ctx map map, ctx messages [text], player_id integer, dx integer, dy integer) begin
 	kindof entities[player_id].position when some(p) then
 		var new_pos := {x: p.x + dx, y: p.y + dy} as point;
 		var target_entity_id := map.blocking_entities[new_pos.y][new_pos.x];
 		if target_entity_id <> -1 then
-			attack_entity(player_id, target_entity_id);
+			attack_entity(ctx entities, ctx map, ctx messages, player_id, target_entity_id);
 		else
-			move_entity(player_id, {x: p.x + dx, y: p.y + dy} as point);
+			move_entity(ctx entities, map, player_id, {x: p.x + dx, y: p.y + dy} as point);
 		end if;
 	end;
 end move_player;
 
-procedure pickup_item() begin
+procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, player_id integer) begin
 	kindof entities[player_id].position when some(p) then
 		var picked_id := map.nonblocking_entities[p.y][p.x];
 		if picked_id = -1 then
-			add_message('Nothing to pick');
+			add_message(ctx messages, 'Nothing to pick');
 		else
 			kindof entities[picked_id].item
 			when some(item) then
+				map.nonblocking_entities[p.y][p.x] := -1;
 				item.owner_id := player_id;
 				entities[picked_id].item := entity_item_some(item);
 				entities[picked_id].position := entity_position_none();
 				map.nonblocking_entities[p.y][p.x] := -1;
-				add_message(entities[player_id].name || ' picked ' || entities[picked_id].name);
+				add_message(ctx messages, entities[player_id].name || ' picked ' || entities[picked_id].name);
 			else
-				add_message('You can''t pick ' || entities[picked_id].name);
+				add_message(ctx messages, 'You can''t pick ' || entities[picked_id].name);
 			end;
 		end if;
 	end;	
 end pickup_item;
 
-procedure viewrange_tick() begin
+procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer) begin
 	for i in 0 .. length(entities) - 1 loop
 		const entity := entities[i];
 		if entity.is_active then
@@ -625,24 +614,24 @@ procedure viewrange_tick() begin
 	end loop;
 end viewrange_tick;
 
-procedure monster_tick() begin
+procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], player_id integer) begin
 	for i in 0 .. length(entities) - 1 loop
 		const entity := entities[i];
 		if entity.is_active and entity.is_monster then
 			kindof entity.position when some(p) then
 				kindof entities[player_id].position when some(player_pos) then
-					if in_viewrange(player_pos, i) then
-						var path := find_path(p, player_pos);
+					if in_viewrange(player_pos, entities[i]) then
+						var path := find_path(map, p, player_pos);
 						if length(path) > 0 then
 							var next_pos := path[0];
 							if next_pos = player_pos then
-								attack_entity(i, player_id);
-							elsif not map_is_blocked(next_pos) then
-								add_message(entity.name || ': don''t run coward');
-								move_entity(i, next_pos);
+								attack_entity(ctx entities, ctx map, ctx messages, i, player_id);
+							elsif not map_is_blocked(map, next_pos) then
+								add_message(ctx messages, entity.name || ': don''t run coward');
+								move_entity(ctx entities, map, i, next_pos);
 							end if;
 						else
-							add_message(entity.name || ': come here if you''re a man');
+							add_message(ctx messages, entity.name || ': come here if you''re a man');
 						end if;
 					end if;
 				end;
@@ -651,11 +640,11 @@ procedure monster_tick() begin
 	end loop;	
 end monster_tick;
 
-procedure entity_use_item(entity_id integer, item_id integer) begin
-	add_message(entities[entity_id].name || ' used ' || entities[item_id].name);
+procedure entity_use_item(ctx entities [entity], ctx messages [text], entity_id integer, item_id integer) begin
+	add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
 end entity_use_item;
 
-procedure inventory_loop() begin
+procedure inventory_loop(ctx entities [entity], ctx messages [text], player_id integer) begin
 	var again := true;
 	while again loop
 		var items := [] as [integer];
@@ -677,7 +666,7 @@ procedure inventory_loop() begin
 		else
 			var item_id := input as integer - char_code('1', 0);
 			if item_id >= 0 and item_id < 9 and item_id < length(items) then
-				entity_use_item(player_id, items[item_id]);
+				entity_use_item(ctx entities, ctx messages, player_id, items[item_id]);
 				again := false;
 			end if;
 		end if;
@@ -685,33 +674,40 @@ procedure inventory_loop() begin
 end inventory_loop;
 
 procedure main_loop() begin
+	var entities := [] as [entity];
+	var screen := EMPTY_SCREEN_CELL ** SCREEN_WIDTH ** SCREEN_HEIGHT;
+	var messages := [] as [text];
+	var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
+	var player_id := spawn_player(ctx entities, ctx map);
+	populate_map(ctx entities, ctx map);
+
 	var again := true;
 	while again loop
-		viewrange_tick();
-		monster_tick();
-		render();
-		display();
+		viewrange_tick(ctx entities, ctx map, player_id);
+		monster_tick(ctx entities, ctx map, ctx messages, player_id);
+		render(ctx screen, entities, map);
+		display(screen, entities[player_id], messages);
 		var input := get_char();
 		if input = CHAR_UP then
-			move_player(0, -1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, 0, -1);
 		elsif input = CHAR_DOWN then
-			move_player(0, 1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, 0, 1);
 		elsif input = CHAR_LEFT then
-			move_player(-1, 0);
+			move_player(ctx entities, ctx map, ctx messages, player_id, -1, 0);
 		elsif input = CHAR_RIGHT then
-			move_player(1, 0);
+			move_player(ctx entities, ctx map, ctx messages, player_id, 1, 0);
 		elsif input = CHAR_UPRIGHT then
-			move_player(1, -1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, 1, -1);
 		elsif input = CHAR_UPLEFT then
-			move_player(-1, -1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, -1, -1);
 		elsif input = CHAR_DOWNRIGHT then
-			move_player(1, 1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, 1, 1);
 		elsif input = CHAR_DOWNLEFT then
-			move_player(-1, 1);
+			move_player(ctx entities, ctx map, ctx messages, player_id, -1, 1);
 		elsif input = CHAR_PICKUP then
-			pickup_item();
+			pickup_item(ctx entities, ctx messages, ctx map, player_id);
 		elsif input = CHAR_INVENTORY then
-			inventory_loop();
+			inventory_loop(ctx entities, ctx messages, player_id);
 		elsif input = CHAR_QUIT then
 			again := false;
 		end if;

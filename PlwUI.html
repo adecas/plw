@@ -198,16 +198,31 @@ say_hello('HAL');
 say_hello('Jane Smith');
 </pre>
 
-
 <p id="snippet-basic-function-title" class="snippet">Basic function</p>
 <pre id="snippet-basic-function">
-var toto := 42;
-function f(a integer) integer begin
-  toto := toto + a;
-  return toto + 1;
-end f;
-print('f(toto): ' || text(f(toto)));
-print('expected: 85');
+function triple(a integer) integer begin
+  var double := a + a;
+  return double + a;
+end triple;
+if triple(2) = 6 and triple(3) = 9 then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+</pre>
+
+<p id="snippet-context-param-title" class="snippet">Context Parameter</p>
+<pre id="snippet-context-param">
+var id := 42;
+function next_id(inc integer, ctx id integer) integer begin
+  id := id + inc;
+  return id;
+end next_id;
+if next_id(10, ctx id) = 52 and next_id(10, ctx id) = 62 and id = 62 then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
 </pre>
 
 <p id="snippet-nested-functions-title" class="snippet">Nested functions</p>
