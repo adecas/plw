@@ -246,6 +246,13 @@ class AstFor extends AstNode {
 	}
 }
 
+class AstExit extends AstNode {
+	constructor(condition) {
+		super("ast-exit");
+		this.condition = condition;
+	}
+}
+
 class AstRange extends AstNode {
 	constructor(lowerBound, upperBound) {
 		super("ast-range");

@@ -63,6 +63,8 @@ class Parser {
 			stmt = this.readProcedureDeclaration();
 		} else if (this.peekToken() === TOK_TYPE) {
 			stmt = this.readTypeDeclaration();
+		} else if (this.peekToken() === TOK_EXIT) {
+			stmt = this.readExit();
 		} else if (this.peekToken() === TOK_RETURN) {
 			stmt = this.readReturn();
 		} else if (this.peekToken() === TOK_YIELD) {
@@ -1136,6 +1138,22 @@ class Parser {
 			}
 		}
 		return new AstReturn(expr).fromToken(retToken);
+	}
+	
+	readExit() {
+		let exitToken = this.readToken();
+		if (exitToken.tag !== TOK_EXIT) {
+			return ParserError.unexpectedToken(exitToken, [TOK_EXIT]);
+		}
+		let condition = null;
+		if (this.peekToken() === TOK_WHEN) {
+			this.readToken();
+			condition = this.readExpression();
+			if (Parser.isError(condition)) {
+				return condition;
+			}
+		}
+		return new AstExit(condition).fromToken(exitToken);
 	}
 	
 	readRaise() {

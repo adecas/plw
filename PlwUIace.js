@@ -16,22 +16,6 @@ function printTextOutObject(obj) {
 	textout.scrollTop = textout.scrollHeight;
 }
 
-function clearDebugText() {
-	document.getElementById("debug").value = "";
-}
-
-function printDebugText(text) {
-	let textout = document.getElementById("debug");
-	textout.value += text + "\n";
-	textout.scrollTop = textout.scrollHeight;
-}
-
-function printDebugObject(obj) {
-	let textout = document.getElementById("debug");
-	textout.value += JSON.stringify(obj, null, 2) + "\n";
-	textout.scrollTop = textout.scrollHeight;
-}
-
 function getTextIn() {
 	let textIn = textinEditor.getSelectedText();
 	if (textIn) return textIn;
@@ -40,7 +24,6 @@ function getTextIn() {
 
 function onExecClick(isDebug) {
 	try {
-		clearDebugText();
 		let tokenReader = new TokenReader(getTextIn(), 1, 1);
 		let parser = new Parser(tokenReader);
 		let compiler = new Compiler(compilerContext);
@@ -51,14 +34,14 @@ function onExecClick(isDebug) {
 				break;
 			}
 			if (isDebug) {
-				printDebugText("=== AST =================================");
-				printDebugObject(expr);
+				printTextOut("=== AST =================================");
+				printTextOutObject(expr);
 			}
 			compiler.resetCode();
 			let result = compiler.evalStatement(expr);
 			if (isDebug) {
-				printDebugText("=== Compiler ============================");
-				printDebugObject(compiler);
+				printTextOut("=== Compiler ============================");
+				printTextOutObject(compiler);
 			}
 			if (result.isError()) {
 				printTextOutObject(result);
@@ -66,8 +49,8 @@ function onExecClick(isDebug) {
 			} else {
 				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
 				if (isDebug) {
-					printDebugText("=== StackMaching ========================");
-					printDebugObject(stackMachine);
+					printTextOut("=== StackMaching ========================");
+					printTextOutObject(stackMachine);
 				}
 				printTextOut(smRet === null ? "ok" : JSON.stringify(smRet));
 			}
@@ -82,7 +65,6 @@ function onExecClick(isDebug) {
 
 function onEvalClick() {
 	try {
-		document.getElementById("debug").value = "";
 		let tokenReader = new TokenReader(getTextIn(), 1, 1);
 		let parser = new Parser(tokenReader);
 		let compiler = new Compiler(compilerContext);
@@ -92,7 +74,6 @@ function onEvalClick() {
 				printTextOutObject(expr);
 				break;
 			}
-			document.getElementById("debug").value += JSON.stringify(expr, null, 2);
 			compiler.resetCode();
 			let result = compiler.eval(expr);
 			if (result.isError()) {			

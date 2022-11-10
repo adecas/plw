@@ -36,6 +36,7 @@ const TOK_CASE = "tok-case";
 const TOK_WHEN = "tok-when";
 const TOK_WHILE = "tok-while";
 const TOK_LOOP = "tok-loop";
+const TOK_EXIT = "tok-exit";
 const TOK_FOR = "tok-for";
 const TOK_IN = "tok-in";
 const TOK_REVERSE = "tok-reverse";
@@ -226,6 +227,9 @@ class TokenReader {
 		}
 		if (token === "loop") {
 			return new Token(TOK_LOOP, token, line, col);
+		}
+		if (token === "exit") {
+			return new Token(TOK_EXIT, token, line, col);
 		}
 		if (token === "for") {
 			return new Token(TOK_FOR, token, line, col);

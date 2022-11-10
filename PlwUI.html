@@ -144,6 +144,16 @@ end loop;
 print('Done while'); 
 </pre>
 
+<p id="snippet-early-exit-title" class="snippet">Early Exit</p>
+<pre id="snippet-early-exit">
+var i := 0;
+while i < 10 loop
+  print(text(i));
+  exit when i = 5;
+  i := i + 1;
+end loop;
+</pre>
+
 <p id="snippet-arrays-title" class="snippet">Arrays</p>
 <pre id="snippet-arrays">
 var a := [11, 22, 33, 44, 55];

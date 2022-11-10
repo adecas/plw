@@ -36,6 +36,7 @@ const TOK_CASE = "tok-case";
 const TOK_WHEN = "tok-when";
 const TOK_WHILE = "tok-while";
 const TOK_LOOP = "tok-loop";
+const TOK_EXIT = "tok-exit";
 const TOK_FOR = "tok-for";
 const TOK_IN = "tok-in";
 const TOK_REVERSE = "tok-reverse";
@@ -226,6 +227,9 @@ class TokenReader {
 		}
 		if (token === "loop") {
 			return new Token(TOK_LOOP, token, line, col);
+		}
+		if (token === "exit") {
+			return new Token(TOK_EXIT, token, line, col);
 		}
 		if (token === "for") {
 			return new Token(TOK_FOR, token, line, col);
@@ -710,6 +714,13 @@ class AstFor extends AstNode {
 	}
 }
 
+class AstExit extends AstNode {
+	constructor(condition) {
+		super("ast-exit");
+		this.condition = condition;
+	}
+}
+
 class AstRange extends AstNode {
 	constructor(lowerBound, upperBound) {
 		super("ast-range");
@@ -960,6 +971,8 @@ class Parser {
 			stmt = this.readProcedureDeclaration();
 		} else if (this.peekToken() === TOK_TYPE) {
 			stmt = this.readTypeDeclaration();
+		} else if (this.peekToken() === TOK_EXIT) {
+			stmt = this.readExit();
 		} else if (this.peekToken() === TOK_RETURN) {
 			stmt = this.readReturn();
 		} else if (this.peekToken() === TOK_YIELD) {
@@ -2035,6 +2048,22 @@ class Parser {
 		return new AstReturn(expr).fromToken(retToken);
 	}
 	
+	readExit() {
+		let exitToken = this.readToken();
+		if (exitToken.tag !== TOK_EXIT) {
+			return ParserError.unexpectedToken(exitToken, [TOK_EXIT]);
+		}
+		let condition = null;
+		if (this.peekToken() === TOK_WHEN) {
+			this.readToken();
+			condition = this.readExpression();
+			if (Parser.isError(condition)) {
+				return condition;
+			}
+		}
+		return new AstExit(condition).fromToken(exitToken);
+	}
+	
 	readRaise() {
 		let raiseToken = this.readToken();
 		if (raiseToken.tag !== TOK_RAISE) {
@@ -3041,25 +3070,30 @@ class CompilerVariable {
 class CompilerScope {
 
 	static makeGlobal() {
-		return new CompilerScope(null, false, false, null);
+		return new CompilerScope(null, false, false, false, null);
 	}
 	
 	static makeBlock(parent) {
-		return new CompilerScope(parent, false, false, null);
+		return new CompilerScope(parent, false, false, false, null);
+	}
+	
+	static makeLoop(parent) {
+		return new CompilerScope(parent, false, false, true, null);
 	}
 	
 	static makeFunction(parent, isGenerator, returnType) {
-		return new CompilerScope(parent, true, isGenerator, returnType);
+		return new CompilerScope(parent, true, isGenerator, false, returnType);
 	}
 	
 	static makeProcedure(parent) {
-		return new CompilerScope(parent, true, false, null);
+		return new CompilerScope(parent, true, false, false, null);
 	}
-
-	constructor(parent, isFrame, isGenerator, returnType) {
+	
+	constructor(parent, isFrame, isGenerator, isLoop, returnType) {
 		this.parent = parent;
 		this.isFrame = isFrame;
 		this.isGenerator = isGenerator;
+		this.isLoop = isLoop;
 		this.returnType = returnType;
 		this.isGlobal = parent === null || (this.parent.isGlobal && isFrame === false);
 		this.variables = [];
@@ -3067,6 +3101,8 @@ class CompilerScope {
 		this.variableCount = 0;
 		this.parameterCount = 0;
 		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableCount);
+		this.exitLocs = [];
+		this.exitLocCount = 0;
 	}
 	
 	findFrame() {
@@ -3144,6 +3180,10 @@ class Compiler {
 		this.scope = CompilerScope.makeBlock(this.scope);
 	}
 	
+	pushScopeLoop() {
+		this.scope = CompilerScope.makeLoop(this.scope);
+	}
+
 	pushScopeFunction(isGenerator, returnType) {
 		this.scope = CompilerScope.makeFunction(this.scope, isGenerator, returnType);
 	}
@@ -3698,6 +3738,7 @@ class Compiler {
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-while") {
+			this.pushScopeLoop();
 			let testLoc = this.codeBlock.codeSize;
 			let conditionType = this.eval(expr.condition);
 			if (conditionType.isError()) {
@@ -3713,11 +3754,15 @@ class Compiler {
 			}
 			this.codeBlock.codeJmp(testLoc);
 			this.codeBlock.setLoc(endLoc);
+			for (let i = 0; i < this.scope.exitLocCount; i++) {
+				this.codeBlock.setLoc(this.scope.exitLocs[i]);
+			}
+			this.popScope();
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
-				this.pushScopeBlock();
+				this.pushScopeLoop();
 				let startBoundExpr = expr.isReverse ? expr.sequence.upperBound : expr.sequence.lowerBound;
 				let endBoundExpr = expr.isReverse ? expr.sequence.lowerBound : expr.sequence.upperBound;				
 				let endBoundType = this.eval(endBoundExpr);
@@ -3757,11 +3802,14 @@ class Compiler {
 				}
 				this.codeBlock.codeJmp(testLoc);
 				this.codeBlock.setLoc(endLoc);
+				for (let i = 0; i < this.scope.exitLocCount; i++) {
+					this.codeBlock.setLoc(this.scope.exitLocs[i]);
+				}
 				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.popScope();
 				return EVAL_RESULT_OK;
 			} else {
-				this.pushScopeBlock();
+				this.pushScopeLoop();
 				let sequence = this.eval(expr.sequence);
 				if (sequence.isError()) {
 					return sequence;
@@ -3786,11 +3834,41 @@ class Compiler {
 				this.codeBlock.codePopLocal(indexVar.offset);
 				this.codeBlock.codeJmp(testLoc);
 				this.codeBlock.setLoc(endLoc);
+				for (let i = 0; i < this.scope.exitLocCount; i++) {
+					this.codeBlock.setLoc(this.scope.exitLocs[i]);
+				}
 				this.codeBlock.codePopVoid(this.scope.variableCount);
 				this.popScope();
 				return EVAL_RESULT_OK;
 			}
 			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
+		}
+		if (expr.tag === "ast-exit") {
+			let currentScope = this.scope;
+			let variableCount = 0;
+			while (currentScope !== null && currentScope.isLoop == false) {
+				variableCount += currentScope.variableCount;
+				currentScope = currentScope.parent; 
+			}
+			if (currentScope === null) {
+				return EvalError.exitNotInLoop().fromExpr(expr);
+			}
+			if (expr.condition === null) {
+				this.codeBlock.codePopVoid(variableCount);
+				currentScope.exitLocs[currentScope.exitLocCount] = this.codeBlock.codeJmp(0);
+				currentScope.exitLocCount++;
+			} else {
+				let condType = this.eval(expr.condition);
+				if (condType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
+				}
+				let falseLoc = this.codeBlock.codeJz(0);
+				this.codeBlock.codePopVoid(variableCount);
+				currentScope.exitLocs[currentScope.exitLocCount] = this.codeBlock.codeJmp(0);
+				currentScope.exitLocCount++;
+				this.codeBlock.setLoc(falseLoc);
+			}
+			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-raise") {
 			let raiseType = this.eval(expr.expr);

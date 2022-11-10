@@ -3,7 +3,13 @@
 <html>
 <head>
 <title>PL/W</title>
-<style>#textin { border-style: solid; border-width: 1px }</style>
+<style>
+body { font-family: Monospace; }
+p { font-weight: bold; }
+label { font-size: 12px; font-weight: bold; }
+#textin { border-style: solid; border-width: 1px; font-size: 14px; }
+#textout { width: 100%; box-sizing: border-box; }
+</style>
 </head>
 <body>
 
@@ -20,7 +26,7 @@
 <input type="button" value="exec" onclick="onExecClick(false)">
 <input type="button" value="debug" onclick="onExecClick(true)">
 <input type="button" value="eval" onclick="onEvalClick()">
-<label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select><br>
+<label for="snippets">Snippets</label> <select id="snippets" onchange="onSnippetChange()"><option value=""></option></select><br>
 
 <div id="textin"></div>
 <script src="../ace-builds-1.5.0/src-min/ace.js" type="text/javascript" charset="utf-8"></script>
@@ -28,8 +34,8 @@
 <script>
     var textinEditor = ace.edit("textin");
     textinEditor.setOptions({
-    	minLines: 20,
-    	maxLines: 20,
+    	minLines: 25,
+    	maxLines: 25,
     	autoScrollEditorIntoView: true
     });
     textinEditor.setTheme("ace/theme/eclipse");
@@ -40,8 +46,8 @@
 <input type="button" value="display context" onclick="onDisplayContextClick()">
 <input type="button" value="display stack machine" onclick="onDisplayStackMachineClick()">
 <input type="button" value="reset context" onclick="onResetContextClick()"><br>
-<textarea id="textout" rows="10" cols="100"></textarea><br>
-<textarea id="debug" rows="10" cols="100"></textarea>
+<textarea id="textout" rows="15" cols="100"></textarea><br>
+
 
 <p id="snippet-variable-title" class="snippet">Variable</p>
 <pre id="snippet-variable">
@@ -217,16 +223,31 @@ say_hello('HAL');
 say_hello('Jane Smith');
 </pre>
 
-
 <p id="snippet-basic-function-title" class="snippet">Basic function</p>
 <pre id="snippet-basic-function">
-var toto := 42;
-function f(a integer) integer begin
-  toto := toto + a;
-  return toto + 1;
-end f;
-print('f(toto): ' || text(f(toto)));
-print('expected: 85');
+function triple(a integer) integer begin
+  var double := a + a;
+  return double + a;
+end triple;
+if triple(2) = 6 and triple(3) = 9 then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+</pre>
+
+<p id="snippet-context-param-title" class="snippet">Context Parameter</p>
+<pre id="snippet-context-param">
+var id := 42;
+function next_id(inc integer, ctx id integer) integer begin
+  id := id + inc;
+  return id;
+end next_id;
+if next_id(10, ctx id) = 52 and next_id(10, ctx id) = 62 and id = 62 then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
 </pre>
 
 <p id="snippet-nested-functions-title" class="snippet">Nested functions</p>

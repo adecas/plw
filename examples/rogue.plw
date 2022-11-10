@@ -130,6 +130,7 @@ type entity_display variant(none, some {glyph text, fg_color text, bg_color text
 type entity_viewrange variant(none, some {range integer, flags [[boolean]], dirty boolean});
 type entity_combatstat variant(none, some {max_hp integer, hp integer, defense integer, power integer});
 type entity_item variant(none, some {owner_id integer});
+type entity_potion variant(none, some {hp integer});
 
 type entity {
 	name text,
@@ -140,7 +141,8 @@ type entity {
 	combat_stat entity_combatstat,
 	is_monster boolean,
 	blocks_tile boolean, 
-	item entity_item
+	item entity_item,
+	potion entity_potion
 };
 
 
@@ -286,26 +288,20 @@ function visible_tile_flags(tiles [[tile_type]], x integer, y integer, range int
 		for i in 0 .. range * 2 loop
 			var border_x := case when dir = 1 or dir = 3 then i when dir = 2 then 2 * range else 0 end;
 			var border_y := case when dir = 2 or dir = 4 then i when dir = 3 then 2 * range else 0 end;
-			var is_blocked := false;
 			for d in line_dots(range, range, border_x, border_y) loop
-				if not is_blocked then
-					flags[d.y][d.x] := true;
-					if tiles[y - range + d.y][x - range + d.x] = tile_type_wall() then
-						is_blocked := true;
-					else
-						if d.x > 0 then
-							flags[d.y][d.x - 1] := true;
-						end if;
-						if d.x < 2 * range then
-							flags[d.y][d.x + 1] := true;
-						end if;
-						if d.y > 0 then
-							flags[d.y - 1][d.x] := true;
-						end if;
-						if d.y < 2 * range then
-							flags[d.y + 1][d.x] := true;
-						end if;
-					end if;
+				flags[d.y][d.x] := true;
+				exit when tiles[y - range + d.y][x - range + d.x] = tile_type_wall();
+				if d.x > 0 then
+					flags[d.y][d.x - 1] := true;
+				end if;
+				if d.x < 2 * range then
+					flags[d.y][d.x + 1] := true;
+				end if;
+				if d.y > 0 then
+					flags[d.y - 1][d.x] := true;
+				end if;
+				if d.y < 2 * range then
+					flags[d.y + 1][d.x] := true;
 				end if;
 			end loop;
 		end loop;
@@ -392,7 +388,8 @@ function spawn_player(ctx entities [entity], ctx map map) integer begin
 		combat_stat: entity_combatstat_some({max_hp: 100, hp: 100, defense: 5, power: 10}),
 		is_monster: false,
 		blocks_tile: true,
-		item: entity_item_none()
+		item: entity_item_none(),
+		potion: entity_potion_none()
 	} as entity);
 	return player_id;
 end spawn_player;
@@ -414,7 +411,8 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 				combat_stat: entity_combatstat_some({max_hp: 20, hp: 20, defense: 2, power: 10}),
 				is_monster: true,
 				blocks_tile: true,
-				item: entity_item_none()
+				item: entity_item_none(),
+				potion: entity_potion_none()
 			} as entity);
 			spawn_points := spawn_points || [spawn_point];
 		end if;
@@ -432,7 +430,8 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 				combat_stat: entity_combatstat_none(),
 				is_monster: false,
 				blocks_tile: false,
-				item: entity_item_some({owner_id: -1})
+				item: entity_item_some({owner_id: -1}),
+				potion: entity_potion_some({hp: 10})
 			} as entity);
 			spawn_points := spawn_points || [spawn_point];
 		end if;		
@@ -501,7 +500,7 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 		end if;
 	end loop;
 	kindof player.combat_stat when some(cs) then
-		var status_line := 'Heath: ' || text(cs.hp) || '/' || text(cs.max_hp);
+		var status_line := 'Health: ' || text(cs.hp) || '/' || text(cs.max_hp);
 		status_line := status_line || text((char_code(' ', 0) as char) ** (SCREEN_WIDTH - length(status_line)));
 		write(ansi_color(ANSI_YELLOW, ANSI_BLUE) || status_line || ansi_color(ANSI_WHITE, ANSI_BLACK));
 	end;
@@ -620,7 +619,7 @@ procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], 
 		if entity.is_active and entity.is_monster then
 			kindof entity.position when some(p) then
 				kindof entities[player_id].position when some(player_pos) then
-					if in_viewrange(player_pos, entities[i]) then
+					if entities[player_id].is_active and in_viewrange(player_pos, entities[i]) then
 						var path := find_path(map, p, player_pos);
 						if length(path) > 0 then
 							var next_pos := path[0];
@@ -641,16 +640,23 @@ procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], 
 end monster_tick;
 
 procedure entity_use_item(ctx entities [entity], ctx messages [text], entity_id integer, item_id integer) begin
-	add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
+	kindof entities[item_id].potion when some(p) then
+		kindof entities[entity_id].combat_stat when some(cs) then
+			cs.hp := cs.hp + p.hp;
+			entities[entity_id].combat_stat := entity_combatstat_some(cs);
+			entities[item_id].is_active := false;
+			entities[item_id].item := entity_item_some({owner_id: -1});
+			add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
+		end;
+	end;
 end entity_use_item;
 
 procedure inventory_loop(ctx entities [entity], ctx messages [text], player_id integer) begin
-	var again := true;
-	while again loop
+	while true loop
 		var items := [] as [integer];
 		for i in 0 .. length(entities) - 1 loop
 			kindof entities[i].item when some(item) then
-				if item.owner_id >= 0 then
+				if item.owner_id = player_id then
 					items := items || [i];
 				end if;
 			end;
@@ -661,17 +667,19 @@ procedure inventory_loop(ctx entities [entity], ctx messages [text], player_id i
 		end loop;
 		print('x: Exit inventory' || ANSI_CR);
 		var input := get_char();
-		if input = CHAR_QUIT then
-			again := false;
-		else
-			var item_id := input as integer - char_code('1', 0);
-			if item_id >= 0 and item_id < 9 and item_id < length(items) then
-				entity_use_item(ctx entities, ctx messages, player_id, items[item_id]);
-				again := false;
-			end if;
+		exit when input = CHAR_QUIT;
+		var item_id := input as integer - char_code('1', 0);
+		if item_id >= 0 and item_id < 9 and item_id < length(items) then
+			entity_use_item(ctx entities, ctx messages, player_id, items[item_id]);
+			exit;
 		end if;
 	end loop;
 end inventory_loop;
+
+procedure game_over_loop() begin
+	print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'You died, game over.' || ANSI_CR);			
+	var input := get_char();
+end game_over_loop;
 
 procedure main_loop() begin
 	var entities := [] as [entity];
@@ -680,11 +688,13 @@ procedure main_loop() begin
 	var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
 	var player_id := spawn_player(ctx entities, ctx map);
 	populate_map(ctx entities, ctx map);
-
-	var again := true;
-	while again loop
+	while true loop
 		viewrange_tick(ctx entities, ctx map, player_id);
 		monster_tick(ctx entities, ctx map, ctx messages, player_id);
+		if not entities[player_id].is_active then
+			game_over_loop();
+			exit;
+		end if;
 		render(ctx screen, entities, map);
 		display(screen, entities[player_id], messages);
 		var input := get_char();
@@ -709,7 +719,7 @@ procedure main_loop() begin
 		elsif input = CHAR_INVENTORY then
 			inventory_loop(ctx entities, ctx messages, player_id);
 		elsif input = CHAR_QUIT then
-			again := false;
+			exit;
 		end if;
 	end loop;
 end main_loop;
