@@ -280,13 +280,13 @@ class Parser {
 			}
 		}
 		
-		if (this.peekToken() === TOK_AS) {
+		while (this.peekToken() === TOK_AS) {
 			let asToken = this.readToken();
 			let exprType = this.readType();
 			if (Parser.isError(exprType)) {
 				return exprType;
 			}
-			return new AstAs(expr, exprType).fromToken(asToken);
+			expr = new AstAs(expr, exprType).fromToken(asToken);
 		}
 		
 		return expr;

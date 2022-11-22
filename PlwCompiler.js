@@ -1125,55 +1125,6 @@ class Compiler {
 			}
 			let namedType = new EvalTypeName(expr.typeName, underlyingType);
 			this.context.addType(namedType);
-			if (underlyingType.tag === "res-type-variant") {
-				// generate builders for the variant kinds that returns the named type
-				let variantType = underlyingType;
-				for (let i = 0; i < variantType.fieldCount; i++) {
-					let paramCount = 0;
-					let params = [];
-					if (variantType.fields[i].fieldType !== null) {
-						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
-					}
-					let evalFunc = new EvalResultFunction(
-						expr.typeName + "_" + variantType.fields[i].fieldName,
-						new EvalResultParameterList(paramCount, params),
-						null,
-						false
-					);
-					if (this.context.getFunction(evalFunc) !== null) {
-						this.context.removeType(namedType.typeKey());
-						return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);
-					}
-				}
-				for (let i = 0; i < variantType.fieldCount; i++) {
-					let paramCount = 0;
-					let params = [];
-					if (variantType.fields[i].fieldType !== null) {
-						paramCount = 1;
-						params[0] = new EvalResultParameter("variant_kind", variantType.fields[i].fieldType, false);
-					}
-					let evalFunc = new EvalResultFunction(
-						expr.typeName + "_" + variantType.fields[i].fieldName,
-						new EvalResultParameterList(paramCount, params),
-						namedType,
-						false
-					);
-					this.context.addFunction(evalFunc);
-					let codeBlockId = this.context.addCodeBlock(evalFunc.functionKey());
-					let codeBlock = this.context.codeBlocks[codeBlockId];
-					if (paramCount === 0) {
-						codeBlock.codePush(0);
-					} else {
-						codeBlock.codePushLocal(-5);
-					}
-					codeBlock.codePush(i);
-					codeBlock.codeCreateRecord(2);
-					codeBlock.codeRetVal();
-					evalFunc.codeBlockIndex = codeBlockId;
-					variantType.fields[i].builder = evalFunc;
-				}
-			}
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-variable-declaration") {
@@ -1625,6 +1576,9 @@ class Compiler {
 				currentScope.exitLocCount++;
 			} else {
 				let condType = this.eval(expr.condition);
+				if (condType.isError()) {
+					return condType;
+				}
 				if (condType !== EVAL_TYPE_BOOLEAN) {
 					return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
 				}
@@ -1907,6 +1861,44 @@ class Compiler {
 				}
 				return asType;
 			}
+			let actAsType = asType;
+			while (actAsType.tag === "res-type-name") {
+				actAsType = actAsType.underlyingType;
+			}
+			if (actAsType.tag === "res-type-variant") {
+				if (expr.expr.tag === "ast-variable") {
+					let varName = expr.expr.varName;
+					let fieldFound = false;
+					for (let i = 0; i < actAsType.fieldCount; i++) {
+						if (actAsType.fields[i].fieldName === varName) {
+							if (actAsType.fields[i].fieldType === null) {
+								this.codeBlock.codePush(0);
+								this.codeBlock.codePush(i);
+								this.codeBlock.codeCreateRecord(2);
+								return asType;
+							}
+						}
+					}
+				} else if (expr.expr.tag === "ast-function" && expr.expr.argList.argCount === 1) {
+					let funcName = expr.expr.functionName;
+					for (let i = 0; i < actAsType.fieldCount; i++) {
+						if (actAsType.fields[i].fieldName === funcName) {
+							if (actAsType.fields[i].fieldType !== null) {
+								let argType = this.eval(expr.expr.argList.args[0]);
+								if (argType !== actAsType.fields[i].fieldType) {
+									return EvalError.wrongType(
+										argType,
+										actAsType.fields[i].fieldType.typeKey()
+									).fromExpr(expr.expr.argList.args[0]);
+								}
+								this.codeBlock.codePush(i);
+								this.codeBlock.codeCreateRecord(2);
+								return asType;
+							}
+						}
+					}
+				}
+			}
 			let valueType = this.eval(expr.expr);
 			if (valueType.isError()) {
 				return valueType;
@@ -1914,15 +1906,15 @@ class Compiler {
 			if (valueType === asType) {
 				return asType;
 			}
-			if (valueType.tag === "res-type-name" && asType === valueType.underlyingType) {
-				return asType;
-			}
-			let actAsType = asType;
+			actAsType = asType;
 			while (actAsType.tag === "res-type-name") {
 				actAsType = actAsType.underlyingType;
 				if (valueType === actAsType) {
 					return asType;
 				}
+			}
+			if (valueType.tag === "res-type-name" && asType === valueType.underlyingType) {
+				return asType;
 			}
 			if (actAsType.tag === "res-type-abstract") {
 				for (let i = 0; i < actAsType.methodCount; i++) {

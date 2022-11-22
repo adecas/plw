@@ -434,9 +434,6 @@ end if;
 
 <p id="snippet-variant-records-title" class="snippet">Variant Records</p>
 <pre id="snippet-variant-records">
-# a variant record type automatically create a variable and a function
-# for each variant. the variable is numeric, and represents the kind
-# of the variant. The function is a constructor for the variant
 type status variant(none, error text, done integer);
 procedure print(s status ) begin
   print(kindof s
@@ -455,13 +452,13 @@ procedure print2(s status) begin
     	print('done: ' || text(row_count));
   end;
 end print2;
-var vr := status_done(5);
+var vr := done(5) as variant(none, error text, done integer) as status;
 print(vr);
 print2(vr);
-vr := status_none();
+vr := none as status;
 print(vr);
 print2(vr);
-vr := status_error('file not found');
+vr := error('file not found') as status;
 print(vr);
 print2(vr);
 </pre>
