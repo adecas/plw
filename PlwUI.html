@@ -461,6 +461,21 @@ print2(vr);
 vr := error('file not found') as status;
 print(vr);
 print2(vr);
+begin
+  const p := {x: 0, y: 0};
+  var v := some(p) as variant(none, some {x integer, y integer});
+  procedure toto(ctx a variant(none, some {x integer, y integer})) begin
+    kindof a when some(p2) then
+      p2.x := 42;
+    end;
+  end toto;
+  toto(ctx v);
+  if p.x = 0 then
+    print('Good');
+  else
+    print('Error: alternate reality');
+  end if;
+end;
 </pre>
 
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>

@@ -2,7 +2,7 @@
 
 // no arg
 
-const OPCODE_DEBUG										= 1;
+const OPCODE_SUSPEND									= 1;
 const OPCODE_DUP										= 2;
 const OPCODE_SWAP										= 3;
 const OPCODE_ADD										= 4;
@@ -45,32 +45,102 @@ const OPCODE_ENDED										= 40;
 const OPCODE_BASIC_ARRAY_TIMES							= 41;
 const OPCODE_ARRAY_TIMES								= 42;
 
-const OPCODE1_MAX										= 99;
+const OPCODE1_MAX										= 42;
 			
 // One arg			
 			
-const OPCODE_JZ											= 100;
-const OPCODE_JNZ										= 101;
-const OPCODE_JMP										= 102;
-const OPCODE_PUSH										= 103;
-const OPCODE_PUSH_GLOBAL								= 104;
-const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 105;
-const OPCODE_PUSH_LOCAL									= 106;
-const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 107;
-const OPCODE_PUSH_INDIRECTION							= 108;
-const OPCODE_PUSH_INDIRECT								= 109;
-const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 110;
-const OPCODE_POP_GLOBAL									= 111;
-const OPCODE_POP_LOCAL									= 112;
-const OPCODE_POP_INDIRECT								= 113;
-const OPCODE_POP_VOID									= 114;
-const OPCODE_CREATE_STRING								= 115;
-const OPCODE_CREATE_RECORD								= 116;
-const OPCODE_CREATE_BASIC_ARRAY							= 117;
-const OPCODE_CREATE_ARRAY							 	= 118;
-const OPCODE_CALL										= 119;
-const OPCODE_CALL_ABSTRACT								= 120;
-const OPCODE_CALL_NATIVE								= 121;
-const OPCODE_INIT_GENERATOR								= 122;
-const OPCODE_CREATE_EXCEPTION_HANDLER					= 123;
+const OPCODE_JZ											= 43;
+const OPCODE_JNZ										= 44;
+const OPCODE_JMP										= 45;
+const OPCODE_PUSH										= 46;
+const OPCODE_PUSH_GLOBAL								= 47;
+const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 48;
+const OPCODE_PUSH_LOCAL									= 49;
+const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 50;
+const OPCODE_PUSH_INDIRECTION							= 51;
+const OPCODE_PUSH_INDIRECT								= 52;
+const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 53;
+const OPCODE_POP_GLOBAL									= 54;
+const OPCODE_POP_LOCAL									= 55;
+const OPCODE_POP_INDIRECT								= 56;
+const OPCODE_POP_VOID									= 57;
+const OPCODE_CREATE_STRING								= 58;
+const OPCODE_CREATE_RECORD								= 59;
+const OPCODE_CREATE_BASIC_ARRAY							= 60;
+const OPCODE_CREATE_ARRAY							 	= 61;
+const OPCODE_CALL										= 62;
+const OPCODE_CALL_ABSTRACT								= 63;
+const OPCODE_CALL_NATIVE								= 64;
+const OPCODE_INIT_GENERATOR								= 65;
+const OPCODE_CREATE_EXCEPTION_HANDLER					= 66;
+
+const PLW_OPCODES = [
+	"",
+	"SUSPEND",
+	"DUP",
+	"SWAP",
+	"ADD",
+	"ADDF",
+	"SUB",
+	"SUBF",
+	"DIV",
+	"DIVF",
+	"REM",
+	"MUL",
+	"MULF",
+	"NEG",
+	"NEGF",
+	"GT",
+	"GTF",
+	"LT",
+	"LTF",
+	"GTE",
+	"GTEF",
+	"LTE",
+	"LTEF",
+	"AND",
+	"OR",
+	"NOT",
+	"EQ",
+	"EQF",
+	"EQ_REF",
+	"NE",
+	"NEF",
+	"PUSH_PTR_OFFSET",
+	"PUSH_PTR_OFFSET_FOR_MUTATE",
+	"POP_PTR_OFFSET",
+	"RAISE",
+	"RET_VAL",
+	"RET",
+	"YIELD",
+	"YIELD_DONE",
+	"NEXT",
+	"ENDED",
+	"BASIC_ARRAY_TIMES",
+	"ARRAY_TIMES",
+	"JZ",
+	"JNZ",
+	"JMP",
+	"PUSH",
+	"PUSH_GLOBAL",
+	"PUSH_GLOBAL_FOR_MUTATE",
+	"PUSH_LOCAL",
+	"PUSH_LOCAL_FOR_MUTATE",
+	"PUSH_INDIRECTION",
+	"PUSH_INDIRECT",
+	"PUSH_INDIRECT_FOR_MUTATE",
+	"POP_GLOBAL",
+	"POP_LOCAL",
+	"POP_INDIRECT",
+	"POP_VOID",
+	"CREATE_STRING",
+	"CREATE_RECORD",
+	"CREATE_BASIC_ARRAY",
+	"CREATE_ARRAY",
+	"CALL",
+	"CALL_ABSTRACT",
+	"CALL_NATIVE",
+	"INIT_GENERATOR",
+	"CREATE_EXCEPTION_HANDLER"
+];
 

@@ -45,6 +45,10 @@ class StackMachineError {
 		this.ip = ip;
 		return this;
 	}
+	
+	static suspended() {
+		return new StackMachineError("suspended");
+	}
 		
 	static stackAccessOutOfBound() {
 		return new StackMachineError("stack access out of bound");
@@ -196,14 +200,14 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodePushPtrOffset(isForMutate) {
+	opcodePushPtrOffset() {
 		if (this.sp < 2) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let refId = this.stack[this.sp - 2];
 		let offset = this.stack[this.sp - 1];
 		let refManError = new PlwRefManagerError();
-		let offsetVal = this.refMan.getOffsetValue(refId, offset, isForMutate, refManError);
+		let offsetVal = this.refMan.getOffsetValue(refId, offset, false, refManError);
 		if (refManError.hasError()) {
 			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 		}
@@ -223,6 +227,33 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushPtrOffsetForMutate() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let refId = this.stack[this.sp - 2];
+		let offset = this.stack[this.sp - 1];
+		let refManError = new PlwRefManagerError();
+		let offsetVal = this.refMan.getOffsetValue(refId, offset, true, refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = offsetVal.val;
+		this.stackMap[this.sp - 2] = offsetVal.isRef;
+		if (offsetVal.isRef === true) {
+			this.refMan.incRefCount(this.stack[this.sp - 2], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.sp--;
+		this.refMan.decRefCount(refId, refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		return null;
+	}
+
 	opcodeEqRef() {
 		if (this.sp < 2) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -499,198 +530,298 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodeDup() {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp] = this.stack[this.sp - 1];
+		this.stackMap[this.sp] = this.stackMap[this.sp - 1];
+		if (this.stackMap[this.sp]) {
+			this.refMan.incRefCount(this.stack[this.sp]);
+		}
+		this.sp++;
+		return null;
+	}
+
+	opcodeAdd() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] += this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeAddf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] += this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeSub() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] -= this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeSubf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] -= this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeDivf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] /= this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeMul() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] *= this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeMulf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] *= this.stack[this.sp - 1];
+		this.sp--;
+		return null;
+	}
+
+	opcodeNeg() {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
+		return null;
+	}
+
+	opcodeNegf() {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
+		return null;
+	}
+
+	opcodeGt() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeGtf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeLt() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeLtf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeGte() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeGtef() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeLte() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeLtef() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeAnd() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) && (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeOr() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) || (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeNot() {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 1] = this.stack[this.sp - 1] === 0 ? 1 : 0;
+		return null;
+	}
+
+	opcodeEq() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeEqf() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeNe() {
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
+	opcodeNef() {	
+		if (this.sp < 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
+		this.sp--;
+		return null;
+	}
+
 	opcode1(code) {
 		switch(code) {
-		case OPCODE_DEBUG:
-			console.log(this);
-			return null;
+		case OPCODE_SUSPEND:
+			return StackMachineError.suspended().fromCode(this.codeBlockId, this.ip);
 		case OPCODE_DUP:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp] = this.stack[this.sp - 1];
-			this.stackMap[this.sp] = this.stackMap[this.sp - 1];
-			if (this.stackMap[this.sp]) {
-				this.refMan.incRefCount(this.stack[this.sp]);
-			}
-			this.sp++;
-			return null;
+			return this.opcodeDup();
 		case OPCODE_SWAP:
 			return this.opcodeSwap();
 		case OPCODE_ADD:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] += this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeAdd();
 		case OPCODE_ADDF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] += this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeAddf();
 		case OPCODE_SUB:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] -= this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeSub();
 		case OPCODE_SUBF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] -= this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeSubf();
 		case OPCODE_DIV:
 			return this.opcodeDiv();
 		case OPCODE_DIVF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] /= this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeDivf();
 		case OPCODE_REM:
 			return this.opcodeRem();
 		case OPCODE_MUL:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] *= this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeMul();
 		case OPCODE_MULF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] *= this.stack[this.sp - 1];
-			this.sp--;
-			return null;
+			return this.opcodeMulf();
 		case OPCODE_NEG:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
-			return null;
+			return this.opcodeNeg();
 		case OPCODE_NEGF:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
-			return null;
+			return this.opcodeNegf();
 		case OPCODE_GT:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeGt();
 		case OPCODE_GTF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeGtf();
 		case OPCODE_LT:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeLt();
 		case OPCODE_LTF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeLtf();
 		case OPCODE_GTE:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeGte();
 		case OPCODE_GTEF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeGtef();
 		case OPCODE_LTE:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeLte();
 		case OPCODE_LTEF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeLtef();
 		case OPCODE_AND:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) && (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeAnd();
 		case OPCODE_OR:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) || (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeOr();
 		case OPCODE_NOT:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 1] = this.stack[this.sp - 1] === 0 ? 1 : 0;
-			return null;
+			return this.opcodeNot();
 		case OPCODE_EQ:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeEq();
 		case OPCODE_EQF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeEqf();
 		case OPCODE_EQ_REF:
 			return this.opcodeEqRef();
 		case OPCODE_NE:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeNe();
 		case OPCODE_NEF:
-			if (this.sp < 2) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
-			this.sp--;
-			return null;
+			return this.opcodeNef();
 		case OPCODE_PUSH_PTR_OFFSET:
+			return this.opcodePushPtrOffset();
 		case OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE:
-			return this.opcodePushPtrOffset(code === OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE);
+			return this.opcodePushPtrOffsetForMutate();
 		case OPCODE_POP_PTR_OFFSET:
 			return this.opcodePopPtrOffset();
 		case OPCODE_RAISE:
@@ -893,17 +1024,9 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodePushGlobal(offset, isForMutate) {
+	opcodePushGlobal(offset) {
 		if (offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (isForMutate) {
-			let refManError = new PlwRefManagerError();
-			this.stack[offset] = this.refMan.makeMutable(this.stack[offset], refManError);
-			if (refManError.hasError()) {
-				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
-			}
-			this.stackMap[offset] = true;
 		}
 		this.stack[this.sp] = this.stack[offset];
 		this.stackMap[this.sp] = this.stackMap[offset];
@@ -918,17 +1041,32 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodePushLocal(offset, isForMutate) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+	opcodePushGlobalForMutate(offset) {
+		if (offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		if (isForMutate) {
+		let refManError = new PlwRefManagerError();
+		this.stack[offset] = this.refMan.makeMutable(this.stack[offset], refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		this.stackMap[offset] = true;
+		this.stack[this.sp] = this.stack[offset];
+		this.stackMap[this.sp] = this.stackMap[offset];
+		if (this.stackMap[this.sp] === true) {
 			let refManError = new PlwRefManagerError();
-			this.stack[this.bp + offset] = this.refMan.makeMutable(this.stack[this.bp + offset], refManError);
+			this.refMan.incRefCount(this.stack[this.sp], refManError);
 			if (refManError.hasError()) {
 				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
 			}
-			this.stackMap[this.bp + offset] = true;
+		}
+		this.sp++;
+		return null;
+	}
+
+	opcodePushLocal(offset) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		this.stack[this.sp] = this.stack[this.bp + offset];
 		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
@@ -943,7 +1081,30 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodePushIndirect(offset, isForMutate) {
+	opcodePushLocalForMutate(offset) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let refManError = new PlwRefManagerError();
+		this.stack[this.bp + offset] = this.refMan.makeMutable(this.stack[this.bp + offset], refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		this.stackMap[this.bp + offset] = true;
+		this.stack[this.sp] = this.stack[this.bp + offset];
+		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
+		if (this.stackMap[this.sp] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.incRefCount(this.stack[this.sp], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.sp++;
+		return null;
+	}
+	
+	opcodePushIndirect(offset) {
 		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
@@ -951,14 +1112,6 @@ class StackMachine {
 		if (directOffset < 0 || directOffset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}		
-		if (isForMutate) {
-			let refManError = new PlwRefManagerError();
-			this.stack[directOffset] = this.refMan.makeMutable(this.stack[directOffset], refManError);
-			if (refManError.hasError()) {
-				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
-			}
-			this.stackMap[directOffset] = true;
-		}
 		this.stack[this.sp] = this.stack[directOffset];
 		this.stackMap[this.sp] = this.stackMap[directOffset];
 		if (this.stackMap[this.sp] === true) {
@@ -972,6 +1125,33 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushIndirectForMutate(offset) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let directOffset = this.stack[this.bp + offset];
+		if (directOffset < 0 || directOffset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}		
+		let refManError = new PlwRefManagerError();
+		this.stack[directOffset] = this.refMan.makeMutable(this.stack[directOffset], refManError);
+		if (refManError.hasError()) {
+			return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		this.stackMap[directOffset] = true;
+		this.stack[this.sp] = this.stack[directOffset];
+		this.stackMap[this.sp] = this.stackMap[directOffset];
+		if (this.stackMap[this.sp] === true) {
+			let refManError = new PlwRefManagerError();
+			this.refMan.incRefCount(this.stack[this.sp], refManError);
+			if (refManError.hasError()) {
+				return StackMachineError.referenceManagerError(refManError).fromCode(this.codeBlockId, this.ip);
+			}
+		}
+		this.sp++;
+		return null;
+	}
+
 	opcodePopGlobal(offset) {
 		if (this.sp < 1 || offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -1027,48 +1207,97 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushIndirection(arg1) {
+		this.stack[this.sp] = this.bp + arg1;
+		this.stackMap[this.sp] = false;
+		this.sp++;
+		return null;
+	}
+	
+	opcodeJz(arg1) {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		if (this.stack[this.sp - 1] === 0) {
+			this.ip = arg1;
+		}
+		this.sp--;
+		return null;
+	}
+
+	opcodeJnz(arg1) {
+		if (this.sp < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		if (this.stack[this.sp - 1] !== 0) {
+			this.ip = arg1;
+		}
+		this.sp--;
+		return null;
+	}
+
+	opcodeJmp(arg1) {
+		this.ip = arg1;
+		return null;
+	}
+	
+	opcodePush(arg1) {
+		this.stack[this.sp] = arg1;
+		this.stackMap[this.sp] = false;
+		this.sp++;
+		return null;
+	}
+
+	opcodeCall(arg1) {
+		if (arg1 < 0 || arg1 > this.codeBlocks.length) {
+			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp] = this.codeBlockId;
+		this.stackMap[this.sp] = false;
+		this.sp++;
+		this.stack[this.sp] = this.ip;
+		this.stackMap[this.sp] = false;
+		this.sp++;					
+		this.stack[this.sp] = this.bp;
+		this.stackMap[this.sp] = false;
+		this.sp++;
+		this.bp = this.sp;
+		this.codeBlockId = arg1;
+		this.ip = 0;
+		return null;
+	}
+
+	opcodeCreateExceptionHandler(arg1) {
+		this.stack[this.sp] = PlwExceptionHandlerRef.make(this.refMan, this.codeBlockId, arg1, this.bp);
+		this.stackMap[this.sp] = true;
+		this.sp++;
+		return null;
+	}
+
 	opcode2(code, arg1) {
 		switch(code) {
 		case OPCODE_JZ:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			if (this.stack[this.sp - 1] === 0) {
-				this.ip = arg1;
-			}
-			this.sp--;
-			return null;
+			return this.opcodeJz(arg1);
 		case OPCODE_JNZ:
-			if (this.sp < 1) {
-				return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			if (this.stack[this.sp - 1] !== 0) {
-				this.ip = arg1;
-			}
-			this.sp--;
-			return null;
+			return this.opcodeJnz(arg1);
 		case OPCODE_JMP:
-			this.ip = arg1;
-			return null;
+			return this.opcodeJmp(arg1);
 		case OPCODE_PUSH:
-			this.stack[this.sp] = arg1;
-			this.stackMap[this.sp] = false;
-			this.sp++;
-			return null;
+			return this.opcodePush(arg1);
 		case OPCODE_PUSH_GLOBAL:
+			return this.opcodePushGlobal(arg1);
 		case OPCODE_PUSH_GLOBAL_FOR_MUTATE:
-			return this.opcodePushGlobal(arg1, code === OPCODE_PUSH_GLOBAL_FOR_MUTATE);
+			return this.opcodePushGlobalForMutate(arg1);
 		case OPCODE_PUSH_LOCAL:
+			return this.opcodePushLocal(arg1);
 		case OPCODE_PUSH_LOCAL_FOR_MUTATE:
-			return this.opcodePushLocal(arg1, code === OPCODE_PUSH_GLOBAL_FOR_MUTATE);
+			return this.opcodePushLocalForMutate(arg1);
 		case OPCODE_PUSH_INDIRECTION:
-			this.stack[this.sp] = this.bp + arg1;
-			this.stackMap[this.sp] = false;
-			this.sp++;
-			return null;
+			return this.opcodePushIndirection(arg1);
 		case OPCODE_PUSH_INDIRECT:
+			return this.opcodePushIndirect(arg1);
 		case OPCODE_PUSH_INDIRECT_FOR_MUTATE:
-			return this.opcodePushIndirect(arg1, code === OPCODE_PUSH_INDIRECT_FOR_MUTATE);
+			return this.opcodePushIndirectForMutate(arg1);
 		case OPCODE_POP_GLOBAL:
 			return this.opcodePopGlobal(arg1);
 		case OPCODE_POP_LOCAL:
@@ -1086,22 +1315,7 @@ class StackMachine {
 		case OPCODE_CREATE_ARRAY:
 			return this.opcodeCreateArray(arg1);
 		case OPCODE_CALL:
-			if (arg1 < 0 || arg1 > this.codeBlocks.length) {
-				return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-			}
-			this.stack[this.sp] = this.codeBlockId;
-			this.stackMap[this.sp] = false;
-			this.sp++;
-			this.stack[this.sp] = this.ip;
-			this.stackMap[this.sp] = false;
-			this.sp++;					
-			this.stack[this.sp] = this.bp;
-			this.stackMap[this.sp] = false;
-			this.sp++;
-			this.bp = this.sp;
-			this.codeBlockId = arg1;
-			this.ip = 0;
-			return null;
+			return this.opcodeCall(arg1);
 		case OPCODE_CALL_ABSTRACT:
 			return this.opcodeCallAbstract(arg1);
 		case OPCODE_CALL_NATIVE:
@@ -1109,10 +1323,7 @@ class StackMachine {
 		case OPCODE_INIT_GENERATOR:
 			return this.opcodeInitGenerator(arg1);
 		case OPCODE_CREATE_EXCEPTION_HANDLER:
-			this.stack[this.sp] = PlwExceptionHandlerRef.make(this.refMan, this.codeBlockId, arg1, this.bp);
-			this.stackMap[this.sp] = true;
-			this.sp++;
-			return null;
+			return this.opcodeCreateExceptionHandler(arg1);
 		default:
 			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
 		}
@@ -1140,6 +1351,39 @@ class StackMachine {
 			}
 		}
 		return null;
+	}
+	
+	dump() {
+		let dmp = "cb: " + this.codeBlockId + ", ip: " + this.ip + ",  bp: " + this.bp + ", sp: " + this.sp + "\n";
+		if (this.codeBlockId !== -1) {
+			let codeBlock = this.codeBlocks[this.codeBlockId];
+			dmp += "codeblock " + this.codeBlockId + ": " + codeBlock.blockName + "\n";
+			for (let i = 0; i < codeBlock.codeSize; i++) {
+				let opcode = codeBlock.codes[i];
+				let opcodeName = PLW_OPCODES[opcode];
+				let prefix = (i === this.ip ? "> " : "") + i + ": ";
+				prefix = "          ".substring(0, 10 - prefix.length) + prefix;
+				if (opcode <= OPCODE1_MAX) {
+					dmp += prefix + opcodeName + "\n";
+				} else {
+					i++;
+					let arg1 = codeBlock.codes[i];
+					dmp += prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1 + "\n";
+				}
+			}
+		}
+		dmp += "stack:\n";
+		for (let i = 0; i < this.sp; i++) {
+			dmp += "    " + i + ": " + (this.stackMap[i] === true ? "ref " : "    ") + this.stack[i] + "\n";
+		}
+		dmp += "heap:\n";
+		for (let i = 0; i < this.refMan.refCount; i++) {
+			let ref = this.refMan.refs[i];
+			if (ref) {
+				dmp += "    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref) + "\n";
+			}
+		}
+		return dmp;
 	}
 
 }

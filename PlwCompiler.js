@@ -464,6 +464,10 @@ class CodeBlock {
 		this.codeSize++;
 	}
 	
+	codeSuspend() {
+		this.code1(OPCODE_SUSPEND);
+	}
+	
 	codeDup() {
 		this.code1(OPCODE_DUP);
 	}
@@ -1766,6 +1770,12 @@ class Compiler {
 			}
 			return EVAL_RESULT_OK;
 		}
+		if (expr.tag === "ast-directive") {
+			if (expr.text === "suspend") {
+				this.codeBlock.codeSuspend();
+			}
+			return EVAL_RESULT_OK;
+		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
 	
@@ -1885,6 +1895,9 @@ class Compiler {
 						if (actAsType.fields[i].fieldName === funcName) {
 							if (actAsType.fields[i].fieldType !== null) {
 								let argType = this.eval(expr.expr.argList.args[0]);
+								if (argType.isError()) {
+									return argType;
+								}
 								if (argType !== actAsType.fields[i].fieldType) {
 									return EvalError.wrongType(
 										argType,

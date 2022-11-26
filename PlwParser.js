@@ -71,10 +71,13 @@ class Parser {
 			stmt = this.readYield();
 		} else if (this.peekToken() === TOK_RAISE) {
 			stmt = this.readRaise();
-		} else if (this.peekToken() == TOK_FOR) {
+		} else if (this.peekToken() === TOK_FOR) {
 			stmt = this.readFor();
-		} else if (this.peekToken() == TOK_BEGIN) {
+		} else if (this.peekToken() === TOK_BEGIN) {
 			stmt = this.readAnonymousBlock();
+		} else if (this.peekToken() === TOK_DIRECTIVE) {
+			let dirTok = this.readToken();
+			stmt = new AstDirective(dirTok.text).fromToken(dirTok);
 		} else {
 			stmt = this.readAssign();
 		}

@@ -120,30 +120,147 @@ type screen_cell {
 	bg_color text
 };
 
+type opt_screen_cell variant(none, some screen_cell);
+
+function screen_cell(glyph text, fg_color text, bg_color text) screen_cell begin
+	return {glyph: glyph, fg_color: fg_color, bg_color: bg_color} as screen_cell;
+end screen_cell;
+
 const EMPTY_SCREEN_CELL := {glyph: GLYPH_SPACE, fg_color: ANSI_WHITE, bg_color: ANSI_BLACK} as screen_cell;
 const FLOOR_SCREEN_CELL := {glyph: GLYPH_FLOOR, fg_color: ANSI_BLUE, bg_color: ANSI_BLACK} as screen_cell;
 const WALL_SCREEN_CELL := {glyph: GLYPH_WALL, fg_color: ANSI_GREEN, bg_color: ANSI_BLACK} as screen_cell;
 
-type entity_position variant(none, some point);
-type entity_display variant(none, some {glyph text, fg_color text, bg_color text});
-type entity_viewrange variant(none, some {range integer, flags [[boolean]], dirty boolean});
-type entity_combatstat variant(none, some {max_hp integer, hp integer, defense integer, power integer});
-type entity_item variant(none, some {owner_id integer});
-type entity_potion variant(none, some {hp integer});
+type opt_point variant(none, some point);
 
-type entity {
-	name text,
-	is_active boolean,
-	position entity_position,
-	display entity_display,
-	viewrange entity_viewrange,
-	combat_stat entity_combatstat,
-	is_monster boolean,
-	blocks_tile boolean, 
-	item entity_item,
-	potion entity_potion
+type viewrange {
+	range integer,
+	flags [[boolean]],
+	dirty boolean
 };
 
+type opt_viewrange variant(none, some viewrange);
+
+function viewrange(range integer) viewrange begin
+	return {range: range, flags: [] as [[boolean]], dirty: true} as viewrange;
+end viewrange;
+
+type combatstat {
+	max_hp integer,
+	hp integer,
+	defense integer,
+	power integer
+};
+
+type opt_combatstat variant(none, some combatstat);
+
+function combatstat(max_hp integer, hp integer, defense integer, power integer) combatstat begin
+	return {max_hp: max_hp, hp: hp, defense: defense, power: power} as combatstat;
+end combatstat;
+
+type item {
+	owner_id integer
+};
+
+type opt_item variant(none, some item);
+
+function item(owner_id integer) item begin
+	return {owner_id: owner_id} as item;
+end item;
+
+type potion {
+	hp integer
+};
+
+type opt_potion variant(none, some potion);
+
+function potion(hp integer) potion begin
+	return {hp: hp} as potion;
+end potion;
+
+type scroll {range integer, damage integer};
+type opt_scroll variant(none, some scroll);
+
+type entity {
+	name				text,
+	is_active			boolean,
+	position			opt_point,
+	display				opt_screen_cell,
+	viewrange			opt_viewrange,
+	combat_stat			opt_combatstat,
+	is_monster			boolean,
+	blocks_tile			boolean, 
+	item				opt_item,
+	potion				opt_potion,
+	scroll				opt_scroll
+};
+
+function entity(
+	name		text,
+	position	point,
+	display		screen_cell,
+	viewrange	integer,
+	stat		combatstat,
+	is_monster	boolean
+) entity
+begin
+	return {
+		name:			name,
+		is_active:		true,
+		position:		some(position) 				as opt_point,
+		display:		some(display)				as opt_screen_cell,
+		viewrange:   	some(viewrange(viewrange))	as opt_viewrange,
+		combat_stat:	some(stat)					as opt_combatstat,
+		is_monster:		is_monster,
+		blocks_tile:	true,
+		item:			none						as opt_item,
+		potion:			none						as opt_potion,
+		scroll:			none						as opt_scroll
+	} as entity;
+end entity;
+
+function entity(
+	name		text,
+	position	point,
+	display		screen_cell,
+	potion		potion
+) entity
+begin
+	return {
+		name:			name,
+		is_active:		true,
+		position:		some(position) 		as opt_point,
+		display:		some(display)		as opt_screen_cell,
+		viewrange:   	none				as opt_viewrange,
+		combat_stat:	none				as opt_combatstat,
+		is_monster:		false,
+		blocks_tile:	false,
+		item:			some(item(-1))		as opt_item,
+		potion:			some(potion)		as opt_potion,
+		scroll:			none				as opt_scroll
+	} as entity;
+end entity;
+
+function entity(
+	name				text,
+	position			point,
+	display				screen_cell,
+	scroll				scroll
+) entity
+begin
+	return {
+		name:			name,
+		is_active:		true,
+		position:		some(position) 		as opt_point,
+		display:		some(display)		as opt_screen_cell,
+		viewrange:   	none				as opt_viewrange,
+		combat_stat:	none				as opt_combatstat,
+		is_monster:		false,
+		blocks_tile:	false,
+		item:			some(item(-1))		as opt_item,
+		potion:			none				as opt_potion,
+		scroll:			some(scroll)		as opt_scroll
+	} as entity;
+end entity;
 
 procedure print_visibility_flags(flags [[boolean]]) begin
 	for y in 0..length(flags) - 1 loop
@@ -378,18 +495,18 @@ end deactivate_entity;
 function spawn_player(ctx entities [entity], ctx map map) integer begin
 	var first_room := map.rooms[0];
 	var player_pos := {x: random(first_room.x1 + 1, first_room.x2), y: random(first_room.y1 + 1, first_room.y2)} as point;
-	var player_id := new_entity(ctx entities, ctx map, {
-		name: 'Player',
-		is_active: true,
-		position: some(player_pos) as entity_position,
-		display: some({glyph: GLYPH_PLAYER, fg_color: ANSI_YELLOW, bg_color: ANSI_BLACK}) as entity_display,
-		viewrange: some({range: 6, flags: [] as [[boolean]], dirty: true}) as entity_viewrange,
-		combat_stat: some({max_hp: 100, hp: 100, defense: 5, power: 10}) as entity_combatstat,
-		is_monster: false,
-		blocks_tile: true,
-		item: none as entity_item,
-		potion: none as entity_potion
-	} as entity);
+	var player_id := new_entity(
+		ctx entities,
+		ctx map,
+		entity(
+			'Player',
+			player_pos,
+			screen_cell(GLYPH_PLAYER, ANSI_YELLOW, ANSI_BLACK),
+			6,
+			combatstat(100, 100, 5, 10),
+			false
+		)
+	);
 	return player_id;
 end spawn_player;
 
@@ -401,37 +518,48 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 		if not point_in_array(spawn_point, spawn_points) then
 			var monster_type := random(0, 1);
 			var glyph := case when monster_type = 0 then 'g' else 'o' end;
-			var monster_id := new_entity(ctx entities, ctx map, {
-				name: case when monster_type = 0 then 'Gnome' else 'Orc' end,
-				is_active: true,
-				position: some(spawn_point) as entity_position,
-				display: some({glyph: glyph, fg_color: ANSI_RED, bg_color: ANSI_BLACK}) as entity_display,
-				viewrange: some({range: 4, flags: [] as [[boolean]], dirty: true}) as entity_viewrange,
-				combat_stat: some({max_hp: 20, hp: 20, defense: 2, power: 10}) as entity_combatstat,
-				is_monster: true,
-				blocks_tile: true,
-				item: none as entity_item,
-				potion: none as entity_potion
-			} as entity);
+			var monster_id := new_entity(
+				ctx entities,
+				ctx map,
+				entity(
+					case when monster_type = 0 then 'Gnome' else 'Orc' end,
+					spawn_point,
+					screen_cell(glyph, ANSI_RED, ANSI_BLACK),
+					4,
+					combatstat(20, 20, 2, 10),
+					true
+				)
+			);
 			spawn_points := spawn_points || [spawn_point];
 		end if;
 	end loop;
-	var potion_num := random(1, 4);
-	for i in 1 .. potion_num loop
+	var item_num := random(0, 9);
+	for i in 0 .. item_num loop
 		var spawn_point := {x: random(room.x1 + 1, room.x2), y: random(room.y1 + 1, room.y2)} as point;
 		if not point_in_array(spawn_point, spawn_points) then
-			var potion_id := new_entity(ctx entities, ctx map, {
-				name: 'Potion',
-				is_active: true,
-				position: some(spawn_point) as entity_position,
-				display: some({glyph: 'j', fg_color: ANSI_MAGENTA, bg_color: ANSI_BLACK}) as entity_display,
-				viewrange: none as entity_viewrange,
-				combat_stat: none as entity_combatstat,
-				is_monster: false,
-				blocks_tile: false,
-				item: some({owner_id: -1}) as entity_item,
-				potion: some({hp: 10}) as entity_potion
-			} as entity);
+			if random(0, 9) = 0 then
+				var potion_id := new_entity(
+					ctx entities,
+					ctx map,
+					entity(
+						'Potion',
+						spawn_point,
+						screen_cell('j', ANSI_MAGENTA, ANSI_BLACK),
+						potion(10)
+					)
+				);
+			else
+				var potion_id := new_entity(
+					ctx entities,
+					ctx map,
+					entity(
+						'Lighning scroll',
+						spawn_point,
+						screen_cell(')', ANSI_CYAN, ANSI_BLACK),
+						{range: 6, damage: 50} as scroll
+					)
+				);
+			end if;
 			spawn_points := spawn_points || [spawn_point];
 		end if;		
 	end loop;
@@ -454,7 +582,7 @@ procedure render(ctx screen [[screen_cell]], entities [entity], map map) begin
 				end;
 				if map.visible_tiles[y][x] then
 					var entity_id := map.blocking_entities[y][x];
-					if entity_id < 0 or entities[entity_id].display = none as entity_display then
+					if entity_id < 0 or entities[entity_id].display = none as opt_screen_cell then
 						entity_id := map.nonblocking_entities[y][x];
 					end if;
 					if entity_id >= 0 then
@@ -508,19 +636,19 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 	end loop;
 end display;
 
-procedure move_entity(ctx entities [entity], map map, entity_id integer, pos point) begin
+procedure move_entity(ctx entities [entity], ctx map map, entity_id integer, pos point) begin
 	kindof entities[entity_id].position when some(old_pos) then
 		if not map_is_blocked(map, pos) then
 			if map.blocking_entities[old_pos.y][old_pos.x] = entity_id then
 				map.blocking_entities[old_pos.y][old_pos.x] := -1;
 			end if;
-			entities[entity_id].position := some(pos) as entity_position;
+			entities[entity_id].position := some(pos) as opt_point;
 			if entities[entity_id].blocks_tile then
 				map.blocking_entities[pos.y][pos.x] := entity_id;
 			end if;
 			kindof entities[entity_id].viewrange when some(vr) then
 				vr.dirty := true;
-				entities[entity_id].viewrange := some(vr) as entity_viewrange;
+				entities[entity_id].viewrange := some(vr) as opt_viewrange;
 			end;
 		end if;
 	end;
@@ -536,7 +664,7 @@ procedure attack_entity(ctx entities [entity], ctx map map, ctx messages [text],
 				damage := 0;
 			end if;
 			target_stat.hp := target_stat.hp - damage;
-			entities[target_id].combat_stat := some(target_stat) as entity_combatstat;
+			entities[target_id].combat_stat := some(target_stat) as opt_combatstat;
 			add_message(ctx messages, attacker.name || ' dealt ' || text(damage) || ' damage to ' || target.name);
 			if target_stat.hp <= 0 then
 				deactivate_entity(ctx entities, ctx map, target_id);
@@ -552,7 +680,7 @@ procedure move_player(ctx entities [entity], ctx map map, ctx messages [text], p
 		if target_entity_id <> -1 then
 			attack_entity(ctx entities, ctx map, ctx messages, player_id, target_entity_id);
 		else
-			move_entity(ctx entities, map, player_id, {x: p.x + dx, y: p.y + dy} as point);
+			move_entity(ctx entities, ctx map, player_id, {x: p.x + dx, y: p.y + dy} as point);
 		end if;
 	end;
 end move_player;
@@ -567,8 +695,8 @@ procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, p
 			when some(item) then
 				map.nonblocking_entities[p.y][p.x] := -1;
 				item.owner_id := player_id;
-				entities[picked_id].item := some(item) as entity_item;
-				entities[picked_id].position := none as entity_position;
+				entities[picked_id].item := some(item) as opt_item;
+				entities[picked_id].position := none as opt_point;
 				map.nonblocking_entities[p.y][p.x] := -1;
 				add_message(ctx messages, entities[player_id].name || ' picked ' || entities[picked_id].name);
 			else
@@ -587,7 +715,7 @@ procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer) 
 					kindof entity.position when some(p) then
 						r.flags := visible_tile_flags(map.tiles, p.x, p.y, r.range);
 						r.dirty := false;
-						entities[i].viewrange := some(r) as entity_viewrange;
+						entities[i].viewrange := some(r) as opt_viewrange;
 						if i = player_id then
 							for y in 0 .. map.height - 1 loop
 								for x in 0 .. map.width - 1 loop
@@ -626,7 +754,7 @@ procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], 
 								attack_entity(ctx entities, ctx map, ctx messages, i, player_id);
 							elsif not map_is_blocked(map, next_pos) then
 								add_message(ctx messages, entity.name || ': don''t run coward');
-								move_entity(ctx entities, map, i, next_pos);
+								move_entity(ctx entities, ctx map, i, next_pos);
 							end if;
 						else
 							add_message(ctx messages, entity.name || ': come here if you''re a man');
@@ -638,19 +766,86 @@ procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], 
 	end loop;	
 end monster_tick;
 
-procedure entity_use_item(ctx entities [entity], ctx messages [text], entity_id integer, item_id integer) begin
+function choose_target_position(ctx screen [[screen_cell]], entities[entity], map map, messages [text], player_id integer) opt_point begin
+	kindof entities[player_id].position when some(pos) then
+		while true loop
+			render(ctx screen, entities, map);
+			screen[pos.y][pos.x].bg_color := ANSI_CYAN;
+			display(screen, entities[player_id], messages);
+			var input := get_char();
+			if input = CHAR_UP then
+				pos.y := pos.y - 1;
+			elsif input = CHAR_DOWN then
+				pos.y := pos.y + 1;
+			elsif input = CHAR_LEFT then
+				pos.x := pos.x - 1;
+			elsif input = CHAR_RIGHT then
+				pos.x := pos.x + 1;
+			elsif input = CHAR_UPRIGHT then
+				pos.y := pos.y - 1;
+				pos.x := pos.x + 1;
+			elsif input = CHAR_UPLEFT then
+				pos.y := pos.y - 1;
+				pos.x := pos.x - 1;
+			elsif input = CHAR_DOWNRIGHT then
+				pos.y := pos.y + 1;
+				pos.x := pos.x + 1;
+			elsif input = CHAR_DOWNLEFT then
+				pos.y := pos.y + 1;
+				pos.x := pos.x - 1;
+			elsif input = CHAR_PICKUP then
+				return some(pos) as opt_point;
+			elsif input = CHAR_QUIT then
+				exit;
+			end if;
+		end loop;
+	end;
+	return none as opt_point;
+end choose_target_position;
+
+procedure entity_use_item(
+	ctx screen		[[screen_cell]],
+	ctx entities	[entity],
+	ctx map			map,
+	ctx messages	[text],
+	entity_id		integer,
+	item_id			integer
+)
+begin
 	kindof entities[item_id].potion when some(p) then
 		kindof entities[entity_id].combat_stat when some(cs) then
 			cs.hp := cs.hp + p.hp;
-			entities[entity_id].combat_stat := some(cs) as entity_combatstat;
+			entities[entity_id].combat_stat := some(cs) as opt_combatstat;
 			entities[item_id].is_active := false;
-			entities[item_id].item := some({owner_id: -1}) as entity_item;
+			entities[item_id].item := some(item(-1)) as opt_item;
+			add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
+		end;
+	end;
+	kindof entities[item_id].scroll when some(s) then
+		var target_pos := choose_target_position(ctx screen, entities, map, messages, entity_id);
+		kindof target_pos when some(p) then
+			var target_id := map.blocking_entities[p.y][p.x];
+			if target_id <> -1 then
+				kindof entities[target_id].combat_stat when some(cs) then
+					cs.hp := cs.hp - s.damage;
+					entities[target_id].combat_stat := some(cs) as opt_combatstat;
+					add_message(
+						ctx messages,
+						entities[entity_id].name || ' dealt ' || text(s.damage) || ' damage to ' || entities[target_id].name
+					);
+					if cs.hp <= 0 then
+						deactivate_entity(ctx entities, ctx map, target_id);
+					end if;
+				end;
+			end if;
+			entities[item_id].is_active := false;
+			entities[item_id].item := some(item(-1)) as opt_item;
 			add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
 		end;
 	end;
 end entity_use_item;
 
-procedure inventory_loop(ctx entities [entity], ctx messages [text], player_id integer) begin
+function choose_inventory_item(entities [entity], player_id integer) integer begin
 	while true loop
 		var items := [] as [integer];
 		for i in 0 .. length(entities) - 1 loop
@@ -669,11 +864,11 @@ procedure inventory_loop(ctx entities [entity], ctx messages [text], player_id i
 		exit when input = CHAR_QUIT;
 		var item_id := input as integer - char_code('1', 0);
 		if item_id >= 0 and item_id < 9 and item_id < length(items) then
-			entity_use_item(ctx entities, ctx messages, player_id, items[item_id]);
-			exit;
+			return items[item_id];
 		end if;
 	end loop;
-end inventory_loop;
+	return -1;
+end choose_inventory_item;
 
 procedure game_over_loop() begin
 	print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'You died, game over.' || ANSI_CR);			
@@ -716,7 +911,10 @@ procedure main_loop() begin
 		elsif input = CHAR_PICKUP then
 			pickup_item(ctx entities, ctx messages, ctx map, player_id);
 		elsif input = CHAR_INVENTORY then
-			inventory_loop(ctx entities, ctx messages, player_id);
+			var item_id := choose_inventory_item(entities, player_id);
+			if item_id <> -1 then
+				entity_use_item(ctx screen, ctx entities, ctx map, ctx messages, player_id, item_id);
+			end if;
 		elsif input = CHAR_QUIT then
 			exit;
 		end if;

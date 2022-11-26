@@ -22,6 +22,13 @@ class AstNode {
 	}
 }
 
+class AstDirective extends AstNode {
+	constructor(text) {
+		super("ast-directive");
+		this.text = text;
+	}
+}
+
 class AstValueBoolean extends AstNode {
 	constructor(boolValue) {
 		super("ast-value-boolean");

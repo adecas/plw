@@ -22,6 +22,16 @@ const PLW_TAG_REF_STRING = 4;
 const PLW_TAG_REF_BASIC_ARRAY = 5;
 const PLW_TAG_REF_ARRAY = 6;
 
+const PLW_TAG_REF_NAMES = [
+	"",
+	"EXCEPTION_HANDLER",
+	"RECORD",
+	"MAPPED_RECORD",
+	"STRING",
+	"BASIC_ARRAY",
+	"ARRAY"
+];
+
 class PlwRefManagerError {
 	constructor() {
 		this.refId = -1;

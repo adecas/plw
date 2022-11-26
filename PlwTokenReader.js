@@ -74,6 +74,7 @@ const TOK_SEP = "tok-sep";
 const TOK_TERM = "tok-term";
 const TOK_EOF = "tok-eof";
 const TOK_UNKOWN = "tok-unknown";
+const TOK_DIRECTIVE = "tok-directive";
 
 class Token {
 	constructor(tag, text, line, col) {
@@ -145,6 +146,32 @@ class TokenReader {
 			this.pos++;
 		}
 		return new Token(TOK_STRING, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("''", "'"), line, col);
+	}
+	
+	readDirective() {
+		let line = this.line;
+		let col = this.col;
+		let beginPos = this.pos;
+		let state = 0;
+		while (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (state === 0) {
+				if (c !== "@") break;
+				state = 1;
+			} else if (state === 1) {
+				if (c === "@") state = 2;
+			} else {
+				if (c !== "@") break;
+				state = 1;
+			}
+			this.col++;
+			if (c === "\n") {
+				this.line++;
+				this.col = 1;
+			}
+			this.pos++;
+		}
+		return new Token(TOK_DIRECTIVE, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("@@", "@"), line, col);
 	}
 	
 	skipComment() {
@@ -344,6 +371,10 @@ class TokenReader {
 		
 		if (c === "'") {
 			return this.readString();
+		}
+		
+		if (c === '@') {
+			return this.readDirective();
 		}
 		
 		let line = this.line;

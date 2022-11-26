@@ -70,7 +70,10 @@ function onExecClick(isDebug) {
 					printDebugText("=== StackMaching ========================");
 					printDebugObject(stackMachine);
 				}
-				printTextOut(smRet === null ? "ok" : JSON.stringify(smRet));
+				if (smRet !== null) {
+					printTextOut(JSON.stringify(smRet));
+					break;
+				}
 			}
 		}
 	} catch (error) {
@@ -121,7 +124,7 @@ function onDisplayContextClick() {
 }
 
 function onDisplayStackMachineClick() {
-	printTextOutObject(stackMachine);
+	printTextOut(stackMachine.dump());
 }
 
 function onResetContextClick() {
