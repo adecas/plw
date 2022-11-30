@@ -46,6 +46,10 @@ class StackMachineError {
 		return this;
 	}
 	
+	static trap(trapName) {
+		return new StackMachineError(trapName);
+	}
+	
 	static suspended() {
 		return new StackMachineError("suspended");
 	}
@@ -987,6 +991,9 @@ class StackMachine {
 		}
 		let error = this.natives[nativeId](this);
 		if (error !== null) {
+			if (error.errorMsg.charAt(0) === "@") {
+				return error;
+			}
 			console.log("error from native function " + nativeId);
 			return error.fromCode(this.codeBlockId, this.ip);
 		}
@@ -1353,34 +1360,38 @@ class StackMachine {
 		return null;
 	}
 	
-	dump() {
-		let dmp = "cb: " + this.codeBlockId + ", ip: " + this.ip + ",  bp: " + this.bp + ", sp: " + this.sp + "\n";
+	dump(println) {
+		println("cb: " + this.codeBlockId + ", ip: " + this.ip + ", bp: " + this.bp + ", sp: " + this.sp);
 		if (this.codeBlockId !== -1) {
 			let codeBlock = this.codeBlocks[this.codeBlockId];
-			dmp += "codeblock " + this.codeBlockId + ": " + codeBlock.blockName + "\n";
+			println("codeblock " + this.codeBlockId + ": " + codeBlock.blockName);
 			for (let i = 0; i < codeBlock.codeSize; i++) {
 				let opcode = codeBlock.codes[i];
 				let opcodeName = PLW_OPCODES[opcode];
 				let prefix = (i === this.ip ? "> " : "") + i + ": ";
 				prefix = "          ".substring(0, 10 - prefix.length) + prefix;
 				if (opcode <= OPCODE1_MAX) {
-					dmp += prefix + opcodeName + "\n";
+					println(prefix + opcodeName);
 				} else {
 					i++;
 					let arg1 = codeBlock.codes[i];
-					dmp += prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1 + "\n";
+					println(prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1);
 				}
 			}
 		}
-		dmp += "stack:\n";
+		println("stack:");
 		for (let i = 0; i < this.sp; i++) {
-			dmp += "    " + i + ": " + (this.stackMap[i] === true ? "ref " : "    ") + this.stack[i] + "\n";
+			let prefix = "    ";
+			if (this.bp === i) {
+				prefix = " bp ";
+			}
+			println(prefix + i + ": " + (this.stackMap[i] === true ? "ref " : "    ") + this.stack[i]);
 		}
-		dmp += "heap:\n";
+		println("heap (total: " + this.refMan.refCount + ", free: " + this.refMan.freeRefIdCount + "):");
 		for (let i = 0; i < this.refMan.refCount; i++) {
 			let ref = this.refMan.refs[i];
-			if (ref) {
-				dmp += "    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref) + "\n";
+			if (ref !== -1) {
+				println("    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref));
 			}
 		}
 		return dmp;

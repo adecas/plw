@@ -2370,10 +2370,9 @@ class EvalResult {
 }
 
 class EvalResultType extends EvalResult {
-	constructor(tag, isRef, isMutable) {
+	constructor(tag, isRef) {
 		super(tag);
 		this.isRef = isRef;
-		this.isMutable = isMutable;
 	}
 	
 	typeKey() {
@@ -2383,7 +2382,7 @@ class EvalResultType extends EvalResult {
 
 class EvalTypeBuiltIn extends EvalResultType {
 	constructor(typeName, isRef) {
-		super("res-type-built-in", isRef, false);
+		super("res-type-built-in", isRef);
 		this.typeName = typeName;
 	}
 	
@@ -2403,7 +2402,7 @@ class EvalTypeRecordField {
 
 class EvalTypeRecord extends EvalResultType {
 	constructor(fieldCount, fields) {
-		super("res-type-record", true, true);
+		super("res-type-record", true);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 		this.refFieldCount = 0;
@@ -2441,7 +2440,7 @@ class EvalTypeVariantField {
 
 class EvalTypeVariant extends EvalResultType {
 	constructor(fieldCount, fields) {
-		super("res-type-variant", true, false);
+		super("res-type-variant", true);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 	}
@@ -2460,7 +2459,7 @@ class EvalTypeVariant extends EvalResultType {
 
 class EvalTypeArray extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-array", true, true);
+		super("res-type-array", true);
 		this.underlyingType = underlyingType;
 	}
 	
@@ -2471,7 +2470,7 @@ class EvalTypeArray extends EvalResultType {
 
 class EvalTypeSequence extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-sequence", true, false);
+		super("res-type-sequence", true);
 		this.underlyingType = underlyingType;
 	}
 	
@@ -2482,7 +2481,7 @@ class EvalTypeSequence extends EvalResultType {
 
 class EvalTypeAbstract extends EvalResultType {
 	constructor(methodCount, methods) {
-		super("res-type-abstract", true, false);
+		super("res-type-abstract", true);
 		this.methodCount = methodCount;
 		this.methods = methods;
 	}
@@ -2541,7 +2540,7 @@ class EvalTypeAbstractParam {
 
 class EvalTypeName extends EvalResultType {
 	constructor(typeName, underlyingType) {
-		super("res-type-name", underlyingType.isRef, underlyingType.isMutable);
+		super("res-type-name", underlyingType.isRef);
 		this.typeName = typeName;
 		this.underlyingType = underlyingType;
 	}
@@ -5466,6 +5465,10 @@ class StackMachineError {
 		return this;
 	}
 	
+	static trap(trapName) {
+		return new StackMachineError(trapName);
+	}
+	
 	static suspended() {
 		return new StackMachineError("suspended");
 	}
@@ -6407,6 +6410,9 @@ class StackMachine {
 		}
 		let error = this.natives[nativeId](this);
 		if (error !== null) {
+			if (error.errorMsg.charAt(0) === "@") {
+				return error;
+			}
 			console.log("error from native function " + nativeId);
 			return error.fromCode(this.codeBlockId, this.ip);
 		}
@@ -6773,34 +6779,38 @@ class StackMachine {
 		return null;
 	}
 	
-	dump() {
-		let dmp = "cb: " + this.codeBlockId + ", ip: " + this.ip + ",  bp: " + this.bp + ", sp: " + this.sp + "\n";
+	dump(println) {
+		println("cb: " + this.codeBlockId + ", ip: " + this.ip + ", bp: " + this.bp + ", sp: " + this.sp);
 		if (this.codeBlockId !== -1) {
 			let codeBlock = this.codeBlocks[this.codeBlockId];
-			dmp += "codeblock " + this.codeBlockId + ": " + codeBlock.blockName + "\n";
+			println("codeblock " + this.codeBlockId + ": " + codeBlock.blockName);
 			for (let i = 0; i < codeBlock.codeSize; i++) {
 				let opcode = codeBlock.codes[i];
 				let opcodeName = PLW_OPCODES[opcode];
 				let prefix = (i === this.ip ? "> " : "") + i + ": ";
 				prefix = "          ".substring(0, 10 - prefix.length) + prefix;
 				if (opcode <= OPCODE1_MAX) {
-					dmp += prefix + opcodeName + "\n";
+					println(prefix + opcodeName);
 				} else {
 					i++;
 					let arg1 = codeBlock.codes[i];
-					dmp += prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1 + "\n";
+					println(prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1);
 				}
 			}
 		}
-		dmp += "stack:\n";
+		println("stack:");
 		for (let i = 0; i < this.sp; i++) {
-			dmp += "    " + i + ": " + (this.stackMap[i] === true ? "ref " : "    ") + this.stack[i] + "\n";
+			let prefix = "    ";
+			if (this.bp === i) {
+				prefix = " bp ";
+			}
+			println(prefix + i + ": " + (this.stackMap[i] === true ? "ref " : "    ") + this.stack[i]);
 		}
-		dmp += "heap:\n";
+		println("heap (total: " + this.refMan.refCount + ", free: " + this.refMan.freeRefIdCount + "):");
 		for (let i = 0; i < this.refMan.refCount; i++) {
 			let ref = this.refMan.refs[i];
-			if (ref) {
-				dmp += "    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref) + "\n";
+			if (ref !== -1) {
+				println("    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref));
 			}
 		}
 		return dmp;
@@ -6826,16 +6836,38 @@ class NativeFunctionManager {
 	static initStdNativeFunctions(compilerContext) {
 		let nativeFunctionManager = new NativeFunctionManager();
 		
-		compilerContext.addProcedure(EvalResultProcedure.fromNative(
-			"debug",
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"get_char",
 			new EvalResultParameterList(0, []),
+			EVAL_TYPE_CHAR,
 			nativeFunctionManager.addFunction(function(sm) {
-				console.log(sm);
+				return StackMachineError.trap("@get_char");
+			})
+		));	
+		
+		compilerContext.addProcedure(EvalResultProcedure.fromNative(
+			"write",
+			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				addTextOut(ref.str);
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.sp -= 2;
 				return null;
 			})
-		));
-
-
+		));		
+		
 		compilerContext.addProcedure(EvalResultProcedure.fromNative(
 			"print",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
@@ -7486,52 +7518,16 @@ class NativeFunctionManager {
 const fs = require("fs");
 const stream = require("stream");
 
+function addTextOut(txt) {
+	process.stdout.write(txt);
+}
+
 function printTextOut(txt) {
 	console.log(txt);
 }
 
 let compilerContext = new CompilerContext();
 let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
-
-compilerContext.addFunction(EvalResultFunction.fromNative(
-	"get_char",
-	new EvalResultParameterList(0, []),
-	EVAL_TYPE_CHAR,
-	nativeFunctionManager.addFunction(function(sm) {
-		if (sm.stack[sm.sp - 1] !== 0) {
-			return new StackMachineError().nativeArgCountMismatch();
-		}
-		let buffer = new Int8Array(1);
-  		fs.readSync(0, buffer, 0, 1);
-		sm.stack[sm.sp - 1] = buffer[0];
-		sm.stackMap[sm.sp - 1] = false;
-		return null;
-	})
-));
-
-compilerContext.addProcedure(EvalResultProcedure.fromNative(
-	"write",
-	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
-	nativeFunctionManager.addFunction(function(sm) {
-		if (sm.stack[sm.sp - 1] !== 1) {
-			return StackMachineError.nativeArgCountMismatch();
-		}
-		let refId = sm.stack[sm.sp - 2];
-		let refManError = new PlwRefManagerError();
-		let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-		if (refManError.hasError()) {
-			return StackMachineError.referenceManagerError(refManError);
-		}
-		process.stdout.write(ref.str);
-		sm.refMan.decRefCount(refId, refManError);
-		if (refManError.hasError()) {
-			return StackMachineError.referenceManagerError(refManError);
-		}
-		sm.sp -= 2;
-		return null;
-	})
-));
-
 let stackMachine = new StackMachine();
 
 if (process.argv.length < 3) {
@@ -7558,6 +7554,13 @@ while (parser.peekToken() !== TOK_EOF) {
 		break;
 	} else {
 		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		while (smRet !== null && smRet.errorMsg === "@get_char") {
+			let buffer = new Int8Array(1);
+	  		fs.readSync(0, buffer, 0, 1);
+			stackMachine.stack[stackMachine.sp - 1] = buffer[0];
+			stackMachine.stackMap[stackMachine.sp - 1] = false;
+			smRet = stackMachine.runLoop();
+		}
 		if (smRet !== null) {
 			console.log(JSON.stringify(smRet));
 			console.log(JSON.stringify(stackMachine.codeBlocks[smRet.currentBlockId], undefined, 4));

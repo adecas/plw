@@ -1,52 +1,16 @@
 const fs = require("fs");
 const stream = require("stream");
 
+function addTextOut(txt) {
+	process.stdout.write(txt);
+}
+
 function printTextOut(txt) {
 	console.log(txt);
 }
 
 let compilerContext = new CompilerContext();
 let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
-
-compilerContext.addFunction(EvalResultFunction.fromNative(
-	"get_char",
-	new EvalResultParameterList(0, []),
-	EVAL_TYPE_CHAR,
-	nativeFunctionManager.addFunction(function(sm) {
-		if (sm.stack[sm.sp - 1] !== 0) {
-			return new StackMachineError().nativeArgCountMismatch();
-		}
-		let buffer = new Int8Array(1);
-  		fs.readSync(0, buffer, 0, 1);
-		sm.stack[sm.sp - 1] = buffer[0];
-		sm.stackMap[sm.sp - 1] = false;
-		return null;
-	})
-));
-
-compilerContext.addProcedure(EvalResultProcedure.fromNative(
-	"write",
-	new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
-	nativeFunctionManager.addFunction(function(sm) {
-		if (sm.stack[sm.sp - 1] !== 1) {
-			return StackMachineError.nativeArgCountMismatch();
-		}
-		let refId = sm.stack[sm.sp - 2];
-		let refManError = new PlwRefManagerError();
-		let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-		if (refManError.hasError()) {
-			return StackMachineError.referenceManagerError(refManError);
-		}
-		process.stdout.write(ref.str);
-		sm.refMan.decRefCount(refId, refManError);
-		if (refManError.hasError()) {
-			return StackMachineError.referenceManagerError(refManError);
-		}
-		sm.sp -= 2;
-		return null;
-	})
-));
-
 let stackMachine = new StackMachine();
 
 if (process.argv.length < 3) {
@@ -73,6 +37,13 @@ while (parser.peekToken() !== TOK_EOF) {
 		break;
 	} else {
 		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		while (smRet !== null && smRet.errorMsg === "@get_char") {
+			let buffer = new Int8Array(1);
+	  		fs.readSync(0, buffer, 0, 1);
+			stackMachine.stack[stackMachine.sp - 1] = buffer[0];
+			stackMachine.stackMap[stackMachine.sp - 1] = false;
+			smRet = stackMachine.runLoop();
+		}
 		if (smRet !== null) {
 			console.log(JSON.stringify(smRet));
 			console.log(JSON.stringify(stackMachine.codeBlocks[smRet.currentBlockId], undefined, 4));

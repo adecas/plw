@@ -3,115 +3,86 @@
 let compilerContext = new CompilerContext();
 let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
 let stackMachine = new StackMachine();
+let tokenReader = null;
+let parser = null;
+let compiler = null;
+let terminalInputStatus = "";
+
+
+function addTextOut(text) {
+	term.write(text);
+}
 
 function printTextOut(text) {
-	let textout = document.getElementById("textout");
-	textout.value += text + "\n";
-	textout.scrollTop = textout.scrollHeight;
+	term.writeln(text);
 }
 
 function printTextOutObject(obj) {
-	let textout = document.getElementById("textout");
-	textout.value += JSON.stringify(obj, null, 2) + "\n";
-	textout.scrollTop = textout.scrollHeight;
+	let lines = JSON.stringify(obj, null, 2).split("\n");
+	for(let i = 0; i < lines.length; i++) {
+		term.writeln(lines[i]);
+	}
 }
 
 function clearDebugText() {
 	document.getElementById("debug").value = "";
 }
 
-function printDebugText(text) {
-	let textout = document.getElementById("debug");
-	textout.value += text + "\n";
-	textout.scrollTop = textout.scrollHeight;
-}
-
-function printDebugObject(obj) {
-	let textout = document.getElementById("debug");
-	textout.value += JSON.stringify(obj, null, 2) + "\n";
-	textout.scrollTop = textout.scrollHeight;
-}
-
 function getTextIn() {
-	let textIn = document.getElementById("textin");
-	let beginPos = textIn.selectionStart;
-	let endPos = textIn.selectionEnd;
-	return beginPos === endPos ? textIn.value : textIn.value.substring(beginPos, endPos);
+	let textIn = textinEditor.getSelectedText();
+	if (textIn) return textIn;
+	return textinEditor.getValue();
 }
 
-function onExecClick(isDebug) {
-	try {
-		clearDebugText();
-		let tokenReader = new TokenReader(getTextIn(), 1, 1);
-		let parser = new Parser(tokenReader);
-		let compiler = new Compiler(compilerContext);
-		while (parser.peekToken() !== TOK_EOF) {
-			let expr = parser.readStatement();
-			if (Parser.isError(expr)) {
-				printTextOutObject(expr);
+function setConsoleInStatus(status) {
+	if (status) {
+		term.focus();
+	}
+	terminalInputStatus = status;
+}
+
+function getConsoleInStatus(status) {
+	return terminalInputStatus;
+}
+
+function execLoop() {
+	while (parser.peekToken() !== TOK_EOF) {
+		let expr = parser.readStatement();
+		if (Parser.isError(expr)) {
+			printTextOutObject(expr);
+			break;
+		}
+		compiler.resetCode();
+		let result = compiler.evalStatement(expr);
+		if (result.isError()) {
+			printTextOutObject(result);
+			break;
+		} else {
+			let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+			if (smRet !== null && smRet.errorMsg === "@get_char") {
+				setConsoleInStatus("@get_char");
 				break;
 			}
-			if (isDebug) {
-				printDebugText("=== AST =================================");
-				printDebugObject(expr);
-			}
-			compiler.resetCode();
-			let result = compiler.evalStatement(expr);
-			if (isDebug) {
-				printDebugText("=== Compiler ============================");
-				printDebugObject(compiler);
-			}
-			if (result.isError()) {
-				printTextOutObject(result);
+			if (smRet !== null) {
+				printTextOut(JSON.stringify(smRet));
 				break;
-			} else {
-				let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-				if (isDebug) {
-					printDebugText("=== StackMaching ========================");
-					printDebugObject(stackMachine);
-				}
-				if (smRet !== null) {
-					printTextOut(JSON.stringify(smRet));
-					break;
-				}
 			}
 		}
-	} catch (error) {
-		console.log(error);
-		printTextOut(error.message);
-		printTextOut(error.stack);
 	}
 }
 
+function onScrollToClick() {
+	document.getElementById("scrollto").scrollIntoView(true);
+	term.focus();
+}
 
-function onEvalClick() {
+function onExecClick() {
 	try {
-		document.getElementById("debug").value = "";
-		let tokenReader = new TokenReader(getTextIn(), 1, 1);
-		let parser = new Parser(tokenReader);
-		let compiler = new Compiler(compilerContext);
-		while (parser.peekToken() !== TOK_EOF) {
-			let expr = parser.readExpression();
-			if (Parser.isError(expr)) {
-				printTextOutObject(expr);
-				break;
-			}
-			document.getElementById("debug").value += JSON.stringify(expr, null, 2);
-			compiler.resetCode();
-			let result = compiler.eval(expr);
-			if (result.isError()) {			
-				printTextOutObject(result);
-				break;
-			}
-			let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-			if (smRet === null) {
-				if (result.tag !== "res-ok") {
-					printTextOutObject(stackMachine.popResult());
-				}
-			} else {
-				printTextOutObject(smRet);
-			}
-		}
+		setConsoleInStatus("");
+		tokenReader = new TokenReader(getTextIn(), 1, 1);
+		parser = new Parser(tokenReader);
+		compiler = new Compiler(compilerContext);
+		execLoop();
 	} catch (error) {
 		console.log(error);
 		printTextOut(error.message);
@@ -124,17 +95,18 @@ function onDisplayContextClick() {
 }
 
 function onDisplayStackMachineClick() {
-	printTextOut(stackMachine.dump());
+	stackMachine.dump(printTextOut);
 }
 
 function onResetContextClick() {
 	compilerContext = new CompilerContext();
 	nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
 	stackMachine = new StackMachine();
+	setConsoleInStatus("");
 }
 
 function onClearMessageClick() {
-	document.getElementById("textout").value = "";
+	term.clear();
 }
 
 function fillSnippetSelect() {
@@ -154,8 +126,40 @@ function onSnippetChange() {
 		return;
 	}
 	snip = snip.substring(0, snip.length - 6);
-	document.getElementById("textin").value = document.getElementById(snip).innerText;
+	textinEditor.setValue(document.getElementById(snip).innerText);
 	onResetContextClick();
 	onClearMessageClick();
 	onExecClick(false);
 }
+
+function onInputFileChange() {
+	var fileReader = new FileReader();
+	fileReader.onload = function() {
+		textinEditor.setValue(fileReader.result);
+		onResetContextClick();
+		onClearMessageClick();
+	};
+	fileReader.readAsText(document.getElementById("inputfile").files[0]);
+}
+
+function onTerminalKey(key) {
+	if (getConsoleInStatus() === "@get_char") {
+		setConsoleInStatus("");
+		if (key.length > 0) {
+			let ch = key.charCodeAt(0);
+			stackMachine.stack[stackMachine.sp - 1] = ch;
+			stackMachine.stackMap[stackMachine.sp - 1] = false;
+			let smRet = stackMachine.runLoop();
+			if (smRet !== null) {
+				if (smRet.errorMsg === "@get_char") {
+					setConsoleInStatus("@get_char");
+				} else {
+					setConsoleInStatus("");
+				}
+			} else {
+				execLoop();
+			}
+		}	
+	}
+}
+

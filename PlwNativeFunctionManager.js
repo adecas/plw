@@ -16,16 +16,38 @@ class NativeFunctionManager {
 	static initStdNativeFunctions(compilerContext) {
 		let nativeFunctionManager = new NativeFunctionManager();
 		
-		compilerContext.addProcedure(EvalResultProcedure.fromNative(
-			"debug",
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"get_char",
 			new EvalResultParameterList(0, []),
+			EVAL_TYPE_CHAR,
 			nativeFunctionManager.addFunction(function(sm) {
-				console.log(sm);
+				return StackMachineError.trap("@get_char");
+			})
+		));	
+		
+		compilerContext.addProcedure(EvalResultProcedure.fromNative(
+			"write",
+			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				addTextOut(ref.str);
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.sp -= 2;
 				return null;
 			})
-		));
-
-
+		));		
+		
 		compilerContext.addProcedure(EvalResultProcedure.fromNative(
 			"print",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),

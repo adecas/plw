@@ -1,7 +1,60 @@
 <!DOCTYPE html>
 <meta charset="UTF-8">
-<html><head><title>PL/W</title></head><body>
-
+<html>
+<head>
+<title>PL/W</title>
+<style>
+body {
+	font-family: Sans-Serif;
+	background-color: black;
+	color: white;
+}
+p {
+	font-weight: bold;
+}
+label {
+	font-size: 12px;
+	margin-right: 2px;
+}
+#textin {
+	border-style: solid;
+	border-color: grey;
+	border-width: 1px;
+	font-size: 16px;
+	font-weight: bold;
+	margin-bottom: 2px;
+}
+#terminal {
+	border-style: solid;
+	border-color: grey;
+	border-width: 1px;
+	font-size: 14px;
+	font-weight: bold;
+}
+button, input, .inputfilelabel, select {
+	background-color: #202040;
+	border: 1px solid grey;
+	border-radius: 4px;
+	color: white;
+	padding: 4px 8px;
+	margin-right: 4px;
+	margin-bottom: 2px;
+	transition-duration: 0.4s;
+}
+button:hover, .inputfilelabel:hover, select:hover {
+	background-color: #404080;
+}
+button:active {
+	background-color: black;
+}
+input[type="file"] {
+	display: none;
+}
+</style>
+<link rel="stylesheet" href="../xterm/css/xterm.css" />
+<script src="../xterm/lib/xterm.js"></script>
+<script src="../ace-builds-1.5.0/src-min/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="PlwAceMode.js" type="text/javascript" charset="utf-8"></script>
 <script src="PlwTokenReader.js"></script>
 <script src="PlwAst.js"></script>
 <script src="PlwParser.js"></script>
@@ -11,18 +64,44 @@
 <script src="PlwStackMachine.js"></script>
 <script src="PlwNativeFunctionManager.js"></script>
 <script src="PlwUI.js"></script>
+</head>
+<body>
 
-<input type="button" value="exec" onclick="onExecClick(false)">
-<input type="button" value="debug" onclick="onExecClick(true)">
-<input type="button" value="eval" onclick="onEvalClick()">
-<label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select><br>
-<textarea id="textin" rows="10" cols="100"></textarea><br>
-<input type="button" value="clear messages" onclick="onClearMessageClick()">
-<input type="button" value="display context" onclick="onDisplayContextClick()">
-<input type="button" value="display stack machine" onclick="onDisplayStackMachineClick()">
-<input type="button" value="reset context" onclick="onResetContextClick()"><br>
-<textarea id="textout" rows="10" cols="100"></textarea><br>
-<textarea id="debug" rows="10" cols="100"></textarea>
+<button onclick="onExecClick()">exec</button>
+<label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select>
+<label for="inputfile" class="inputfilelabel">load file</label><input type="file" id="inputfile" onchange="onInputFileChange()">
+
+<div id="textin"></div>
+<script>
+	var textinEditor = ace.edit("textin");
+	textinEditor.setOptions({
+		minLines: 25,
+		maxLines: 25,
+		autoScrollEditorIntoView: true
+	});
+	textinEditor.setTheme("ace/theme/nord_dark");
+	textinEditor.session.setMode("ace/mode/plw");
+</script>
+
+<button onclick="onClearMessageClick()">clear messages</button>
+<button onclick="onDisplayContextClick()">display context</button>
+<button onclick="onDisplayStackMachineClick()">display stack machine</button>
+<button onclick="onResetContextClick()">reset context</button>
+<button id="scrollto" onclick="onScrollToClick()">scroll to</button>
+<br>
+<div id="terminal"></div>
+<script>
+	var term = new Terminal({
+		"cols": 135,
+		"rows": 35,
+		"fontFamily": "Monospace",
+		"fontSize": "14px"
+	});
+	term.open(document.getElementById('terminal'));
+	term.onKey(function(ev) {
+		onTerminalKey(ev.key);
+	});
+</script>
 
 <p id="snippet-variable-title" class="snippet">Variable</p>
 <pre id="snippet-variable">
@@ -199,8 +278,8 @@ end if;
 <pre id="snippet-basic-procedure">
 procedure say_hello(name text) begin
   if name = 'HAL' then
-    print('Hello HAL, are you the HAL from 2001 ?');
-    return;
+	print('Hello HAL, are you the HAL from 2001 ?');
+	return;
   end if;
   print('Hello ' || name || ', nice to meet you');
 end say_hello;
@@ -253,9 +332,9 @@ print('expected: 6');
 var primes_count := 100;
 function isprime(n integer) boolean begin
   for i in 2 .. n - 1 loop
-    if n % i = 0 then
-      return false;
-    end if;
+	if n % i = 0 then
+	  return false;
+	end if;
   end loop;
   return true;
 end isprime;
@@ -264,11 +343,11 @@ begin
   var i := 1;
   var index := 0;
   while index < primes_count loop
-    if isprime(i) then
-      first_primes[index] := i;
-      index := index + 1;
-    end if;
-    i := i + 1;
+	if isprime(i) then
+	  first_primes[index] := i;
+	  index := index + 1;
+	end if;
+	i := i + 1;
   end loop;
 end;
 print('first_primes: ' || text(first_primes));
@@ -278,9 +357,9 @@ print('first_primes: ' || text(first_primes));
 <pre id="snippet-recursive-facto">
 function facto(a integer) integer begin
   if a = 0 then
-    return 1;
+	return 1;
   else
-    return a * facto(a - 1);
+	return a * facto(a - 1);
   end if;
 end facto;
 print(text(facto(5)));
@@ -295,23 +374,23 @@ generator benchmark() boolean begin
 end benchmark;
 function fibonacci_iterative(n integer) integer begin
   if n < 2 then
-    return n;
+	return n;
   end if;
   var result := 0; 
   var n1 := 1;
   var n2 := 0;
   for i in 2..n loop
-    result := n1 + n2;    
-    n2 := n1;    
-    n1 := result;  
+	result := n1 + n2;    
+	n2 := n1;    
+	n1 := result;  
   end loop;  
   return result; 
 end fibonacci_iterative;
 function fibonacci_recursive(n integer) integer begin
   if n = 0 or n = 1 then
-    return n;
+	return n;
   else
-    return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
+	return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2);
   end if;
 end fibonacci_recursive;
 for i in benchmark() loop
@@ -325,13 +404,13 @@ end loop;
 <pre id="snippet-bubble-sort">
 function bubble_sort(nums [integer]) [integer] begin
   for i in reverse 0 .. length(nums) - 2 loop
-    for j in 0 .. i loop
-      if nums[j] > nums[j + 1] then
-        var tmp := nums[j];
-        nums[j] := nums[j + 1];
-        nums[j + 1] := tmp;
-      end if;
-    end loop;
+	for j in 0 .. i loop
+	  if nums[j] > nums[j + 1] then
+		var tmp := nums[j];
+		nums[j] := nums[j + 1];
+		nums[j + 1] := tmp;
+	  end if;
+	end loop;
   end loop;
   return nums;
 end bubble_sort;
@@ -343,7 +422,7 @@ print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
 function avg(nums [real]) real begin
   var sum := 0.0;
   for i in 0..length(nums)-1 loop
-    sum := sum + nums[i];
+	sum := sum + nums[i];
   end loop;
   return sum / real(length(nums));
 end avg;
@@ -364,22 +443,22 @@ print(text(stddev([0.0, 1.0])));
 <pre id="snippet-entropy">
 function occurence_pos(c integer, occurences [{c integer, n integer}]) integer begin
   for i in 0 .. length(occurences) - 1 loop
-    if occurences[i].c = c then
-      return i;
-    end if;
+	if occurences[i].c = c then
+	  return i;
+	end if;
   end loop;
   return -1;
 end occurence_pos;
 function char_occurences(t text) [{c integer, n integer}] begin
   var occurences := [] as [{c integer, n integer}];
   for i in 0 .. length(t) - 1 loop
-    var c := char_code(t, i);
-    var pos := occurence_pos(c, occurences);
-    if pos = - 1 then
-      occurences := occurences || [{c: c, n: 1}];
-    else
-      occurences[pos].n := occurences[pos].n + 1;
-    end if;
+	var c := char_code(t, i);
+	var pos := occurence_pos(c, occurences);
+	if pos = - 1 then
+	  occurences := occurences || [{c: c, n: 1}];
+	else
+	  occurences[pos].n := occurences[pos].n + 1;
+	end if;
   end loop;
   return occurences;
 end char_occurences;
@@ -387,8 +466,8 @@ function char_entropy(t text) real begin
   var occurences := char_occurences(t);
   var entropy := 0.0;
   for i in 0 .. length(occurences) - 1 loop
-    var frequency := real(occurences[i].n) / real(length(t));
-    entropy := entropy - frequency * log(frequency) / log(2.0);
+	var frequency := real(occurences[i].n) / real(length(t));
+	entropy := entropy - frequency * log(frequency) / log(2.0);
   end loop;
   return entropy;
 end char_entropy;
@@ -401,14 +480,14 @@ print(text(char_entropy('abababababababababab')));
 function html_escape(t text) text begin
   var esc := '';
   for i in 0..length(t) - 1 loop
-    var c := subtext(t, i, 1);
-    esc := esc || case c
-      when '&gt;'   then '&amp;gt;'
-      when '&lt;'   then '&amp;lt'
-      when '&amp;'  then '&amp;amp;'
-      when '&quot;' then '&amp;quot;'
-      else c
-    end; 
+	var c := subtext(t, i, 1);
+	esc := esc || case c
+	  when '&gt;'   then '&amp;gt;'
+	  when '&lt;'   then '&amp;lt'
+	  when '&amp;'  then '&amp;amp;'
+	  when '&quot;' then '&amp;quot;'
+	  else c
+	end; 
   end loop;
   return esc;
 end html_escape;
@@ -437,19 +516,19 @@ end if;
 type status variant(none, error text, done integer);
 procedure print(s status ) begin
   print(kindof s
-    when none then 'none'
-    when error(msg) then 'error: ' || msg
-    when done(row_count) then 'done: ' || text(row_count)
+	when none then 'none'
+	when error(msg) then 'error: ' || msg
+	when done(row_count) then 'done: ' || text(row_count)
   end);
 end print;
 procedure print2(s status) begin
   kindof s
-    when none then
-    	print('none');
-    when error(msg) then
-    	print('error: ' || msg);
-    when done(row_count) then
-    	print('done: ' || text(row_count));
+	when none then
+		print('none');
+	when error(msg) then
+		print('error: ' || msg);
+	when done(row_count) then
+		print('done: ' || text(row_count));
   end;
 end print2;
 var vr := done(5) as variant(none, error text, done integer) as status;
@@ -465,15 +544,15 @@ begin
   const p := {x: 0, y: 0};
   var v := some(p) as variant(none, some {x integer, y integer});
   procedure toto(ctx a variant(none, some {x integer, y integer})) begin
-    kindof a when some(p2) then
-      p2.x := 42;
-    end;
+	kindof a when some(p2) then
+	  p2.x := 42;
+	end;
   end toto;
   toto(ctx v);
   if p.x = 0 then
-    print('Good');
+	print('Good');
   else
-    print('Error: alternate reality');
+	print('Error: alternate reality');
   end if;
 end;
 </pre>
@@ -484,11 +563,11 @@ var v1 := [[10, 11], [20, 21], [30, 31]];
 function text(v [[integer]]) text begin
   var s := '[';
   for i in 0..length(v) - 1 loop
-    if i = 0 then
-      s := s || text(v[i]);
-    else
-      s := s || ', ' || text(v[i]);
-    end if;
+	if i = 0 then
+	  s := s || text(v[i]);
+	else
+	  s := s || ', ' || text(v[i]);
+	end if;
   end loop;
   return s || ']';
 end text;
@@ -543,8 +622,8 @@ end if;
 generator gen_range_step(first integer, last integer, step integer) integer begin
   var current := first;
   while current <= last loop
-    yield current;
-    current := current + step;
+	yield current;
+	current := current + step;
   end loop;
 end gen_range_step;
 for i in gen_range_step(42, 51, 3) loop
@@ -559,8 +638,8 @@ generator gen_concat(words [text], final_int integer) text begin
   var phrase := '';
   yield text(word_count);
   for i in 0 .. word_count - 1 loop
-    phrase := phrase || words[i];
-    yield phrase;
+	phrase := phrase || words[i];
+	yield phrase;
   end loop;
   yield text(final_int);
 end gen_concat;
@@ -578,9 +657,9 @@ type employee {
 };
 function employee(first_name text, last_name text, skills [text]) employee begin
   return {
-    first_name: first_name,
-    last_name: last_name,
-    skills: skills
+	first_name: first_name,
+	last_name: last_name,
+	skills: skills
   } as employee;
 end employee;
 generator fetch_employees() employee begin
@@ -591,9 +670,9 @@ end fetch_employees;
 generator employee_table(with_header boolean, employees sequence(employee)) text begin
   yield '&lt;table&gt;';
   for employee in employees loop
-    yield '&lt;tr&gt;&lt;td&gt;' || employee.first_name
-       || '&lt;/td&gt;&lt;td&gt;' || employee.last_name
-       || '&lt;/td&gt;&lt;td&gt;' || text(employee.skills) || '&lt;/td&gt;&lt;tr&gt;';
+	yield '&lt;tr&gt;&lt;td&gt;' || employee.first_name
+	   || '&lt;/td&gt;&lt;td&gt;' || employee.last_name
+	   || '&lt;/td&gt;&lt;td&gt;' || text(employee.skills) || '&lt;/td&gt;&lt;tr&gt;';
   end loop;
   yield '&lt;/table&gt;';
 end employee_table;
@@ -608,35 +687,35 @@ const empty_input := 1;
 const non_octal_digit := 2;
 function parse_octal(t text) integer begin
   if length(t) = 0 then
-    raise empty_input;
+	raise empty_input;
   end if;
   var code0 := char_code('0', 0);
   var num := 0;
   for i in 0..length(t) - 1 loop
-    var digit := char_code(t, i) - code0;
-    if digit < 0 or digit > 7 then
-      raise non_octal_digit;
-    end if;
-    num := num * 8 + digit;
+	var digit := char_code(t, i) - code0;
+	if digit < 0 or digit > 7 then
+	  raise non_octal_digit;
+	end if;
+	num := num * 8 + digit;
   end loop;
   return num;
 end parse_octal;
 procedure print_test_result(input text, result integer, is_result_exception boolean, expected integer, is_expected_exception boolean) begin
   var result_text := text(result);
   if is_result_exception then
-    result_text := 'exception(' || text(result) || ')';
+	result_text := 'exception(' || text(result) || ')';
   end if;
   var expected_text := text(expected);
   if is_expected_exception then
-    expected_text := 'exception(' || text(expected) || ')';
+	expected_text := 'exception(' || text(expected) || ')';
   end if;
   var status := 'FAILED';
   if result = expected and is_result_exception = is_expected_exception then
-    status := 'OK';
+	status := 'OK';
   end if;
   print('Test ' || status || ' for ' || input || ' got ' || result_text || ', expected ' || expected_text);
   if input = 'Darth Vader' then
-    raise 54;
+	raise 54;
   end if;
 end print_test_result;
 procedure test_parse_octal(t text, expected_result integer, expected_exception boolean) begin
@@ -659,7 +738,7 @@ begin
   test_parse_octal('Darth Vader', non_octal_digit, true);
 exception
   else
-    print('easter egg exception');   
+	print('easter egg exception');   
 end;
 </pre>
 
@@ -690,4 +769,5 @@ print('The perimeter of the ' || shape_name(shape) || ' is ' || text(shape_perim
 </pre>
 
 <script>fillSnippetSelect()</script>
-</body></html>
+</body>
+</html>

@@ -101,6 +101,8 @@ const ANSI_LF := text([10 as char]);
 const ANSI_CSI := text([27 as char]) || '[';
 const ANSI_CLEAR_TERMINAL := ANSI_CSI || '0;0H' || ANSI_CSI || 'J';
 const ANSI_HIDE_CURSOR := ANSI_CSI || '?25l';
+const ANSI_SHOW_CURSOR := ANSI_CSI || '?25h';
+const ANSI_RESET_COLOR := ANSI_CSI || '0m';
 const ANSI_BLACK := '0';
 const ANSI_RED := '1';
 const ANSI_GREEN := '2';
@@ -533,11 +535,22 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 			spawn_points := spawn_points || [spawn_point];
 		end if;
 	end loop;
-	var item_num := random(0, 9);
+	var item_num := random(0, 2);
 	for i in 0 .. item_num loop
 		var spawn_point := {x: random(room.x1 + 1, room.x2), y: random(room.y1 + 1, room.y2)} as point;
 		if not point_in_array(spawn_point, spawn_points) then
-			if random(0, 9) = 0 then
+			if random(0, 2) = 0 then
+				var potion_id := new_entity(
+					ctx entities,
+					ctx map,
+					entity(
+						'Lighning scroll',
+						spawn_point,
+						screen_cell(')', ANSI_CYAN, ANSI_BLACK),
+						{range: 6, damage: 15} as scroll
+					)
+				);
+			else
 				var potion_id := new_entity(
 					ctx entities,
 					ctx map,
@@ -546,17 +559,6 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 						spawn_point,
 						screen_cell('j', ANSI_MAGENTA, ANSI_BLACK),
 						potion(10)
-					)
-				);
-			else
-				var potion_id := new_entity(
-					ctx entities,
-					ctx map,
-					entity(
-						'Lighning scroll',
-						spawn_point,
-						screen_cell(')', ANSI_CYAN, ANSI_BLACK),
-						{range: 6, damage: 50} as scroll
 					)
 				);
 			end if;
@@ -919,6 +921,7 @@ procedure main_loop() begin
 			exit;
 		end if;
 	end loop;
+	write(ANSI_CLEAR_TERMINAL || ANSI_SHOW_CURSOR || ANSI_RESET_COLOR);
 end main_loop;
 
 main_loop();
