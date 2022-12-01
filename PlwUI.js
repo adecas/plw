@@ -18,10 +18,7 @@ function printTextOut(text) {
 }
 
 function printTextOutObject(obj) {
-	let lines = JSON.stringify(obj, null, 2).split("\n");
-	for(let i = 0; i < lines.length; i++) {
-		term.writeln(lines[i]);
-	}
+	term.writeln(JSON.stringify(obj, null, 2).replaceAll("\n", "\r\n"));
 }
 
 function clearDebugText() {
@@ -86,7 +83,7 @@ function onExecClick() {
 	} catch (error) {
 		console.log(error);
 		printTextOut(error.message);
-		printTextOut(error.stack);
+		printTextOut(error.stack.replaceAll("\n", "\r\n"));
 	}
 }
 

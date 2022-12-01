@@ -5112,7 +5112,7 @@ class PlwBasicArrayRef extends PlwAbstractRef {
 	
 	getOffsetValue(refMan, offset, isForMutate, refManError) {
 		if (offset < 0 || offset >= this.arraySize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return null;
 		}
 		return new PlwOffsetValue(this.ptr[offset], false);
