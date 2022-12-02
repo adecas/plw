@@ -1778,7 +1778,13 @@ function find_max_total(aa [[integer]]) [integer] begin
 end find_max_total;
 
 var m := find_max_total (input);
+var total := sum(m);
 
-print('index ' || text(sum(m)));
+print('total ' || text(total));
 
+if total = 197301 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
 

@@ -414,7 +414,30 @@ function bubble_sort(nums [integer]) [integer] begin
   end loop;
   return nums;
 end bubble_sort;
-print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33,  -22, 11, 0, -11])));
+print(text(bubble_sort([77, 66, 99, 88, 55, 44, 22, 33, -22, 11, 0, -11])));
+
+<p id="snippet-quick-sort-title" class="snippet">Quick Sort</p>
+<pre id="snippet-quick-sort">
+procedure quicksort(ctx nums [integer], begin_pos integer, end_pos integer) begin
+	if end_pos <= begin_pos then
+		return;
+	end if;
+	var pivot := nums[end_pos];
+	var partition_pos := begin_pos;
+	for pos in begin_pos .. end_pos loop
+		if nums[pos] <= pivot then
+			var tmp := nums[partition_pos];
+			nums[partition_pos] := nums[pos];
+			nums[pos] := tmp;
+			partition_pos := partition_pos + 1;
+		end if;
+	end loop;
+	quicksort(ctx nums, begin_pos, partition_pos - 2);
+	quicksort(ctx nums, partition_pos, end_pos); 
+end quicksort;
+var nums := [77, 66, 99, 88, 55, 44, 22, 33, -22, 11, 0, -11];
+quicksort(ctx nums, 0, length(nums) - 1);
+print(text(nums));
 </pre>
 
 <p id="snippet-standard-deviation-title" class="snippet">Standard Deviation</p>

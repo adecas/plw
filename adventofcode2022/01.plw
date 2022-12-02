@@ -1772,4 +1772,11 @@ var m := find_max_total (input);
 
 print('index ' || text(m.index) || ', total ' || text(m.total));
 
+if m.index = 126 and m.total = 66487 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+
+
 
