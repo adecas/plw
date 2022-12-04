@@ -33,6 +33,7 @@ const PLW_TAG_REF_NAMES = [
 ];
 
 class PlwRefManagerError {
+	
 	constructor() {
 		this.refId = -1;
 		this.refTag = -1;
@@ -73,20 +74,16 @@ class PlwOffsetValue {
 }
 
 class PlwAbstractRef {
+
 	constructor(tag) {
 		this.tag = tag;
 		this.refCount = 1;
 	}
 	
-	getOffsetValue(refMan, offset, isForMutate, refManError) {
-		refManError.invalidRefTag(this.tag);
-		return null;
+	getTag() {
+		return this.tag;
 	}
-	
-	setOffsetValue(refMan, offset, val, refManError) {
-		refManError.invalidRefTag(this.tag);
-	}
-	
+		
 	shallowCopy(refMan, refManError) {
 		refManError.invalidRefTag(this.tag);
 		return -1;
@@ -103,6 +100,7 @@ class PlwAbstractRef {
 }
 
 class PlwExceptionHandlerRef extends PlwAbstractRef {
+
 	constructor(codeBlockId, ip, bp) {
 		super(PLW_TAG_REF_EXCEPTION_HANDLER);
 		this.codeBlockId = codeBlockId;
@@ -120,6 +118,7 @@ class PlwExceptionHandlerRef extends PlwAbstractRef {
 }
 
 class PlwRecordRef extends PlwAbstractRef {
+
 	constructor(refSize, totalSize, ptr) {
 		super(PLW_TAG_REF_RECORD);
 		this.refSize = refSize;
@@ -130,35 +129,7 @@ class PlwRecordRef extends PlwAbstractRef {
 	static make(refMan, refSize, totalSize, ptr) {
 		return refMan.addRef(new PlwRecordRef(refSize, totalSize, ptr));
 	}
-	
-	getOffsetValue(refMan, offset, isForMutate, refManError) {
-		if (offset < 0 || offset >= this.totalSize) {
-			refManError.invalidRefOffset(offset);
-			return null;
-		}
-		if (isForMutate === true) {
-			this.ptr[offset] = refMan.makeMutable(this.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return null;
-			}				
-		}
-		return new PlwOffsetValue(this.ptr[offset], offset < this.refSize);
-	}
-	
-	setOffsetValue(refMan, offset, val, refManError) {
-		if (offset < 0 || offset >= this.totalSize) {
-			refManError.invalidRefOffset(offset);
-			return;
-		}
-		if (offset < this.refSize) {
-			refMan.decRefCount(this.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return;
-			}
-		}
-		this.ptr[offset] = val;
-	}
-	
+			
 	shallowCopy(refMan, refManError) {
 		let newPtr = [...this.ptr];
 		for (let i = 0; i < this.refSize; i++) {
@@ -203,7 +174,10 @@ class PlwRecordRef extends PlwAbstractRef {
 	
 }
 
+
+
 class PlwBasicArrayRef extends PlwAbstractRef {
+
 	constructor(arraySize, ptr) {
 		super(PLW_TAG_REF_BASIC_ARRAY);
 		this.arraySize = arraySize;
@@ -213,23 +187,7 @@ class PlwBasicArrayRef extends PlwAbstractRef {
 	static make(refMan, arraySize, ptr) {
 		return refMan.addRef(new PlwBasicArrayRef(arraySize, ptr));
 	}
-	
-	getOffsetValue(refMan, offset, isForMutate, refManError) {
-		if (offset < 0 || offset >= this.arraySize) {
-			refManError.invalidOffset(offset);
-			return null;
-		}
-		return new PlwOffsetValue(this.ptr[offset], false);
-	}
-	
-	setOffsetValue(refMan, offset, val, refManError) {
-		if (offset < 0 || offset >= this.arraySize) {
-			refManError.invalidRefOffset(offset);
-			return;
-		}
-		this.ptr[offset] = val;
-	}
-	
+			
 	shallowCopy(refMan, refManError) {
 		return PlwBasicArrayRef.make(refMan, this.arraySize, [...this.ptr]);
 	}
@@ -252,7 +210,9 @@ class PlwBasicArrayRef extends PlwAbstractRef {
 
 }
 
+
 class PlwArrayRef extends PlwAbstractRef {
+
 	constructor(arraySize, ptr) {
 		super(PLW_TAG_REF_ARRAY);
 		this.arraySize = arraySize;
@@ -262,33 +222,7 @@ class PlwArrayRef extends PlwAbstractRef {
 	static make(refMan, arraySize, ptr) {
 		return refMan.addRef(new PlwArrayRef(arraySize, ptr));
 	}
-	
-	getOffsetValue(refMan, offset, isForMutate, refManError) {
-		if (offset < 0 || offset >= this.arraySize) {
-			refManError.invalidRefOffset(offset);
-			return null;
-		}
-		if (isForMutate === true) {
-			this.ptr[offset] = refMan.makeMutable(this.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return null;
-			}				
-		}
-		return new PlwOffsetValue(this.ptr[offset], true);
-	}
-	
-	setOffsetValue(refMan, offset, val, refManError) {
-		if (offset < 0 || offset >= this.arraySize) {
-			refManError.invalidRefOffset(offset);
-			return;
-		}
-		refMan.decRefCount(this.ptr[offset], refManError);
-		if (refManError.hasError()) {
-			return;
-		}
-		this.ptr[offset] = val;
-	}
-	
+			
 	shallowCopy(refMan, refManError) {
 		let newPtr = [...this.ptr];
 		for (let i = 0; i < this.arraySize; i++) {
@@ -327,7 +261,9 @@ class PlwArrayRef extends PlwAbstractRef {
 
 }
 
+
 class PlwMappedRecordRef extends PlwAbstractRef {
+
 	constructor(totalSize, ptr, mapPtr) {
 		super(PLW_TAG_REF_MAPPED_RECORD);
 		this.totalSize = totalSize;
@@ -384,18 +320,18 @@ class PlwStringRef extends PlwAbstractRef {
 class PlwRefManager {
 
 	constructor() {
-		this.refs = [];
+		this.refs = new Array(1000).fill(null);
 		this.refCount = 0;
-		this.freeRefIds = [];
+		this.freeRefIds = new Array(1000).fill(-1);
 		this.freeRefIdCount = 0;
 	}
 	
 	isValidRefId(refId) {
-		return refId >= 0 && refId < this.refCount && this.refs[refId] !== -1;
+		return refId >= 0 && refId < this.refCount && this.refs[refId] !== null;
 	}
 	
 	getRef(refId, refManError) {
-		if (!this.isValidRefId(refId)) {
+		if (this.isValidRefId(refId) === false) {
 			refManError.invalidRefId(refId);
 			return null;	
 		}
@@ -433,7 +369,7 @@ class PlwRefManager {
 	}
 							
 	incRefCount(refId, refManError) {
-		if (!this.isValidRefId(refId)) {
+		if (this.isValidRefId(refId) === false) {
 			refManError.invalidRefId(refId);
 			return;	
 		}
@@ -441,7 +377,7 @@ class PlwRefManager {
 	}
 	
 	addRefCount(refId, count, refManError) {
-		if (!this.isValidRefId(refId)) {
+		if (this.isValidRefId(refId) === false) {
 			refManError.invalidRefId(refId);
 			return;	
 		}
@@ -449,7 +385,7 @@ class PlwRefManager {
 	}
 	
 	decRefCount(refId, refManError) {
-		if (!this.isValidRefId(refId)) {
+		if (this.isValidRefId(refId) === false) {
 			refManError.invalidRefId(refId);
 			return;	
 		}
@@ -460,14 +396,14 @@ class PlwRefManager {
 			if (refManError.hasError()) {
 				return;
 			}
-			this.refs[refId] = -1;
+			this.refs[refId] = null;
 			this.freeRefIds[this.freeRefIdCount] = refId;
 			this.freeRefIdCount++;
 		}
 	}
 	
 	compareRefs(refId1, refId2, refManError) {
-		if (!this.isValidRefId(refId1)) {
+		if (this.isValidRefId(refId1) === false) {
 			refManError.invalidRefId(refId1);
 			return false;
 		}
@@ -487,9 +423,9 @@ class PlwRefManager {
 	}
 		
 	makeMutable(refId, refManError) {
-		if (!this.isValidRefId(refId)) {
+		if (this.isValidRefId(refId) === false) {
 			refManError.invalidRefId(refId);
-			return false;
+			return -1;
 		}
 		let ref = this.refs[refId];
 		if (ref.refCount === 1) {
@@ -508,16 +444,111 @@ class PlwRefManager {
 		if (refManError.hasError()) {
 			return;
 		}
-		ref.setOffsetValue(this, offset, val, refManError);
+		switch(ref.getTag()) {
+		case PLW_TAG_REF_RECORD:
+			this.setOffsetValueRecord(ref, offset, val, refManError);
+			return;
+		case PLW_TAG_REF_BASIC_ARRAY:	
+			this.setOffsetValueBasicArray(ref, offset, val, refManError);
+			return;
+		case PLW_TAG_REF_ARRAY:
+			this.setOffsetValueArray(ref, offset, val, refManError);
+			return;
+		}
+		refManError.invalidRefTag(ref.tag);
 	}
 	
-	getOffsetValue(refId, offset, isForMutate, refManError) {
+	setOffsetValueRecord(ref, offset, val, refManError) {
+		if (offset < 0 || offset >= ref.totalSize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		if (offset < ref.refSize) {
+			this.decRefCount(ref.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return;
+			}
+		}
+		ref.ptr[offset] = val;
+	}
+	
+	setOffsetValueBasicArray(ref, offset, val, refManError) {
+		if (offset < 0 || offset >= ref.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		ref.ptr[offset] = val;
+	}
+	
+	setOffsetValueArray(ref, offset, val, refManError) {
+		if (offset < 0 || offset >= ref.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		this.decRefCount(ref.ptr[offset], refManError);
+		if (refManError.hasError()) {
+			return;
+		}
+		ref.ptr[offset] = val;
+	}
+	
+	getOffsetValue(refId, offset, isForMutate, refManError, result) {
 		let ref = this.getRef(refId, refManError);
 		if (refManError.hasError()) {
-			return null;
+			return;
 		}
-		return ref.getOffsetValue(this, offset, isForMutate, refManError);
+		switch(ref.getTag()) {
+		case PLW_TAG_REF_RECORD:
+			this.getOffsetValueRecord(ref, offset, isForMutate, refManError, result);
+			return;
+		case PLW_TAG_REF_BASIC_ARRAY:	
+			this.getOffsetValueBasicArray(ref, offset, isForMutate, refManError, result);
+			return;
+		case PLW_TAG_REF_ARRAY:
+			this.getOffsetValueArray(ref, offset, isForMutate, refManError, result);
+			return;
+		}
+		refManError.invalidRefTag(ref.tag);
 	}
-
+	
+	getOffsetValueRecord(ref, offset, isForMutate, refManError, result) {
+		if (offset < 0 || offset >= ref.totalSize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		if (isForMutate === true) {
+			ref.ptr[offset] = this.makeMutable(ref.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return;
+			}				
+		}
+		result.val = ref.ptr[offset];
+		result.isRef = offset < ref.refSize;
+	}
+		
+	getOffsetValueBasicArray(ref, offset, isForMutate, refManError, result) {
+		if (offset < 0 || offset >= ref.arraySize) {
+			refManError.invalidOffset(offset);
+			return;
+		}
+		result.val = ref.ptr[offset];
+		result.isRef = false;
+	}
+	
+	getOffsetValueArray(ref, offset, isForMutate, refManError, result) {
+		if (offset < 0 || offset >= ref.arraySize) {
+			refManError.invalidRefOffset(offset);
+			return;
+		}
+		if (isForMutate === true) {
+			ref.ptr[offset] = this.makeMutable(ref.ptr[offset], refManError);
+			if (refManError.hasError()) {
+				return;
+			}				
+		}
+		result.val = ref.ptr[offset];
+		result.isRef = true;
+	}
+	
 }
 

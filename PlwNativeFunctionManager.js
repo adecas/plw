@@ -423,6 +423,36 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"index_of",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("c", EVAL_TYPE_CHAR),
+				new EvalResultParameter("t", EVAL_TYPE_TEXT)
+			]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let ch = sm.stack[sm.sp - 3];
+				let refId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let index = ref.str.indexOf(String.fromCharCode(ch));
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = index;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"slice_basic_array",
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("array", EVAL_TYPE_REF),
