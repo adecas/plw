@@ -2163,6 +2163,34 @@ class Compiler {
 				}
 				return EVAL_TYPE_BOOLEAN;
 			}
+			if (expr.operator === TOK_IN) {
+				let leftType = this.eval(expr.left);
+				if (leftType.isError()) {
+					return leftType;
+				}
+				let rightType = this.eval(expr.right);
+				if (rightType.isError()) {
+					return rightType;
+				}
+				let actRightType = rightType;
+				while (actRightType.tag === "res-type-name") {
+					actRightType = actRightType.underlyingType;
+				}
+				if (actRightType.tag !== "res-type-array") {
+					return EvalError.wrongType(rightType, "array").fromExpr(expr.right);
+				}
+				if (leftType !== actRightType.underlyingType) {
+					return EvalError.wrongType(leftType, rightType.underlyingType.typeKey()).fromExpr(expr.left);
+				}
+				this.codeBlock.codePush(2);
+				let nativeFuncKey = leftType.isRef === false ? "in_basic_array(integer,ref)" : "in_array(ref,ref)";
+				let nativeFunc = this.context.getFunction(nativeFuncKey);
+				if (nativeFunc === null) {
+					return EvalError.unknownFunction(nativeFuncKey);
+				}
+				this.codeBlock.codeCallNative(nativeFunc.nativeIndex);
+				return EVAL_TYPE_BOOLEAN;
+			}
 			if (expr.operator === TOK_EQ || expr.operator === TOK_NE) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {

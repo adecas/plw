@@ -423,6 +423,39 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"char_at",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT),
+				new EvalResultParameter("i", EVAL_TYPE_INTEGER)
+			]),
+			EVAL_TYPE_CHAR,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refId = sm.stack[sm.sp - 3];
+				let index = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				if (index < 0 || index >= ref.str.length) {
+					return StackMachineError.refAccessOutOfBound();
+				}
+				let charCode = ref.str.charCodeAt(index)
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = charCode;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"index_of",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("c", EVAL_TYPE_CHAR),
@@ -451,6 +484,50 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"split",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT),
+				new EvalResultParameter("s", EVAL_TYPE_TEXT)
+			]),
+			compilerContext.addType(new EvalTypeArray(EVAL_TYPE_TEXT)),
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refId = sm.stack[sm.sp - 3];
+				let sepId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let sep = sm.refMan.getRefOfType(sepId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let strs = ref.str.split(sep.str);
+				let strIds = new Array(strs.length);
+				for (let i = 0; i < strs.length; i++) {
+					strIds[i] = PlwStringRef.make(sm.refMan, strs[i]);
+				}
+				let resultId = PlwArrayRef.make(sm.refMan, strs.length, strIds);
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(sepId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = resultId;
+				sm.stackMap[sm.sp - 3] = true;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"slice_basic_array",
@@ -537,6 +614,37 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"in_basic_array",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("item", EVAL_TYPE_INTEGER),
+				new EvalResultParameter("array", EVAL_TYPE_REF)
+			]),
+			EVAL_TYPE_BOOLEAN,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let item = sm.stack[sm.sp - 3];
+				let refId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let isIn = ref.ptr.indexOf(item) > -1 ? 1 : 0;
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = isIn;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+		
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"concat_basic_array",
@@ -717,6 +825,32 @@ class NativeFunctionManager {
 				sm.stack[sm.sp - 3] = Math.floor(Math.random() * (highBound - lowBound + 1)) + lowBound;
 				sm.stackMap[sm.sp - 3] = false;
 				sm.sp -= 2;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"integer",
+			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let result = parseInt(ref.str);
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 2] = result;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
 				return null;
 			})
 		));

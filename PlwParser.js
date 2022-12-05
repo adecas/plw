@@ -167,7 +167,8 @@ class Parser {
 			this.peekToken() === TOK_LT ||
 			this.peekToken() === TOK_GTE ||
 			this.peekToken() === TOK_LTE ||
-			this.peekToken() === TOK_NE
+			this.peekToken() === TOK_NE ||
+			this.peekToken() === TOK_IN
 		) {
 			let operator = this.readToken();
 			let right = this.readExpr3();
