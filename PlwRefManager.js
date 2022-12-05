@@ -460,7 +460,7 @@ class PlwRefManager {
 	
 	setOffsetValueRecord(ref, offset, val, refManError) {
 		if (offset < 0 || offset >= ref.totalSize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return;
 		}
 		if (offset < ref.refSize) {
@@ -474,7 +474,7 @@ class PlwRefManager {
 	
 	setOffsetValueBasicArray(ref, offset, val, refManError) {
 		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return;
 		}
 		ref.ptr[offset] = val;
@@ -482,7 +482,7 @@ class PlwRefManager {
 	
 	setOffsetValueArray(ref, offset, val, refManError) {
 		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return;
 		}
 		this.decRefCount(ref.ptr[offset], refManError);
@@ -513,7 +513,7 @@ class PlwRefManager {
 	
 	getOffsetValueRecord(ref, offset, isForMutate, refManError, result) {
 		if (offset < 0 || offset >= ref.totalSize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return;
 		}
 		if (isForMutate === true) {
@@ -537,7 +537,7 @@ class PlwRefManager {
 	
 	getOffsetValueArray(ref, offset, isForMutate, refManError, result) {
 		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidRefOffset(offset);
+			refManError.invalidOffset(offset);
 			return;
 		}
 		if (isForMutate === true) {

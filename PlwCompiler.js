@@ -803,6 +803,18 @@ class CompilerContext {
 					lengthFunc.nativeIndex = this.getFunction("length_basic_array(ref)").nativeIndex;
 				}
 				this.addFunction(lengthFunc);
+				var lastIndexFunc =  new EvalResultFunction(
+					"last_index",
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
+					EVAL_TYPE_INTEGER, 
+					false
+				);
+				if (evalType.underlyingType.isRef) {
+					lastIndexFunc.nativeIndex = this.getFunction("last_index_array(ref)").nativeIndex;
+				} else {
+					lastIndexFunc.nativeIndex = this.getFunction("last_index_basic_array(ref)").nativeIndex;
+				}
+				this.addFunction(lastIndexFunc);
 			}
 			return evalType;
 		}
