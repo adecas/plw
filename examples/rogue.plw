@@ -25,7 +25,7 @@ type rect {
 };
 
 function point_in_array(p point, a [point]) boolean begin
-	for i in 0 .. length(a) - 1 loop
+	for i in 0 .. last_index(a) loop
 		if a[i] = p then
 			return true;
 		end if;
@@ -291,9 +291,9 @@ begin
 end entity;
 
 procedure print_visibility_flags(flags [[boolean]]) begin
-	for y in 0..length(flags) - 1 loop
+	for y in 0 .. last_index(flags) loop
 		var line := '';
-		for x in 0..length(flags[y]) - 1 loop
+		for x in 0 .. last_index(flags[y]) loop
 			line := line || case when flags[y][x] then 'X' else '.' end;
 		end loop;
 		print(line);
@@ -388,7 +388,7 @@ function make_map(width integer, height integer) map begin
         var y := random(1, height - h - 1) - 1;
         var new_room := make_rect(x, y, w, h);
         var ok := true;
-        for j in 0 .. length(rooms) - 1 loop
+        for j in 0 .. last_index(rooms) loop
             if intersect(new_room, rooms[j]) then
             	ok := false;
             end if;
@@ -397,7 +397,7 @@ function make_map(width integer, height integer) map begin
             tiles := tiles_with_room(tiles, new_room);
             if length(rooms) > 0 then
 				var new_center := center(new_room);
-        		var prev_center := center(rooms[length(rooms) - 1]);
+        		var prev_center := center(rooms[last_index(rooms)]);
 				if random(0, 2) = 1 then
             		tiles := tiles_with_horizontal_tunnel(tiles, prev_center.x, new_center.x, prev_center.y);
             		tiles := tiles_with_vertical_tunnel(tiles, prev_center.y, new_center.y, new_center.x);
@@ -474,7 +474,7 @@ function find_path(map map, start_pos point, end_pos point) [point] begin
 	var origins := {x: 0, y: 0} as point ** map.width ** map.height;
 	while length(frontier) > 0 loop
 		var new_frontier := [] as [point];
-		for i in 0..length(frontier) - 1 loop
+		for i in 0 .. last_index(frontier) loop
 			for p in map_neighbors(map, frontier[i]) loop
 				if p = end_pos then
 					var path := [p];
@@ -594,7 +594,7 @@ procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
 end populate_room;
 
 procedure populate_map(ctx entities [entity], ctx map map) begin
-	for i in 1 .. length(map.rooms) - 1 loop
+	for i in 1 .. last_index(map.rooms) loop
 		populate_room(ctx entities, ctx map, map.rooms[i]);
 	end loop;
 end populate_map;
@@ -634,7 +634,7 @@ function screen_line_to_text(line [screen_cell]) text begin
 	var t := ansi_color(ANSI_FG_WHITE, ANSI_BG_BLACK);
 	var last_fg := ANSI_FG_WHITE;
 	var last_bg := ANSI_BG_BLACK;
-	for i in 0 .. length(line) - 1 loop
+	for i in 0 .. last_index(line) loop
 		var r := line[i];
 		if r.fg_color <> last_fg then
 			if r.bg_color <> last_bg then
@@ -655,7 +655,7 @@ function screen_line_to_text(line [screen_cell]) text begin
 end screen_line_to_text;
 
 procedure display(screen [[screen_cell]], player entity, messages [text]) begin
-	for i in 0 .. length(screen) - 1 loop
+	for i in 0 .. last_index(screen) loop
 		if i = 0 then
 			print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || screen_line_to_text(screen[i]) || ANSI_CR);			
 		else
@@ -667,7 +667,7 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 		status_line := status_line || text((char_code(' ', 0) as char) ** (SCREEN_WIDTH - length(status_line)));
 		write(ansi_color(ANSI_FG_YELLOW, ANSI_BG_BLUE) || status_line || ansi_color(ANSI_FG_WHITE, ANSI_BG_BLACK));
 	end;
-	for i in max(0, length(messages) - 3) .. length(messages) - 1 loop
+	for i in max(0, length(messages) - 3) .. last_index(messages) loop
 		write(ANSI_CR || ANSI_LF || messages[i]);
 	end loop;
 end display;
@@ -743,7 +743,7 @@ procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, p
 end pickup_item;
 
 procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer) begin
-	for i in 0 .. length(entities) - 1 loop
+	for i in 0 .. last_index(entities) loop
 		const entity := entities[i];
 		if entity.is_active then
 			kindof entity.viewrange when some(r) then
@@ -777,7 +777,7 @@ procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer) 
 end viewrange_tick;
 
 procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], player_id integer) begin
-	for i in 0 .. length(entities) - 1 loop
+	for i in 0 .. last_index(entities) loop
 		const entity := entities[i];
 		if entity.is_active and entity.is_monster then
 			kindof entity.position when some(p) then
@@ -884,7 +884,7 @@ end entity_use_item;
 function choose_inventory_item(entities [entity], player_id integer) integer begin
 	while true loop
 		var items := [] as [integer];
-		for i in 0 .. length(entities) - 1 loop
+		for i in 0 .. last_index(entities) loop
 			kindof entities[i].item when some(item) then
 				if item.owner_id = player_id then
 					items := items || [i];
@@ -892,7 +892,7 @@ function choose_inventory_item(entities [entity], player_id integer) integer beg
 			end;
 		end loop;
 		print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'Inventory (' || text(length(items)) || ' items):' || ANSI_CR);			
-		for i in 0 .. length(items) - 1 loop
+		for i in 0 .. last_index(items) loop
 			print(text(i + 1) || ': ' || entities[items[i]].name || ANSI_CR);
 		end loop;
 		print('x: Exit inventory' || ANSI_CR);
