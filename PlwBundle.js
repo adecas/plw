@@ -6989,6 +6989,21 @@ class NativeFunctionManager {
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"text",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_CHAR)]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = PlwStringRef.make(sm.refMan, String.fromCharCode(sm.stack[sm.sp - 2]));
+				sm.stackMap[sm.sp - 2] = true;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_BOOLEAN)]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
@@ -7307,6 +7322,42 @@ class NativeFunctionManager {
 			})
 		));	
 		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"subtext",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT),
+				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER)
+			]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refId = sm.stack[sm.sp - 3];
+				let beginIndex = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				if (beginIndex < 0) {
+					return StackMachineError.refAccessOutOfBound();
+				}
+				if (beginIndex > ref.str.length) {
+					return StackMachineError.refAccessOutOfBound();
+				}
+				let resultRefId = PlwStringRef.make(sm.refMan, ref.str.substr(beginIndex));
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = resultRefId;
+				sm.stackMap[sm.sp - 3] = true;
+				sm.sp -= 2;
+				return null;
+			})
+		));	
+
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"char_code",
 			new EvalResultParameterList(2, [
