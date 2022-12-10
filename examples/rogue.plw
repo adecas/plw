@@ -45,6 +45,60 @@ function center(r rect) point begin
 	return {x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2} as point; 
 end center;
 
+type line_dots_context {
+	x1 integer,
+	y1 integer,
+	x2 integer,
+	y2 integer,
+	dx integer,
+	sx integer,
+	dy integer,
+	sy integer,
+	error integer,
+	again boolean
+};
+
+function line_dots_init(x1 integer, y1 integer, x2 integer, y2 integer) line_dots_context begin
+	return {
+		x1: x1,
+		y1: y1,
+		x2: x2,
+		y2: y2,
+		dx: abs(x2 - x1),
+		sx:  case when x1 < x2 then 1 else -1 end,
+		dy: -abs(y2 - y1),
+		sy: case when y1 < y2 then 1 else -1 end,
+		error: abs(x2 - x1) - abs(y2 - y1),
+		again: true
+	} as line_dots_context;
+end line_dots_init;
+
+function line_dots_next(ctx ldc line_dots_context) {x integer, y integer} begin
+	var result := {x: ldc.x1, y: ldc.y1};
+    if ldc.x1 = ldc.x2 and ldc.y1 = ldc.y2 then
+    	ldc.again := false;
+   	else
+	    var e2 := 2 * ldc.error;
+	    if e2 >= ldc.dy then
+	        if ldc.x1 = ldc.x2 then
+	        	ldc.again := false;
+	        else
+	        	ldc.error := ldc.error + ldc.dy;
+	        	ldc.x1 := ldc.x1 + ldc.sx;
+	        end if;
+	    end if;
+	    if e2 <= ldc.dx then
+	        if ldc.y1 = ldc.y2 then
+	        	ldc.again := false;
+	        else
+	        	ldc.error := ldc.error + ldc.dx;
+	        	ldc.y1 := ldc.y1 + ldc.sy;
+	        end if;
+	    end if;
+	end if;
+	return result;
+end line_dots_next;
+
 generator line_dots(x1 integer, y1 integer, x2 integer, y2 integer) {x integer, y integer} begin
     var dx := abs(x2 - x1);
     var sx := case when x1 < x2 then 1 else -1 end;
@@ -83,17 +137,18 @@ const GLYPH_PLAYER := '@';
 const GLYPH_WALL := '#';
 const GLYPH_FLOOR := '.';
 
-const CHAR_UP := char_code('i', 0) as char;
-const CHAR_DOWN := char_code('k', 0) as char;
-const CHAR_LEFT := char_code('j', 0) as char;
-const CHAR_RIGHT := char_code('l', 0) as char;
-const CHAR_QUIT := char_code('x', 0) as char;
-const CHAR_UPRIGHT := char_code('o', 0) as char;
-const CHAR_UPLEFT := char_code('u', 0) as char;
-const CHAR_DOWNRIGHT := char_code(';', 0) as char;
-const CHAR_DOWNLEFT := char_code(',', 0) as char;
-const CHAR_PICKUP := char_code(' ', 0) as char;
-const CHAR_INVENTORY := char_code('y', 0) as char;
+const CHAR_UP := char_at('i', 0);
+const CHAR_DOWN := char_at('k', 0);
+const CHAR_LEFT := char_at('j', 0);
+const CHAR_RIGHT := char_at('l', 0);
+const CHAR_QUIT := char_at('x', 0);
+const CHAR_UPRIGHT := char_at('o', 0);
+const CHAR_UPLEFT := char_at('u', 0);
+const CHAR_DOWNRIGHT := char_at(';', 0);
+const CHAR_DOWNLEFT := char_at(',', 0);
+const CHAR_PICKUP := char_at(' ', 0);
+const CHAR_INVENTORY := char_at('y', 0);
+const CHAR_SPACE := char_at(' ', 0);
 
 
 const ANSI_CR := text([13 as char]);
@@ -432,7 +487,9 @@ function visible_tile_flags(tiles [[tile_type]], x integer, y integer, range int
 		for i in 0 .. range * 2 loop
 			var border_x := case when dir = 1 or dir = 3 then i when dir = 2 then 2 * range else 0 end;
 			var border_y := case when dir = 2 or dir = 4 then i when dir = 3 then 2 * range else 0 end;
-			for d in line_dots(range, range, border_x, border_y) loop
+			var ldc := line_dots_init(range, range, border_x, border_y);
+			while ldc.again loop
+				var d := line_dots_next(ctx ldc);
 				flags[d.y][d.x] := true;
 				exit when tiles[y - range + d.y][x - range + d.x] = wall as tile_type;
 				if d.x > 0 then
@@ -664,7 +721,7 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 	end loop;
 	kindof player.combat_stat when some(cs) then
 		var status_line := 'Health: ' || text(cs.hp) || '/' || text(cs.max_hp);
-		status_line := status_line || text((char_code(' ', 0) as char) ** (SCREEN_WIDTH - length(status_line)));
+		status_line := status_line || text(CHAR_SPACE ** (SCREEN_WIDTH - length(status_line)));
 		write(ansi_color(ANSI_FG_YELLOW, ANSI_BG_BLUE) || status_line || ansi_color(ANSI_FG_WHITE, ANSI_BG_BLACK));
 	end;
 	for i in max(0, length(messages) - 3) .. last_index(messages) loop
@@ -742,14 +799,16 @@ procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, p
 	end;	
 end pickup_item;
 
-procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer) begin
+procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer, ctx visibe_tile_flags_time integer) begin
 	for i in 0 .. last_index(entities) loop
 		const entity := entities[i];
 		if entity.is_active then
 			kindof entity.viewrange when some(r) then
 				if r.dirty then
 					kindof entity.position when some(p) then
+						var t1 := now();
 						r.flags := visible_tile_flags(map.tiles, p.x, p.y, r.range);
+						visibe_tile_flags_time := visibe_tile_flags_time + now() - t1;
 						r.dirty := false;
 						entities[i].viewrange := some(r) as opt_viewrange;
 						if i = player_id then
@@ -918,15 +977,31 @@ procedure main_loop() begin
 	var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
 	var player_id := spawn_player(ctx entities, ctx map);
 	populate_map(ctx entities, ctx map);
+	var frame_count := 0;
+	var viewrange_tick_time := 0;
+	var visibe_tile_flags_time := 0;
+	var monster_tick_time := 0;
+	var render_time := 0;
+	var display_time := 0;
 	while true loop
-		viewrange_tick(ctx entities, ctx map, player_id);
+		frame_count := frame_count + 1;
+		var t1 := now();
+		viewrange_tick(ctx entities, ctx map, player_id, ctx visibe_tile_flags_time);
+		var t2 := now();
 		monster_tick(ctx entities, ctx map, ctx messages, player_id);
+		var t3 := now();
 		if not entities[player_id].is_active then
 			game_over_loop();
 			exit;
 		end if;
 		render(ctx screen, entities, map);
+		var t4 := now();
 		display(screen, entities[player_id], messages);
+		var t5 := now();
+		viewrange_tick_time := viewrange_tick_time + t2 - t1;
+		monster_tick_time := monster_tick_time + t3 - t2;
+		render_time := render_time + t4 - t3;
+		display_time := display_time + t5 - t4; 
 		var input := get_char();
 		if input = CHAR_UP then
 			move_player(ctx entities, ctx map, ctx messages, player_id, 0, -1);
@@ -956,6 +1031,13 @@ procedure main_loop() begin
 		end if;
 	end loop;
 	write(ANSI_CLEAR_TERMINAL || ANSI_SHOW_CURSOR || ANSI_RESET_COLOR);
+	print('frame_count         : ' || text(frame_count));
+	print('viewrange_tick_time : ' || text(viewrange_tick_time / frame_count));
+	print('visibe_tile_flags_time : ' || text(visibe_tile_flags_time / frame_count));
+	print('monster_tick_time   : ' || text(monster_tick_time / frame_count));
+	print('render_time         : ' || text(render_time / frame_count));
+	print('display_time        : ' || text(display_time / frame_count));
+
 end main_loop;
 
 main_loop();
