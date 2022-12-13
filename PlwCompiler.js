@@ -1560,26 +1560,70 @@ class Compiler {
 				if (sequence.isError()) {
 					return sequence;
 				}
-				if (sequence.tag !== "res-type-sequence") {
-					return EvalError.wrongType(sequence, "sequence").fromExpr(expr.sequence);
-				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
-				let testLoc = this.codeBlock.codeSize;
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeEnded();
-				let endLoc = this.codeBlock.codeJnz(0);
-				let stmtRet = this.evalStatement(expr.statement);
-				if (stmtRet.isError()) {
-					return stmtRet;
-				}
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				this.codeBlock.codePopLocal(indexVar.offset);
-				this.codeBlock.codeJmp(testLoc);
-				this.codeBlock.setLoc(endLoc);
+				if (sequence.tag == "res-type-sequence") {
+					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeNext();
+					let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					let testLoc = this.codeBlock.codeSize;
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeEnded();
+					let endLoc = this.codeBlock.codeJnz(0);
+					let stmtRet = this.evalStatement(expr.statement);
+					if (stmtRet.isError()) {
+						return stmtRet;
+					}
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeNext();
+					this.codeBlock.codePopLocal(indexVar.offset);
+					this.codeBlock.codeJmp(testLoc);
+					this.codeBlock.setLoc(endLoc);
+				} else if (sequence.tag === "res-type-array") {
+					let arrayVar = this.scope.addVariable("_for_array", sequence, false);
+					let lastIndexFuncIndex = sequence.underlyingType.isRef ?
+						this.context.getFunction("last_index_array(ref)").nativeIndex :
+						this.context.getFunction("last_index_basic_array(ref)").nativeIndex;
+					this.codeBlock.codeDup();
+					this.codeBlock.codePush(1);
+					this.codeBlock.codeCallNative(lastIndexFuncIndex);
+					let lastIndexVar = this.scope.addVariable("_for_last_index", EVAL_TYPE_INTEGER, false);
+					this.codeBlock.codePush(0);
+					let itemVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					if (expr.isReverse === true) {
+						this.codeBlock.codePushLocal(lastIndexVar.offset);
+					} else {
+						this.codeBlock.codePush(0);
+					}
+					let indexVar = this.scope.addVariable("_for_index", EVAL_TYPE_INTEGER, false);
+					let testLoc = this.codeBlock.codeSize;
+					this.codeBlock.codePushLocal(indexVar.offset);
+					if (expr.isReverse === true) {
+						this.codeBlock.codePush(0);
+						this.codeBlock.codeGte();
+					} else {
+						this.codeBlock.codePushLocal(lastIndexVar.offset);
+						this.codeBlock.codeLte();
+					}
+					let endLoc = this.codeBlock.codeJz(0);
+					this.codeBlock.codePushLocal(arrayVar.offset);
+					this.codeBlock.codePushLocal(indexVar.offset);
+					this.codeBlock.codePushPtrOffset();
+					this.codeBlock.codePopLocal(itemVar.offset);
+					let stmtRet = this.evalStatement(expr.statement);
+					if (stmtRet.isError()) {
+						return stmtRet;
+					}
+					this.codeBlock.codePush(1);
+					if (expr.isReverse === true) {
+						this.codeBlock.codeSub();
+					} else {
+						this.codeBlock.codeAdd();
+					}
+					this.codeBlock.codeJmp(testLoc);
+					this.codeBlock.setLoc(endLoc);
+				} else {
+					return EvalError.wrongType(sequence, "sequence or array").fromExpr(expr.sequence);
+				}	
 				for (let i = 0; i < this.scope.exitLocCount; i++) {
 					this.codeBlock.setLoc(this.scope.exitLocs[i]);
 				}

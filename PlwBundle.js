@@ -3165,6 +3165,20 @@ class CompilerContext {
 					lastIndexFunc.nativeIndex = this.getFunction("last_index_basic_array(ref)").nativeIndex;
 				}
 				this.addFunction(lastIndexFunc);
+				var indexOfFunc =  new EvalResultFunction(
+					"index_of",
+					new EvalResultParameterList(2, [
+						new EvalResultParameter("item", evalType.underlyingType, false),
+						new EvalResultParameter("array", evalType, false)]),
+					EVAL_TYPE_INTEGER, 
+					false
+				);
+				if (evalType.underlyingType.isRef) {
+					indexOfFunc.nativeIndex = this.getFunction("index_of_array(ref,ref)").nativeIndex;
+				} else {
+					indexOfFunc.nativeIndex = this.getFunction("index_of_basic_array(integer,ref)").nativeIndex;
+				}
+				this.addFunction(indexOfFunc);
 			}
 			return evalType;
 		}
@@ -3896,26 +3910,70 @@ class Compiler {
 				if (sequence.isError()) {
 					return sequence;
 				}
-				if (sequence.tag !== "res-type-sequence") {
-					return EvalError.wrongType(sequence, "sequence").fromExpr(expr.sequence);
-				}
-				let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
-				let testLoc = this.codeBlock.codeSize;
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeEnded();
-				let endLoc = this.codeBlock.codeJnz(0);
-				let stmtRet = this.evalStatement(expr.statement);
-				if (stmtRet.isError()) {
-					return stmtRet;
-				}
-				this.codeBlock.codePushLocal(sequenceVar.offset);
-				this.codeBlock.codeNext();
-				this.codeBlock.codePopLocal(indexVar.offset);
-				this.codeBlock.codeJmp(testLoc);
-				this.codeBlock.setLoc(endLoc);
+				if (sequence.tag == "res-type-sequence") {
+					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeNext();
+					let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					let testLoc = this.codeBlock.codeSize;
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeEnded();
+					let endLoc = this.codeBlock.codeJnz(0);
+					let stmtRet = this.evalStatement(expr.statement);
+					if (stmtRet.isError()) {
+						return stmtRet;
+					}
+					this.codeBlock.codePushLocal(sequenceVar.offset);
+					this.codeBlock.codeNext();
+					this.codeBlock.codePopLocal(indexVar.offset);
+					this.codeBlock.codeJmp(testLoc);
+					this.codeBlock.setLoc(endLoc);
+				} else if (sequence.tag === "res-type-array") {
+					let arrayVar = this.scope.addVariable("_for_array", sequence, false);
+					let lastIndexFuncIndex = sequence.underlyingType.isRef ?
+						this.context.getFunction("last_index_array(ref)").nativeIndex :
+						this.context.getFunction("last_index_basic_array(ref)").nativeIndex;
+					this.codeBlock.codeDup();
+					this.codeBlock.codePush(1);
+					this.codeBlock.codeCallNative(lastIndexFuncIndex);
+					let lastIndexVar = this.scope.addVariable("_for_last_index", EVAL_TYPE_INTEGER, false);
+					this.codeBlock.codePush(0);
+					let itemVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					if (expr.isReverse === true) {
+						this.codeBlock.codePushLocal(lastIndexVar.offset);
+					} else {
+						this.codeBlock.codePush(0);
+					}
+					let indexVar = this.scope.addVariable("_for_index", EVAL_TYPE_INTEGER, false);
+					let testLoc = this.codeBlock.codeSize;
+					this.codeBlock.codePushLocal(indexVar.offset);
+					if (expr.isReverse === true) {
+						this.codeBlock.codePush(0);
+						this.codeBlock.codeGte();
+					} else {
+						this.codeBlock.codePushLocal(lastIndexVar.offset);
+						this.codeBlock.codeLte();
+					}
+					let endLoc = this.codeBlock.codeJz(0);
+					this.codeBlock.codePushLocal(arrayVar.offset);
+					this.codeBlock.codePushLocal(indexVar.offset);
+					this.codeBlock.codePushPtrOffset();
+					this.codeBlock.codePopLocal(itemVar.offset);
+					let stmtRet = this.evalStatement(expr.statement);
+					if (stmtRet.isError()) {
+						return stmtRet;
+					}
+					this.codeBlock.codePush(1);
+					if (expr.isReverse === true) {
+						this.codeBlock.codeSub();
+					} else {
+						this.codeBlock.codeAdd();
+					}
+					this.codeBlock.codeJmp(testLoc);
+					this.codeBlock.setLoc(endLoc);
+				} else {
+					return EvalError.wrongType(sequence, "sequence or array").fromExpr(expr.sequence);
+				}	
 				for (let i = 0; i < this.scope.exitLocCount; i++) {
 					this.codeBlock.setLoc(this.scope.exitLocs[i]);
 				}
@@ -6856,7 +6914,7 @@ class StackMachine {
 		println("heap (total: " + this.refMan.refCount + ", free: " + this.refMan.freeRefIdCount + "):");
 		for (let i = 0; i < this.refMan.refCount; i++) {
 			let ref = this.refMan.refs[i];
-			if (ref !== -1) {
+			if (ref !== null) {
 				println("    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref));
 			}
 		}
@@ -7143,6 +7201,86 @@ class NativeFunctionManager {
 				sm.stack[sm.sp - 2] = len;
 				sm.stackMap[sm.sp - 2] = false;
 				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"index_of_array",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("item", EVAL_TYPE_REF),
+				new EvalResultParameter("array", EVAL_TYPE_REF)
+			]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refIdItem = sm.stack[sm.sp - 3];
+				let refIdArray = sm.stack[sm.sp - 2];
+				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}				
+				let indexOf = -1;
+				for (let i = 0; i < refArray.arraySize; i++) {
+					let isEquals = sm.refMan.compareRefs(refIdItem, refArray.ptr[i], refManError);
+					if (refManError.hasError()) {
+						return StackMachineError.referenceManagerError(refManError);
+					}
+					if (isEquals === true) {
+						indexOf = i;
+						break;
+					}
+				}
+				sm.refMan.decRefCount(refIdItem, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(refIdArray, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = indexOf;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"index_of_basic_array",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("item", EVAL_TYPE_INTEGER),
+				new EvalResultParameter("array", EVAL_TYPE_REF)
+			]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let item = sm.stack[sm.sp - 3];
+				let refIdArray = sm.stack[sm.sp - 2];
+				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}				
+				let indexOf = -1;
+				for (let i = 0; i < refArray.arraySize; i++) {
+					if (item === refArray.ptr[i]) {
+						indexOf = i;
+						break;
+					}
+				}
+				sm.refMan.decRefCount(refIdError, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = indexOf;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
 				return null;
 			})
 		));
@@ -7455,6 +7593,44 @@ class NativeFunctionManager {
 		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"index_of",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("c", EVAL_TYPE_TEXT),
+				new EvalResultParameter("t", EVAL_TYPE_TEXT)
+			]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refIdSub = sm.stack[sm.sp - 3];
+				let refSub = sm.refMan.getRefOfType(refIdSub, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let index = ref.str.indexOf(refSub.str);
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(refIdSub, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = index;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"split",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
@@ -7614,6 +7790,49 @@ class NativeFunctionManager {
 			})
 		));
 		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"in_array",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("item", EVAL_TYPE_REF),
+				new EvalResultParameter("array", EVAL_TYPE_REF)
+			]),
+			EVAL_TYPE_BOOLEAN,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 2) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refIdItem = sm.stack[sm.sp - 3];
+				let refId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let isIn = 0;
+				for (let i = 0; i < ref.arraySize; i++) {
+					let isEqual = sm.refMan.compareRefs(refIdItem, ref.ptr[i], refManError);
+					if(refManError.hasError()) {
+						return StackMachineError.referenceManagerError(refManError);						
+					}
+					if (isEqual === true) {
+						isIn = 1;
+						break;
+					}
+				}
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.refMan.decRefCount(refIdItem, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 3] = isIn;
+				sm.stackMap[sm.sp - 3] = false;
+				sm.sp -= 2;
+				return null;
+			})
+		));
 		
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"concat_basic_array",

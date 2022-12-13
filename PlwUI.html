@@ -223,6 +223,29 @@ end loop;
 print('Done while'); 
 </pre>
 
+<p id="snippet-for-loop-title" class="snippet">For loop</p>
+<pre id="snippet-for-loop">
+var t := '';
+for i in 0 .. 9 loop
+  t := t || text(i);
+end loop;
+for i in reverse 0 .. 9 loop
+  t := t || text(i);
+end loop;
+for i in ['a', 'b', 'c'] loop
+  t := t || i;
+end loop;
+for i in reverse ['a', 'b', 'c'] loop
+  t := t || i;
+end loop;
+print(t);
+if t = '01234567899876543210abccba' then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+</pre>
+
 <p id="snippet-early-exit-title" class="snippet">Early Exit</p>
 <pre id="snippet-early-exit">
 var i := 0;

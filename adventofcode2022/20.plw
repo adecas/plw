@@ -1,0 +1,187 @@
+var input := '
+addx 2
+addx 3
+noop
+addx 1
+addx 27
+addx -23
+addx 5
+noop
+addx 1
+noop
+addx 4
+addx 1
+noop
+addx 4
+addx 5
+noop
+noop
+noop
+addx 5
+addx -4
+addx 4
+noop
+addx 1
+addx -38
+noop
+noop
+addx 7
+addx 8
+addx -3
+noop
+addx 3
+noop
+addx 5
+noop
+noop
+addx -2
+addx 2
+addx 9
+addx -2
+addx 6
+addx 1
+addx -4
+addx 5
+addx 2
+addx -14
+addx -6
+addx -16
+addx 1
+addx 5
+addx 1
+addx 4
+addx -2
+noop
+addx -7
+addx -3
+addx 17
+addx 5
+noop
+noop
+addx 19
+addx -16
+noop
+addx 14
+addx -8
+addx 2
+noop
+addx 4
+noop
+addx -35
+addx -2
+noop
+noop
+addx 7
+addx 19
+addx -26
+addx 10
+addx 29
+addx -21
+noop
+addx 4
+noop
+noop
+addx -9
+addx 4
+addx 8
+addx 7
+noop
+addx -2
+addx 5
+addx 2
+addx -19
+addx -18
+noop
+noop
+noop
+noop
+addx 7
+addx -7
+addx 37
+addx -27
+addx 5
+addx 2
+addx -12
+addx 4
+addx 11
+noop
+noop
+noop
+addx 5
+addx -14
+addx 21
+addx -4
+addx 5
+addx 2
+noop
+addx -35
+noop
+noop
+noop
+noop
+addx 7
+addx 1
+noop
+noop
+addx 5
+addx -1
+addx 5
+addx 1
+noop
+addx 4
+addx 1
+noop
+noop
+addx 4
+noop
+addx 1
+addx 2
+addx 5
+addx 2
+addx 1
+noop
+noop
+noop
+noop
+';
+
+var nl := '
+';
+
+var x := 1;
+var histo := [] as [integer];
+
+var lines := split(input, nl);
+for i in 0 .. last_index(lines) loop
+	var line := lines[i];
+	if length(line) >= 4 then
+		var op := subtext(line, 0, 4);
+		if op = 'addx' then
+			var arg := integer(subtext(line, 5));
+			histo := histo || [x, x];
+			x := x + arg;
+			# print(text(cycle) || ' ' || text(x));
+		elsif op = 'noop' then
+			histo := histo || [x];
+		end if;
+	end if;
+end loop;
+
+var strength := 0;
+var i := 19;
+while i < length(histo) loop
+	# print(text(histo[i]));
+	strength := strength + histo[i] * (i + 1);
+	i := i + 40;
+end loop;
+
+print(text(strength));
+
+if strength = 12540 then
+	print('Correct');
+else
+	print('Error');
+end if;
+
+
+

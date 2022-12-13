@@ -1365,7 +1365,7 @@ class StackMachine {
 		println("heap (total: " + this.refMan.refCount + ", free: " + this.refMan.freeRefIdCount + "):");
 		for (let i = 0; i < this.refMan.refCount; i++) {
 			let ref = this.refMan.refs[i];
-			if (ref !== -1) {
+			if (ref !== null) {
 				println("    " + i + ": " + ref.refCount + " " + PLW_TAG_REF_NAMES[ref.tag] + " " + JSON.stringify(ref));
 			}
 		}
