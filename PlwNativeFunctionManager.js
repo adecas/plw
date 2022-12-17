@@ -570,6 +570,34 @@ class NativeFunctionManager {
 				sm.sp -= 2;
 				return null;
 			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"trim",
+			new EvalResultParameterList(1, [
+				new EvalResultParameter("t", EVAL_TYPE_TEXT)
+			]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refManError = new PlwRefManagerError();
+				let refId = sm.stack[sm.sp - 2];
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let resultRefId = PlwStringRef.make(sm.refMan, ref.str.trim());
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 2] = resultRefId;
+				sm.stackMap[sm.sp - 2] = true;
+				sm.sp -= 1;
+				return null;
+			})
 		));	
 
 		compilerContext.addFunction(EvalResultFunction.fromNative(
