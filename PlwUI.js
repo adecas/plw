@@ -68,6 +68,48 @@ function execLoop() {
 	}
 }
 
+function compileLoop() {
+	let rootCodeBlocks = [];
+	while (parser.peekToken() !== TOK_EOF) {
+		let expr = parser.readStatement();
+		if (Parser.isError(expr)) {
+			printTextOutObject(expr);
+			break;
+		}
+		compiler.resetCode();
+		let result = compiler.evalStatement(expr);
+		if (result.isError()) {
+			printTextOutObject(result);
+			return;
+		}
+		if (compiler.codeBlock.codeSize > 0) {
+			rootCodeBlocks[rootCodeBlocks.length] = compiler.codeBlock;
+		}
+	}
+	let codeBlockId = compilerContext.codeBlocks.length;
+	let codeBlocks = [...compilerContext.codeBlocks, ...rootCodeBlocks];
+	let codeBlockCount = codeBlocks.length;
+	let compiled = "" + codeBlockCount + " " + codeBlockId + "\n";
+	for (let i = 0; i < codeBlockCount; i++) {
+		let cb = codeBlocks[i];
+		compiled += cb.blockName.length + " " + cb.blockName + "\n" + cb.strConstSize + "\n";
+		for (let j = 0; j < cb.strConstSize; j++) {
+			compiled += cb.strConsts[j].length + " " + cb.strConsts[j] + "\n";
+		}
+		compiled += cb.codeSize + "\n";
+		for (let j = 0; j < cb.codeSize; j++) {
+			compiled += cb.codes[j] + " ";
+			if (j % 50 == 49) {
+				compiled += "\n";
+			}
+		}
+		compiled += "\n";
+	}
+	navigator.clipboard.writeText(compiled).then(function() {
+    	alert("Compiled code copied to clipboard")
+	});	
+}
+
 function onScrollToClick() {
 	document.getElementById("scrollto").scrollIntoView(true);
 	term.focus();
@@ -87,6 +129,15 @@ function onExecClick() {
 	}
 }
 
+function onCompileClick() {
+	onResetContextClick();
+	onClearMessageClick();
+	tokenReader = new TokenReader(getTextIn(), 1, 1);
+	parser = new Parser(tokenReader);
+	compiler = new Compiler(compilerContext);
+	compileLoop();
+}
+
 function onDisplayContextClick() {
 	printTextOutObject(compilerContext);
 }
@@ -104,6 +155,13 @@ function onResetContextClick() {
 
 function onClearMessageClick() {
 	term.clear();
+}
+
+function onCopyAllMessageClick() {
+	term.selectAll();
+	navigator.clipboard.writeText(term.getSelection()).then(function() {
+    	alert("Term content copied to clipboard")
+	});
 }
 
 function fillSnippetSelect() {

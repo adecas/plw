@@ -1,0 +1,180 @@
+var input_test := '
+Valve OJ has flow rate=0; tunnels lead to valves EW, IG
+Valve BN has flow rate=0; tunnels lead to valves SA, AA
+Valve SA has flow rate=5; tunnels lead to valves QK, LP, ZP, BN, VH
+Valve RL has flow rate=21; tunnel leads to valve AM
+Valve LR has flow rate=19; tunnel leads to valve XZ
+Valve VQ has flow rate=0; tunnels lead to valves OW, IG
+Valve ZK has flow rate=0; tunnels lead to valves EW, WC
+Valve IG has flow rate=16; tunnels lead to valves OJ, VQ
+Valve WC has flow rate=22; tunnels lead to valves VD, ZK
+Valve EW has flow rate=18; tunnels lead to valves OJ, ZK
+Valve FP has flow rate=8; tunnel leads to valve GB
+Valve JF has flow rate=23; tunnel leads to valve VD
+Valve BL has flow rate=0; tunnels lead to valves AA, ZD
+Valve BZ has flow rate=0; tunnels lead to valves QK, JA
+Valve KH has flow rate=0; tunnels lead to valves SJ, FC
+Valve FU has flow rate=0; tunnels lead to valves FC, MH
+Valve ZP has flow rate=0; tunnels lead to valves SA, FC
+Valve DZ has flow rate=0; tunnels lead to valves AA, MH
+Valve RI has flow rate=0; tunnels lead to valves LP, MH
+Valve AE has flow rate=0; tunnels lead to valves FC, AA
+Valve JA has flow rate=4; tunnels lead to valves MM, BZ, JR, ZI, QO
+Valve XP has flow rate=0; tunnels lead to valves ZD, ZI
+Valve GB has flow rate=0; tunnels lead to valves FP, SJ
+Valve AM has flow rate=0; tunnels lead to valves ZD, RL
+Valve MH has flow rate=3; tunnels lead to valves VJ, DZ, JR, FU, RI
+Valve QK has flow rate=0; tunnels lead to valves BZ, SA
+Valve AA has flow rate=0; tunnels lead to valves DZ, CZ, BL, AE, BN
+Valve MJ has flow rate=0; tunnels lead to valves VN, VH
+Valve QO has flow rate=0; tunnels lead to valves CZ, JA
+Valve MM has flow rate=0; tunnels lead to valves FC, JA
+Valve VN has flow rate=17; tunnels lead to valves FV, MJ
+Valve OW has flow rate=0; tunnels lead to valves SJ, VQ
+Valve ZI has flow rate=0; tunnels lead to valves XP, JA
+Valve VJ has flow rate=0; tunnels lead to valves KJ, MH
+Valve KQ has flow rate=0; tunnels lead to valves XZ, KJ
+Valve FC has flow rate=12; tunnels lead to valves ZP, MM, KH, AE, FU
+Valve LP has flow rate=0; tunnels lead to valves SA, RI
+Valve VD has flow rate=0; tunnels lead to valves WC, JF
+Valve JR has flow rate=0; tunnels lead to valves MH, JA
+Valve VH has flow rate=0; tunnels lead to valves SA, MJ
+Valve CZ has flow rate=0; tunnels lead to valves AA, QO
+Valve SJ has flow rate=15; tunnels lead to valves KH, FV, GB, OW
+Valve FV has flow rate=0; tunnels lead to valves VN, SJ
+Valve XZ has flow rate=0; tunnels lead to valves LR, KQ
+Valve KJ has flow rate=9; tunnels lead to valves KQ, VJ
+Valve ZD has flow rate=13; tunnels lead to valves XP, BL, AM
+';
+
+var input := input_test;
+
+type node {
+	value integer,
+	list [integer],
+	cost [integer]
+};
+
+
+function text_id_to_int(t text) integer begin
+	return (char_code(t, 0) - char_code('A', 0)) * 26 + char_code(t, 1) - char_code('A', 0);
+end text_id_to_int;
+
+function parse_input(input text, ctx starting_node_id integer) [node] begin
+	var nodes := [] as [node];
+	var node_ids := [] as [integer];
+	for line in split(input, '
+')
+	loop
+		if length(line) > 0 then
+			var parts := split(line, ' ');
+			node_ids := node_ids || [text_id_to_int(parts[1])];
+			var value := integer(subtext(parts[4], 5, length(parts[4]) - 6));
+			var list := [] as [integer];
+			for i in 9 .. last_index(parts) loop
+				list := list || [text_id_to_int(subtext(parts[i], 0, 2))];
+			end loop;
+			nodes := nodes || [{value: value, list: list, cost: [] as [integer]} as node];
+		end if;
+	end loop;
+	starting_node_id := index_of(0, node_ids);
+	for i in 0 .. last_index(nodes) loop
+		nodes[i].cost := -1 ** length(nodes);
+		nodes[i].cost[i] := 0;
+		for j in 0 .. last_index(nodes[i].list) loop
+			var ni := index_of(nodes[i].list[j], node_ids);
+			nodes[i].list[j] := ni;
+			nodes[i].cost[ni] := 1;
+		end loop;
+	end loop;
+	while true loop
+		var updated := false;
+		for i in 0 .. last_index(nodes) loop
+			for j in 0 .. last_index(nodes[i].cost) loop
+				if nodes[i].cost[j] <> -1 then
+					for k in 0 .. last_index(nodes[j].cost) loop
+						if nodes[j].cost[k] <> -1 then
+							var new_cost := nodes[j].cost[k] + nodes[i].cost[j];
+							if nodes[i].cost[k] = -1 or nodes[i].cost[k] > new_cost then
+								nodes[i].cost[k] := new_cost;
+								updated := true;
+							end if;
+						end if;
+					end loop;
+				end if;
+			end loop;
+		end loop;
+		exit when not updated;
+	end loop;
+	return nodes;
+end parse_input;
+
+procedure print_nodes(nodes [node]) begin
+	for i in 0 .. last_index(nodes) loop
+		print(text(i) || ': ' || text(nodes[i].value) || ' -> ' || text(nodes[i].list) || ' costs ' || text(nodes[i].cost));
+	end loop;
+end print_nodes;
+
+function max_rate(nodes [node]) integer begin
+	var max_rate := 0;
+	for n in nodes loop
+		if n.value > max_rate then
+			max_rate := n.value;
+		end if;
+	end loop;
+	return max_rate;
+end max_rate;
+
+function eval(node_id integer, nbsteps integer, nodes [node], ctx path [integer]) integer begin
+	if nbsteps = 2 then
+		# best we can do is open the valve
+		path := [node_id];
+		return nodes[node_id].value;
+	elsif nbsteps < 2 then
+		path := [node_id];
+		# no gain whatever we do
+		return 0;
+	end if;
+	# eval the gain of opening the valve
+	var gain := 0;
+	if nodes[node_id].value > 0 then
+		nbsteps := nbsteps - 1;
+		gain := nodes[node_id].value * nbsteps;
+		nodes[node_id].value := 0;
+	end if;
+	# eval the max gain of going to another valve and open it
+	var max_next_gain := 0;
+	var max_path := [] as [integer];
+	for i in 0 .. last_index(nodes) loop
+		if nodes[i].value > 0 then
+			var cost := nodes[node_id].cost[i];
+			if cost <> -1 and cost < nbsteps - 1 then
+				var next_path := [] as [integer];
+				var next_gain := eval(i, nbsteps - cost, nodes, ctx next_path);
+				if next_gain > max_next_gain then
+					max_next_gain := next_gain;
+					max_path := next_path;
+				end if;
+			end if;
+		end if;
+	end loop;
+	path := [node_id] || max_path;
+	return gain + max_next_gain;
+end eval;
+
+var starting_node_id := 0;	 
+var nodes := parse_input(input, ctx starting_node_id);
+print_nodes(nodes);
+print('Starting node: ' || text(starting_node_id));
+
+var path := [] as [integer];
+var total := eval(starting_node_id, 30, nodes, ctx path);
+print(text(total));
+print(text(path));
+
+if total = 1871 then
+	print('Correct');
+else
+	print('Error');
+end if;
+

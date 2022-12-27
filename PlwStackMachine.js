@@ -928,7 +928,7 @@ class StackMachine {
 		if (this.refManError.hasError()) {
 			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
 		}
-		if (funcId < 0 || ref.totalSize < 1 + 2 * funcId) {
+		if (funcId < 0 || (1 + 2 * funcId) >= ref.totalSize) {
 			return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let codeBlockId = ref.ptr[1 + 2 * funcId];
@@ -996,10 +996,10 @@ class StackMachine {
 		if (this.sp < 1) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
-		let nbParam = this.stack[this.sp - 1];
-		if (this.sp < 1) {
+		if (codeBlockId < 0 || codeBlockId > this.codeBlocks.length) {
 			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
+		let nbParam = this.stack[this.sp - 1];
 		if (nbParam < 0 || this.sp < nbParam + 1) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}					
@@ -1007,6 +1007,8 @@ class StackMachine {
 		let mapPtr = new Array(nbParam + 2);
 		ptr[0] = codeBlockId;
 		ptr[1] = 0;
+		mapPtr[0] = false;
+		mapPtr[1] = false;
 		for (let i = 0; i < nbParam; i++) {
 			ptr[i + 2] = this.stack[this.sp - nbParam - 1 + i];
 			mapPtr[i + 2] = this.stackMap[this.sp - nbParam - 1 + i];

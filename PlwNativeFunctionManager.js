@@ -339,7 +339,7 @@ class NativeFunctionManager {
 				let refManError = new PlwRefManagerError();
 				let item = sm.stack[sm.sp - 3];
 				let refIdArray = sm.stack[sm.sp - 2];
-				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_ARRAY, refManError);
+				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_BASIC_ARRAY, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}				
@@ -350,7 +350,7 @@ class NativeFunctionManager {
 						break;
 					}
 				}
-				sm.refMan.decRefCount(refIdError, refManError);
+				sm.refMan.decRefCount(refIdArray, refManError);
 				if (refManError.hasError()) {
 					return StackMachineError.referenceManagerError(refManError);
 				}

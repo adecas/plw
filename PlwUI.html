@@ -68,6 +68,7 @@ input[type="file"] {
 <body>
 
 <button onclick="onExecClick()">exec</button>
+<button onclick="onCompileClick()">compile</button>
 <label for="snippets">Snippets</label><select id="snippets" onchange="onSnippetChange()"><option value=""></option></select>
 <label for="inputfile" class="inputfilelabel">load file</label><input type="file" id="inputfile" onchange="onInputFileChange()">
 
@@ -84,6 +85,7 @@ input[type="file"] {
 </script>
 
 <button onclick="onClearMessageClick()">clear messages</button>
+<button onclick="onCopyAllMessageClick()">copy all</button>
 <button onclick="onDisplayContextClick()">display context</button>
 <button onclick="onDisplayStackMachineClick()">display stack machine</button>
 <button onclick="onResetContextClick()">reset context</button>

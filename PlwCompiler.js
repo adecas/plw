@@ -1931,7 +1931,7 @@ class Compiler {
 					actAsType = actAsType.underlyingType;
 				}
 				if (actAsType.tag !== "res-type-array") {
-					return EvalError.wrongType("empty array", asType.typeKey()).fromExpr(expr.expr);				
+					return EvalError.wrongType(asType, "array").fromExpr(expr.exprType);				
 				}
 				if (actAsType.underlyingType.isRef === true) {
 					this.codeBlock.codeCreateArray(0);

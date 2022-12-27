@@ -1,0 +1,117 @@
+var input := '
+Sensor at x=3482210, y=422224: closest beacon is at x=2273934, y=-202439
+Sensor at x=3679395, y=2737332: closest beacon is at x=4104213, y=2980736
+Sensor at x=3173475, y=3948494: closest beacon is at x=3494250, y=3554521
+Sensor at x=27235, y=3642190: closest beacon is at x=-190885, y=3635525
+Sensor at x=3851721, y=1754784: closest beacon is at x=3145586, y=2167751
+Sensor at x=327074, y=3250656: closest beacon is at x=-190885, y=3635525
+Sensor at x=3499970, y=3186179: closest beacon is at x=3494250, y=3554521
+Sensor at x=150736, y=2522778: closest beacon is at x=-85806, y=2000000
+Sensor at x=3000768, y=3333983: closest beacon is at x=2564067, y=3163630
+Sensor at x=1751302, y=1660540: closest beacon is at x=3145586, y=2167751
+Sensor at x=2591068, y=2923079: closest beacon is at x=2564067, y=3163630
+Sensor at x=48946, y=3999178: closest beacon is at x=-190885, y=3635525
+Sensor at x=3695475, y=3863101: closest beacon is at x=3494250, y=3554521
+Sensor at x=1504031, y=2760: closest beacon is at x=2273934, y=-202439
+Sensor at x=3021186, y=2667125: closest beacon is at x=3145586, y=2167751
+Sensor at x=1514629, y=3771171: closest beacon is at x=2564067, y=3163630
+Sensor at x=234064, y=616106: closest beacon is at x=-85806, y=2000000
+Sensor at x=3990843, y=3393575: closest beacon is at x=4104213, y=2980736
+Sensor at x=768875, y=2665271: closest beacon is at x=-85806, y=2000000
+';
+
+var search_range := 4000000;
+
+type sensor {
+	x integer,
+	y integer,
+	bx integer,
+	by integer
+};
+
+var sensors := [] as [sensor];
+
+for line in split(input, '
+')
+loop
+	if length(line) > 0 then
+		var parts := split(line, ' ');
+		sensors := sensors || [{
+			x: integer(subtext(parts[2], 2, length(parts[2]) - 3)),
+			y: integer(subtext(parts[3], 2, length(parts[3]) - 3)),
+			bx: integer(subtext(parts[8], 2, length(parts[8]) - 3)),
+			by: integer(subtext(parts[9], 2, length(parts[9]) - 2))
+		} as sensor] ;
+	end if;
+end loop;
+
+
+function nobpos(y integer, range integer, sensors [sensor]) [{x1 integer, x2 integer}] begin
+	var p := [] as [{x1 integer, x2 integer}];
+	for s in sensors loop
+		var dist := abs(s.x - s.bx) + abs(s.y - s.by);
+		dist := dist - abs(y - s.y);
+		if dist >= 0 then
+			var x1 := s.x - dist;
+			var x2 := s.x + dist;
+			if x1 < 0 then
+				x1 := 0;
+			elsif x2 > range then
+				x2 := range;
+			end if;
+			if x2 >= x1 then 
+				p := p || [{x1: x1, x2: x2}];
+			end if;
+		end if;
+	end loop;
+	return p;
+end nobpos;
+
+function merge_ranges(rl [{x1 integer, x2 integer}]) [{x1 integer, x2 integer}] begin
+	var ml := [] as [{x1 integer, x2 integer}];
+	var merge_count := 0;
+	for r in rl loop
+		var merged := false;
+		for i in 0 .. last_index(ml) loop
+			var m := ml[i];
+			if r.x1 <= m.x2 and r.x2 >= m.x1 then
+				if r.x1 < m.x1 then
+					ml[i].x1 := r.x1;
+				end if;
+				if r.x2 > m.x2 then
+					ml[i].x2 := r.x2;
+				end if;
+				merged := true;
+				merge_count := merge_count + 1;
+				exit;
+			end if; 
+		end loop;
+		if not merged then
+			ml := ml || [r];
+		end if;
+	end loop;
+	return case when merge_count > 0 then merge_ranges(ml) else ml end;
+end merge_ranges;
+
+var freq := 0;
+for i in 0 .. search_range loop
+	var n := merge_ranges(nobpos(i, search_range, sensors));
+	if length(n) > 1 then
+		var x := n[0].x2;
+		if n[1].x2 < x then
+			x := n[1].x2;
+		end if;
+		freq := (x + 1) * 4000000 + i;
+		exit;
+	end if;
+end loop;
+
+print(text(freq));
+
+if freq = 13171855019123 then
+	print('Correct');
+else
+	print('Error');
+end if;
+
+
