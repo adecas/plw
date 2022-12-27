@@ -1645,7 +1645,7 @@ static void PlwStackMachine_RunLoop(PlwStackMachine *sm, PlwError *error) {
 		sm->ip++;
 		if (code <= PLW_OPCODE1_MAX) {
 #ifdef PLW_DEBUG_SM
-			printf("sp: %d, bp: %d, cs: %d, ip: %d nbrefs: %d   %s\n", sm->sp, sm->bp, sm->codeBlockId, sm->ip - 1, PlwRefManager_RefCount(sm->refMan), PlwOpcodes[code]);
+			printf("sp: %ld, bp: %ld, cs: %ld, ip: %ld nbrefs: %ld   %s\n", sm->sp, sm->bp, sm->codeBlockId, sm->ip - 1, PlwRefManager_RefCount(sm->refMan), PlwOpcodes[code]);
 #endif
 			PlwStackMachine_Opcode1(sm, code, error);
 			if (PlwIsError(error)) {
@@ -1659,7 +1659,7 @@ static void PlwStackMachine_RunLoop(PlwStackMachine *sm, PlwError *error) {
 			arg1 = codeBlock->codes[sm->ip];
 			sm->ip++;
 #ifdef PLW_DEBUG_SM
-			printf("sp: %d, bp: %d, cs: %d, ip: %d nbrefs: %d   %s %d\n", sm->sp, sm->bp, sm->codeBlockId, sm->ip - 2, PlwRefManager_RefCount(sm->refMan), PlwOpcodes[code], arg1);
+			printf("sp: %ld, bp: %ld, cs: %ld, ip: %ld nbrefs: %ld   %s %ld\n", sm->sp, sm->bp, sm->codeBlockId, sm->ip - 2, PlwRefManager_RefCount(sm->refMan), PlwOpcodes[code], arg1);
 #endif
 			PlwStackMachine_Opcode2(sm, code, arg1, error);
 			if (PlwIsError(error)) {

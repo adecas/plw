@@ -12,11 +12,15 @@ void PlwSetError(PlwError *error, const char *code, char *message) {
 	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "%s", message);
 }
 
+PlwBoolean IsCharBlank(int c) {
+	return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
 int PlwSkipBlank(FILE *file) {
 	int c;
 	for (;;) {
 		c = fgetc(file);
-		if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+		if (!IsCharBlank(c)) {
 			return c;
 		}
 	}
@@ -32,7 +36,7 @@ PlwInt PlwReadNextInt(FILE *file, PlwError *error) {
 		return 0;
 	}
 	for(;;) {
-		if ((c >= '0' && c <= '9') || c == '-') {
+		if (!IsCharBlank(c)) {
 			*p = c;
 			p++;
 			if (p >= buffer + 255) break;
@@ -175,7 +179,7 @@ void PlwReadCodeBlocksFromFile(
 			return;
 		}
 #ifdef PLW_DEBUG_SM
-		printf("cs %d: %s\n", i, codeBlocks[i].name);
+		printf("cs %ld: %s\n", i, codeBlocks[i].name);
 #endif
 	}
 	fclose(file);
@@ -200,12 +204,8 @@ int main(int argc, char **argv) {
 	if (argc == 2) {
 		fileName = argv[1];
 	} else {
-		if (argc == 1) {
-			fileName = "test.plwc";
-		} else {
-			printf("Usage: plw <file.plwc>\n");
-			return -1;
-		}
+		printf("Usage: plw <file.plwc>\n");
+		return -1;
 	}
 	
 	PlwError_Init(&error);
