@@ -1257,6 +1257,16 @@ class StackMachine {
 		this.sp++;
 		return null;
 	}
+	
+	opcodePushf(floatId) {
+		if (floatId < 0 || floatId >= this.codeBlocks[this.codeBlockId].floatConsts.length) {
+			return StackMachineError.constAccessOutOfBound().fromCode(this.codeBlockId, this.ip);						
+		}
+		this.stack[this.sp] = this.codeBlocks[this.codeBlockId].floatConsts[floatId];
+		this.stackMap[this.sp] = false;
+		this.sp++;
+		return null;
+	}
 
 	opcode2(code, arg1) {
 		switch(code) {
@@ -1308,6 +1318,8 @@ class StackMachine {
 			return this.opcodeInitGenerator(arg1);
 		case OPCODE_CREATE_EXCEPTION_HANDLER:
 			return this.opcodeCreateExceptionHandler(arg1);
+		case OPCODE_PUSHF:
+			return this.opcodePushf(arg1);
 		default:
 			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
 		}

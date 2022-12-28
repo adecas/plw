@@ -243,11 +243,15 @@ static void PlwStackMachine_OpcodeAdd(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeAddf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwInt)((PlwFloat)(sm->stack[sm->sp - 2]) + (PlwFloat)(sm->stack[sm->sp - 1]));
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	w1.f += w2.f;
+	sm->stack[sm->sp - 2] = w1.i;
 	sm->sp--;
 }
 
@@ -261,11 +265,15 @@ static void PlwStackMachine_OpcodeSub(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeSubf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwInt)((PlwFloat)(sm->stack[sm->sp - 2]) - (PlwFloat)(sm->stack[sm->sp - 1]));
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	w1.f -= w2.f;
+	sm->stack[sm->sp - 2] = w1.i;
 	sm->sp--;
 }
 
@@ -289,11 +297,15 @@ static void PlwStackMachine_OpcodeDiv(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeDivf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwInt)((PlwFloat)(sm->stack[sm->sp - 2]) / (PlwFloat)(sm->stack[sm->sp - 1]));
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	w1.f /= w2.f;
+	sm->stack[sm->sp - 2] = w1.i;
 	sm->sp--;
 }
 
@@ -326,11 +338,15 @@ static void PlwStackMachine_OpcodeMul(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeMulf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwInt)((PlwFloat)(sm->stack[sm->sp - 2]) * (PlwFloat)(sm->stack[sm->sp - 1]));
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	w1.f *= w2.f;
+	sm->stack[sm->sp - 2] = w1.i;
 	sm->sp--;
 }
 
@@ -343,11 +359,14 @@ static void PlwStackMachine_OpcodeNeg(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeNegf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w;
 	if (sm->sp < 1) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 1] = (PlwInt)(-(PlwFloat)(sm->stack[sm->sp - 1]));
+	w.i = sm->stack[sm->sp - 1];
+	w.f = -w.f;
+	sm->stack[sm->sp - 1] = w.i;
 }
 
 static void PlwStackMachine_OpcodeGt(PlwStackMachine *sm, PlwError *error) {
@@ -360,11 +379,14 @@ static void PlwStackMachine_OpcodeGt(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeGtf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) > (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f > w2.f;
 	sm->sp--;
 }
 
@@ -378,11 +400,14 @@ static void PlwStackMachine_OpcodeLt(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeLtf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) < (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f < w2.f;
 	sm->sp--;
 }
 
@@ -396,11 +421,14 @@ static void PlwStackMachine_OpcodeGte(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeGtef(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) >= (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f >= w2.f;
 	sm->sp--;
 }
 
@@ -414,11 +442,14 @@ static void PlwStackMachine_OpcodeLte(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeLtef(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) <= (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f <= w2.f;
 	sm->sp--;
 }
 
@@ -458,11 +489,14 @@ static void PlwStackMachine_OpcodeEq(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeEqf(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) == (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f == w2.f;
 	sm->sp--;
 }
 
@@ -498,11 +532,14 @@ static void PlwStackMachine_OpcodeNe(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwStackMachine_OpcodeNef(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w1, w2;
 	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	sm->stack[sm->sp - 2] = (PlwFloat)(sm->stack[sm->sp - 2]) != (PlwFloat)(sm->stack[sm->sp - 1]);
+	w1.i = sm->stack[sm->sp - 2];
+	w2.i = sm->stack[sm->sp - 1];
+	sm->stack[sm->sp - 2] = w1.f != w2.f;
 	sm->sp--;
 }
 
@@ -1420,6 +1457,23 @@ static void PlwStackMachine_OpcodeCreateExceptionHandler(PlwStackMachine *sm, Pl
 	sm->sp++;
 }
 
+static void PlwStackMachine_OpcodePushf(PlwStackMachine *sm, PlwInt floatId, PlwError *error) {
+	PlwWord w;
+	const PlwCodeBlock *codeBlock = &sm->codeBlocks[sm->codeBlockId];
+	if (floatId < 0 || floatId >= codeBlock->floatConstCount) {
+		StackMachineError_ConstAccessOutOfBound(error, sm->codeBlockId, floatId);
+		return;				
+	}
+	PlwStackMachine_GrowStack(sm, 1, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	w.f = codeBlock->floatConsts[floatId];
+	sm->stack[sm->sp] = w.i;
+	sm->stackMap[sm->sp] = PlwFalse;
+	sm->sp++;	
+}
+
 static void PlwStackMachine_Opcode1(PlwStackMachine *sm, PlwInt code, PlwError *error) {
 	switch(code) {
 	case PLW_OPCODE_SUSPEND:
@@ -1626,6 +1680,9 @@ static void PlwStackMachine_Opcode2(PlwStackMachine *sm, PlwInt code, PlwInt arg
 		break;
 	case PLW_OPCODE_CREATE_EXCEPTION_HANDLER:
 		PlwStackMachine_OpcodeCreateExceptionHandler(sm, arg1, error);
+		break;
+	case PLW_OPCODE_PUSHF:
+		PlwStackMachine_OpcodePushf(sm, arg1, error);
 		break;
 	default:
 		PlwStackMachineError_UnknownOp(error, code);

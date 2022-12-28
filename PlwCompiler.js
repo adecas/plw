@@ -433,6 +433,8 @@ class CodeBlock {
 		this.codeSize = 0;
 		this.strConsts = [];
 		this.strConstSize = 0;
+		this.floatConsts = [];
+		this.floatConstSize = 0;
 	}
 	
 	addStrConst(str) {
@@ -447,6 +449,18 @@ class CodeBlock {
 		return strId;
 	}
 	
+	addFloatConst(f) {
+		for (let i = 0; i < this.floatConstSize; i++) {
+			if (this.floatConsts[i] === f) {
+				return i;
+			}
+		}
+		let floatId = this.floatConstSize;
+		this.floatConsts[floatId] = f;
+		this.floatConstSize++;
+		return floatId;
+	}
+
 	setLoc(offset) {
 		this.codes[offset] = this.codeSize;
 	}
@@ -477,6 +491,10 @@ class CodeBlock {
 	
 	codePush(val) {
 		this.code2(OPCODE_PUSH, val);
+	}
+	
+	codePushf(val) {
+		this.code2(OPCODE_PUSHF, val);
 	}
 		
 	codePushGlobal(offset) {
@@ -2038,7 +2056,8 @@ class Compiler {
 			return EVAL_TYPE_INTEGER;
 		}
 		if (expr.tag === "ast-value-real") {
-			this.codeBlock.codePush(expr.realValue);
+			let floatId = this.codeBlock.addFloatConst(expr.realValue);
+			this.codeBlock.codePushf(floatId);
 			return EVAL_TYPE_REAL;
 		}
 		if (expr.tag === "ast-value-text") {

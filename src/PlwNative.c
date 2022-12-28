@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 const char * const PlwNativeErrorNotImplemented = "PlwNativeErrorNotImplemented";
 
@@ -76,7 +77,24 @@ static void PlwNativeFunc_Text_Integer(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwNativeFunc_Text_Real(PlwStackMachine *sm, PlwError *error) {
-	PlwNativeError_NotImplemented(error, "PlwNativeFunc_Text_Real");
+	PlwWord w;
+	char buffer[128];
+	char *ptr;
+	PlwRefId refId;
+	w.i = sm->stack[sm->sp - 2];
+	snprintf(buffer, 128, "%f", w.f);
+	ptr = PlwStrDup(buffer, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	refId = PlwStringRef_Make(sm->refMan, ptr, error);
+	if (PlwIsError(error)) {
+		PlwFree(ptr);
+		return;
+	}
+	sm->stack[sm->sp - 2] = refId;
+	sm->stackMap[sm->sp - 2] = PlwTrue;
+	sm->sp--;
 }
 
 static void PlwNativeFunc_Text_Char(PlwStackMachine *sm, PlwError *error) {
@@ -998,15 +1016,27 @@ static void PlwNativeFunc_Abs_Integer(PlwStackMachine *sm, PlwError *error) {
 }
 
 static void PlwNativeFunc_Real_Integer(PlwStackMachine *sm, PlwError *error) {
-	PlwNativeError_NotImplemented(error, "PlwNativeFunc_Real_Integer");
+	PlwWord w;
+	w.i = sm->stack[sm->sp - 2];
+	w.f = w.i;
+	sm->stack[sm->sp - 2] = w.i;
+	sm->sp--;
 }
 
 static void PlwNativeFunc_Sqrt_Real(PlwStackMachine *sm, PlwError *error) {
-	PlwNativeError_NotImplemented(error, "PlwNativeFunc_Sqrt_Real");
+	PlwWord w;
+	w.i = sm->stack[sm->sp - 2];
+	w.f = sqrt(w.f);
+	sm->stack[sm->sp - 2] = w.i;
+	sm->sp--;
 }
 
 static void PlwNativeFunc_Log_Real(PlwStackMachine *sm, PlwError *error) {
-	PlwNativeError_NotImplemented(error, "PlwNativeFunc_Log_Real");
+	PlwWord w;
+	w.i = sm->stack[sm->sp - 2];
+	w.f = log(w.f);
+	sm->stack[sm->sp - 2] = w.i;
+	sm->sp--;
 }
 
 static void PlwNativeFunc_Now(PlwStackMachine *sm, PlwError *error) {

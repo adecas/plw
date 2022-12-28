@@ -10,6 +10,11 @@ typedef int64_t PlwInt;
 typedef PlwInt PlwBoolean;
 typedef double PlwFloat;
 
+typedef union PlwWord {
+	PlwInt i;
+	PlwFloat f;
+} PlwWord;
+
 #define PlwTrue 1
 #define PlwFalse 0
 

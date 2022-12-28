@@ -49,6 +49,31 @@ PlwInt PlwReadNextInt(FILE *file, PlwError *error) {
 	return atol(buffer);
 }
 
+PlwFloat PlwReadNextFloat(FILE *file, PlwError *error) {
+	char buffer[256];
+	char *p = buffer;
+	int c;
+	PlwFloat f;
+	c = PlwSkipBlank(file);
+	if (c == EOF) {
+		PlwSetError(error, "EndOfFile", "Unexpected end of file");
+		return 0;
+	}
+	for(;;) {
+		if (!IsCharBlank(c)) {
+			*p = c;
+			p++;
+			if (p >= buffer + 255) break;
+			c = fgetc(file);
+		} else {
+			break;
+		}
+	}
+	*p = 0;
+	f = strtod(buffer, NULL);
+	return f;
+}
+
 char *PlwReadNextString(FILE *file, PlwError *error) {
 	PlwInt len;
 	PlwInt i;
@@ -76,6 +101,8 @@ void PlwReadCodeBlock(FILE *file, PlwCodeBlock *codeBlock, PlwError *error) {
 	char *name = NULL;
 	PlwInt strConstSize = 0;
 	char **strConsts = NULL;
+	PlwInt floatConstSize = 0;
+	PlwFloat *floatConsts = NULL;
 	PlwInt codeSize = 0;
 	PlwInt *codes = NULL;
 	PlwInt i;
@@ -94,6 +121,17 @@ void PlwReadCodeBlock(FILE *file, PlwCodeBlock *codeBlock, PlwError *error) {
 		strConsts[i] = PlwReadNextString(file, error);
 		if (PlwIsError(error)) goto error;
 	}
+	
+	floatConstSize = PlwReadNextInt(file, error);
+	if (PlwIsError(error)) goto error;
+	
+	floatConsts = PlwAlloc(floatConstSize * sizeof(PlwFloat), error);	
+	if (PlwIsError(error)) goto error;
+	
+	for (i = 0; i < floatConstSize; i++) {
+		floatConsts[i] = PlwReadNextFloat(file, error);
+		if (PlwIsError(error)) goto error;
+	}
 		
 	codeSize = PlwReadNextInt(file, error);
 	if (PlwIsError(error)) goto error;
@@ -109,6 +147,8 @@ void PlwReadCodeBlock(FILE *file, PlwCodeBlock *codeBlock, PlwError *error) {
 	codeBlock->name = name;
 	codeBlock->strConstCount = strConstSize;
 	codeBlock->strConsts = strConsts;
+	codeBlock->floatConstCount = floatConstSize;
+	codeBlock->floatConsts = floatConsts;
 	codeBlock->codeCount = codeSize;
 	codeBlock->codes = codes;
 	return;
@@ -121,6 +161,7 @@ error:
 		}
 		PlwFree(strConsts);
 	}
+	PlwFree(floatConsts);
 	PlwFree(codes);	
 }
 
@@ -133,6 +174,7 @@ void PlwFreeCodeBlocks(PlwCodeBlock *codeBlocks, PlwInt codeBlockCount) {
 			PlwFree(codeBlocks[i].strConsts[j]);
 		}
 		PlwFree(codeBlocks[i].strConsts);
+		PlwFree(codeBlocks[i].floatConsts);
 	}
 	PlwFree(codeBlocks);
 }	

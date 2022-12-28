@@ -96,6 +96,10 @@ function compileLoop() {
 		for (let j = 0; j < cb.strConstSize; j++) {
 			compiled += cb.strConsts[j].length + " " + cb.strConsts[j] + "\n";
 		}
+		compiled += cb.floatConstSize + "\n";
+		for (let j = 0; j < cb.floatConstSize; j++) {
+			compiled += cb.floatConsts[j] + "\n";
+		}		
 		compiled += cb.codeSize + "\n";
 		for (let j = 0; j < cb.codeSize; j++) {
 			compiled += cb.codes[j] + " ";

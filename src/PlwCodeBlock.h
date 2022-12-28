@@ -9,6 +9,8 @@ typedef struct PlwCodeBlock {
 	PlwInt *codes;
 	PlwInt strConstCount;
 	char **strConsts;
+	PlwInt floatConstCount;
+	PlwFloat *floatConsts;
 } PlwCodeBlock;
 
 void PlwCodeBlock_Init(PlwCodeBlock *cb, char *name);
