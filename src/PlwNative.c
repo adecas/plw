@@ -1079,6 +1079,21 @@ static void PlwNativeFunc_Integer_Text(PlwStackMachine *sm, PlwError *error) {
 	sm->sp--;
 }
 
+static void PlwNativeFunc_Ceil_Real(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w;
+	w.i = sm->stack[sm->sp - 2];
+	sm->stack[sm->sp - 2] = ceil(w.f);
+	sm->sp--;
+}
+
+static void PlwNativeFunc_Floor_Real(PlwStackMachine *sm, PlwError *error) {
+	PlwWord w;
+	w.i = sm->stack[sm->sp - 2];
+	sm->stack[sm->sp - 2] = floor(w.f);
+	sm->sp--;
+}
+
+
 const PlwNativeFunction PlwNativeFunctions[] = {
 	PlwNativeFunc_GetChar_Char,
 	PlwNativeProc_Write_Text,
@@ -1119,7 +1134,9 @@ const PlwNativeFunction PlwNativeFunctions[] = {
 	PlwNativeFunc_Log_Real,
 	PlwNativeFunc_Now,
 	PlwNativeFunc_Random_Integer_Integer,
-	PlwNativeFunc_Integer_Text
+	PlwNativeFunc_Integer_Text,
+	PlwNativeFunc_Ceil_Real,
+	PlwNativeFunc_Floor_Real
 };
 
 const PlwInt PlwNativeFunctionCount = sizeof(PlwNativeFunctions) / sizeof(PlwNativeFunction);
