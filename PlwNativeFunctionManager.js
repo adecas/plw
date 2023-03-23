@@ -412,6 +412,32 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"text",
+			new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_BOOLEAN)))]),
+			EVAL_TYPE_TEXT,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				let refId = sm.stack[sm.sp - 2];
+				let refManError = new PlwRefManagerError();
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				let resultId = PlwStringRef.make(sm.refMan, "[" + ref.ptr + "]");
+				sm.refMan.decRefCount(refId, refManError);
+				if (refManError.hasError()) {
+					return StackMachineError.referenceManagerError(refManError);
+				}
+				sm.stack[sm.sp - 2] = resultId;
+				sm.stackMap[sm.sp - 2] = true;
+				sm.sp -= 1;
+				return null;
+			})
+		));
 
 		compilerContext.addFunction(EvalResultFunction.fromNative(
 			"text",
@@ -1141,6 +1167,36 @@ class NativeFunctionManager {
 					return StackMachineError.referenceManagerError(refManError);
 				}
 				sm.stack[sm.sp - 2] = result;
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"ceil",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = Math.ceil(sm.stack[sm.sp - 2]);
+				sm.stackMap[sm.sp - 2] = false;
+				sm.sp -= 1;
+				return null;
+			})
+		));
+		
+		compilerContext.addFunction(EvalResultFunction.fromNative(
+			"floor",
+			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
+			EVAL_TYPE_INTEGER,
+			nativeFunctionManager.addFunction(function(sm) {
+				if (sm.stack[sm.sp - 1] !== 1) {
+					return StackMachineError.nativeArgCountMismatch();
+				}
+				sm.stack[sm.sp - 2] = Math.floor(sm.stack[sm.sp - 2]);
 				sm.stackMap[sm.sp - 2] = false;
 				sm.sp -= 1;
 				return null;

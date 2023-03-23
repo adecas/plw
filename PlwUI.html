@@ -299,6 +299,12 @@ else
 end if;
 </pre>
 
+<p id="snippet-arrays-title" class="snippet">Maps</p>
+<pre id="snippet-maps">
+var m := ['Paris': 75, 'Marseille': 13, 'Lyon': 69];
+var v := m['Paris'];
+</pre>
+
 <p id="snippet-basic-procedure-title" class="snippet">Basic Procedure</p>
 <pre id="snippet-basic-procedure">
 procedure say_hello(name text) begin
@@ -350,6 +356,47 @@ function double(a integer) integer begin
 end double;
 print('double(3): ' || text(double(3)));
 print('expected: 6');
+</pre>
+
+<p id="snippet-macro-title" class="snippet">Macro</p>
+<pre id="snippet-macro">
+macro procedure swap(ctx a, ctx b) begin
+	var tmp := a;
+	a := b;
+	b := tmp;
+end swap;
+var i1 := 42;
+var i2 := 51;
+swap(ctx i1, ctx i2);
+if i1 = 51 and i2 = 42 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
+var r1 := 42.0;
+var r2 := 51.0;
+swap(ctx r1, ctx r2);
+if i1 = 51.0 and i2 = 42.0 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
+macro function max(a, b) begin
+	if a > b then
+		return a;
+	end if;
+	return b;
+end max;
+if max(i1, i2) = 52 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
+if max(r1, r2) = 52.0 then
+	print('Good');
+else
+	print('Alternate reality');
+end if;
 </pre>
 
 <p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>

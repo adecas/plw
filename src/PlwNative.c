@@ -397,6 +397,10 @@ static void PlwNativeFunc_Text_ArrayOfInteger(PlwStackMachine *sm, PlwError *err
 	sm->sp--;
 }
 
+static void PlwNativeFunc_Text_ArrayOfBoolean(PlwStackMachine *sm, PlwError *error) {
+	PlwNativeFunc_Text_ArrayOfInteger(sm, error);
+}
+
 static void PlwNativeFunc_Text_ArrayOfText(PlwStackMachine *sm, PlwError *error) {
 	PlwRefId refId;
 	PlwBasicArrayRef *ref;
@@ -1112,6 +1116,7 @@ const PlwNativeFunction PlwNativeFunctions[] = {
 	PlwNativeFunc_IndexOfBasicArray_Integer_Ref,
 	PlwNativeFunc_Text_ArrayOfChar,
 	PlwNativeFunc_Text_ArrayOfInteger,
+	PlwNativeFunc_Text_ArrayOfBoolean,
 	PlwNativeFunc_Text_ArrayOfText,
 	PlwNativeFunc_Concat_Text_Text,
 	PlwNativeFunc_Subtext_Text_Integer_Integer,
