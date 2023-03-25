@@ -69,11 +69,10 @@
 #define PLW_OPCODE_CREATE_BASIC_ARRAY						60
 #define PLW_OPCODE_CREATE_ARRAY							 	61
 #define PLW_OPCODE_CALL										62
-#define PLW_OPCODE_CALL_ABSTRACT							63
-#define PLW_OPCODE_CALL_NATIVE								64
-#define PLW_OPCODE_INIT_GENERATOR							65
-#define PLW_OPCODE_CREATE_EXCEPTION_HANDLER					66
-#define PLW_OPCODE_PUSHF									67
+#define PLW_OPCODE_CALL_NATIVE								63
+#define PLW_OPCODE_INIT_GENERATOR							64
+#define PLW_OPCODE_CREATE_EXCEPTION_HANDLER					65
+#define PLW_OPCODE_PUSHF									66
 
 extern const char * const PlwOpcodes[];
 

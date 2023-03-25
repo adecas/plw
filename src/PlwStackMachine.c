@@ -1324,63 +1324,6 @@ static void PlwStackMachine_OpcodeCall(PlwStackMachine *sm, PlwInt arg1, PlwErro
 	sm->ip = 0;	
 }
 
-static void PlwStackMachine_OpcodeCallAbstract(PlwStackMachine *sm, PlwInt funcId, PlwError *error) {
-	PlwRefId refId;
-	PlwRecordRef *ref;
-	PlwInt codeBlockId;
-	PlwBoolean concreteIsRef;
-	PlwInt concreteVal;
-	if (sm->sp < 2) {
-		PlwStackMachineError_StackAccessOutOfBound(error);
-		return;				
-	}
-	PlwStackMachine_GrowStack(sm, 3, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	refId = sm->stack[sm->sp - 2];
-	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwRecordRefTagName, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	if (funcId < 0 || (1 + 2 * funcId) >= PlwRecordRef_TotalSize(ref)) {
-		PlwStackMachineError_InvalidFuncId(error, funcId, refId);
-		return;
-	}
-	codeBlockId =  PlwRecordRef_Ptr(ref)[1 + 2 * funcId];
-	if (codeBlockId < 0 || codeBlockId > sm->codeBlockCount) {
-		PlwStackMachineError_CodeBlockAccessOutOfBound(error, codeBlockId);
-		return;
-	}
-	concreteVal = PlwRecordRef_Ptr(ref)[0];
-	concreteIsRef = PlwFalse;
-	if (PlwRecordRef_RefSize(ref) > 0) {
-		concreteIsRef = PlwTrue;
-		PlwRefManager_IncRefCount(sm->refMan, concreteVal, error);
-		if (PlwIsError(error)) {
-			return;
-		}
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	sm->stack[sm->sp - 2] = concreteVal;
-	sm->stackMap[sm->sp - 2] = concreteIsRef;
-	sm->stack[sm->sp] = sm->codeBlockId;
-	sm->stackMap[sm->sp] = PlwFalse;
-	sm->sp++;
-	sm->stack[sm->sp] = sm->ip;
-	sm->stackMap[sm->sp] = PlwFalse;
-	sm->sp++;					
-	sm->stack[sm->sp] = sm->bp;
-	sm->stackMap[sm->sp] = PlwFalse;
-	sm->sp++;
-	sm->bp = sm->sp;
-	sm->codeBlockId = codeBlockId;
-	sm->ip = 0;
-}
-
 static void PlwStackMachine_OpcodeCallNative(PlwStackMachine *sm, PlwInt nativeId, PlwError *error) {
 	if (nativeId < 0 || nativeId >= sm->nativeCount) {
 		PlwStackMachineError_NativeAccessOutOfBound(error, nativeId);
@@ -1668,9 +1611,6 @@ static void PlwStackMachine_Opcode2(PlwStackMachine *sm, PlwInt code, PlwInt arg
 		break;
 	case PLW_OPCODE_CALL:
 		PlwStackMachine_OpcodeCall(sm, arg1, error);
-		break;
-	case PLW_OPCODE_CALL_ABSTRACT:
-		PlwStackMachine_OpcodeCallAbstract(sm, arg1, error);
 		break;
 	case PLW_OPCODE_CALL_NATIVE:
 		PlwStackMachine_OpcodeCallNative(sm, arg1, error);
