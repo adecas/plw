@@ -332,6 +332,10 @@ class Parser {
 			return new AstValueBoolean(token.tag === TOK_TRUE).fromToken(token);
 		}
 		
+		if (token.tag === TOK_NULL) {
+			return new AstNull();
+		}
+		
 		if (token.tag === TOK_INTEGER) {
 			return new AstValueInteger(parseInt(token.text, 10)).fromToken(token);
 		}
@@ -424,14 +428,6 @@ class Parser {
 		if (kindofToken.tag !== TOK_KINDOF) {
 			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
 		}
-		let varName = this.readToken();
-		if (varName.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
-		}
-		let assignToken = this.readToken();
-		if (assignToken.tag !== TOK_ASSIGN) {
-			return ParserError.unexpectedToken(assignToken, [TOK_ASSIGN]);
-		}
 		let caseExpr = this.readExpression();
 		if (Parser.isError(caseExpr)) {
 			return caseExpr;
@@ -458,7 +454,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindof(varName.text, caseExpr, whenIndex, whens, elseExpr);
+		return new AstKindof(caseExpr, whenIndex, whens, elseExpr);
 	}
 	
 	readKindofWhen() {
@@ -470,6 +466,10 @@ class Parser {
 		if (Parser.isError(type)) {
 			return type;
 		}
+		let varName = this.readToken();
+		if (varName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+		}
 		let thenToken = this.readToken();
 		if (thenToken.tag !== TOK_THEN) {
 			return ParserError.unexpectedToken(thenToken, [TOK_THEN]);
@@ -478,21 +478,13 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstKindofWhen(type, thenExpr);
+		return new AstKindofWhen(type, varName.text, thenExpr);
 	}
 	
 	readKindofStmt() {
 		let kindofToken = this.readToken();
 		if (kindofToken.tag !== TOK_KINDOF) {
 			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
-		}
-		let varName = this.readToken();
-		if (varName.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
-		}
-		let assignToken = this.readToken();
-		if (assignToken.tag !== TOK_ASSIGN) {
-			return ParserError.unexpectedToken(assignToken, [TOK_ASSIGN]);
 		}
 		let caseExpr = this.readExpression();
 		if (Parser.isError(caseExpr)) {
@@ -519,7 +511,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindofStmt(varName.text, caseExpr, whenIndex, whens, elseBlock);
+		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock);
 	}
 
 	readKindofWhenStmt() {
@@ -531,11 +523,15 @@ class Parser {
 		if (Parser.isError(type)) {
 			return type;
 		}
+		let varName = this.readToken();
+		if (varName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+		}
 		let thenBlock = this.readBlockUntil(TOK_THEN, [TOK_WHEN, TOK_ELSE, TOK_END]);
 		if (Parser.isError(thenBlock)) {
 			return thenBlock;
 		}
-		return new AstKindofWhenStmt(type, thenBlock);
+		return new AstKindofWhenStmt(type, varName.text, thenBlock);
 	}
 
 	readExprGroup() {
@@ -658,8 +654,11 @@ class Parser {
 			return this.readTypeArray();
 		}
 		let typeName = this.readToken();
+		if (typeName.tag === TOK_NULL) {
+			return new AstNull();
+		}
 		if (typeName.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(typeName, [TOK_IDENTIFIER, TOK_BEGIN_ARRAY, TOK_BEGIN_AGG, TOK_SEQUENCE]);
+			return ParserError.unexpectedToken(typeName, [TOK_NULL, TOK_IDENTIFIER, TOK_BEGIN_ARRAY, TOK_BEGIN_AGG, TOK_SEQUENCE]);
 		}
 		return new AstTypeNamed(typeName.text).fromToken(typeName);
 	}

@@ -453,12 +453,12 @@ var input := '
 type node integer|[integer];
 
 function text(node_id integer, nodes [node]) text begin
-	kindof k := nodes[node_id]
-	when integer then
-		return text(k);
-	when [integer] then
+	kindof nodes[node_id]
+	when integer i then
+		return text(i);
+	when [integer] l then
 		var t := '[';
-		for n in k loop
+		for n in l loop
 			t := t || text(n, nodes) || ',';
 		end loop;
 		return t || ']';
@@ -508,25 +508,25 @@ function parse_node(t text, ctx nodes [node]) integer begin
 end parse_node;
 
 function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
-	kindof v1 := nodes[n1]
-	when integer then
-		kindof v2 := nodes[n2]
-		when integer then
+	kindof nodes[n1]
+	when integer v1 then
+		kindof nodes[n2]
+		when integer v2 then
 			return v1 - v2;
-		when [integer] then
-			nodes := nodes || [[v1] as node];
+		when [integer] l2 then
+			nodes := nodes || [[n1] as node];
 			return compare_node(last_index(nodes), n2, ctx nodes);
 		end;
-	when [integer] then
-		kindof v2 := nodes[n2]
-		when integer then
+	when [integer] l1 then
+		kindof nodes[n2]
+		when integer v2 then
 			return -compare_node(n2, n1, ctx nodes);
-		when [integer] then
-			var last1 := last_index(v1);
-			var last2 := last_index(v2);
+		when [integer] l2 then
+			var last1 := last_index(l1);
+			var last2 := last_index(l2);
 			var min_last := case when last1 < last2 then last1 else last2 end;
 			for i in 0 .. min_last loop
-				 var c := compare_node(v1[i], v2[i], ctx nodes);
+				 var c := compare_node(l1[i], l2[i], ctx nodes);
 				 if c <> 0 then
 				 	return c;
 				 end if;
@@ -563,6 +563,7 @@ if sum = 4894 then
 else
 	print('Error');
 end if;
+
 
 
 

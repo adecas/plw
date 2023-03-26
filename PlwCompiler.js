@@ -956,6 +956,9 @@ class Compiler {
 	}
 	
 	evalType(expr) {
+		if (expr.tag === "ast-null") {
+			return EVAL_TYPE_NULL;
+		}
 		if (expr.tag === "ast-type-named") {
 			let evalType = this.context.getType(expr.typeName);
 			if (evalType === null) {
@@ -1338,7 +1341,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.varName, whenType, false);
+				this.scope.addVariable(expr.whens[i].varName, whenType, false);
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
 				if (thenRet.isError()) {
 					return thenRet;
@@ -1831,6 +1834,10 @@ class Compiler {
 		if (expr.tag === "ast-value-boolean") {
 			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
 			return EVAL_TYPE_BOOLEAN;
+		}
+		if (expr.tag === "ast-null") {
+			this.codeBlock.codePush(0);
+			return EVAL_TYPE_NULL;
 		}
 		if (expr.tag === "ast-value-integer") {
 			this.codeBlock.codePush(expr.intValue);
@@ -2360,7 +2367,7 @@ class Compiler {
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.varName, whenType, true);
+				this.scope.addVariable(expr.whens[i].varName, whenType, true);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
 					return thenType;

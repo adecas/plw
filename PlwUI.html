@@ -570,16 +570,16 @@ function f(a integer) integer|text begin
   end;
 end f;
 var a := f(0);
-print(kindof k := a
-  when integer then 'Integer: ' || text(k)
-  when text then 'Text: ' || k
+print(kindof a
+  when integer i then 'Integer: ' || text(i)
+  when text t then 'Text: ' || t
 end);
 a := f(1);
-kindof k := a
-  when integer then
-  	print('Integer: ' || text(k));
-  when text then
-  	print('Text: ' || k);
+kindof a
+  when integer i then
+  	print('Integer: ' || text(i));
+  when text t then
+  	print('Text: ' || t);
 end;
 </pre>
 

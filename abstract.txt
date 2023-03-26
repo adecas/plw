@@ -94,17 +94,17 @@ kindof permet tester le type d'un variant
 
 	var b := ['42', 42, 42.0, false];					# b est de type [boolean|integer|real|text]
 
-	var c := kindof k := b[0]							# on peut faire aussi kindof <variablename>	
-				when integer then 'Hello ' || text(k)	# k est de type integer dans le bloc then
-				when text then 'Hello ' || k
-				else k									# k est de type boolean|real  
-			 end;										# c est de type boolean|real|text
+	var c := kindof b[0]							    # on peut faire aussi kindof <variablename>	
+				when integer i then 'Hello ' || text(i)	# k est de type integer dans le bloc then
+				when text t then 'Hello ' || t
+				else 'unknown'							  
+			 end;										
 			 
 kindof existe aussi en statement
 
-	kindof k := b[0]
-	when text then
-		print('Hello ' || k);
+	kindof b[0]
+	when text t then
+		print('Hello ' || t);
 	end;
 		    
 
