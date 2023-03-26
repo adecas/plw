@@ -66,9 +66,8 @@ const TOK_END_ARRAY = "tok-end-array";
 const TOK_BEGIN_AGG = "tok-begin-agg";
 const TOK_END_AGG = "tok-end-agg";
 const TOK_SEQUENCE = "tok-sequence";
-const TOK_VARIANT = "tok-variant";
+const TOK_TYPE_SEP = "tok-type-sep";
 const TOK_KINDOF = "tok-kindof";
-const TOK_ABSTRACT = "tok-abstract";
 const TOK_SEL = "tok-sel";
 const TOK_SEP = "tok-sep";
 const TOK_TERM = "tok-term";
@@ -303,14 +302,8 @@ class TokenReader {
 		if (token === "sequence") {
 			return new Token(TOK_SEQUENCE, token, line, col);
 		}
-		if (token === "variant") {
-			return new Token(TOK_VARIANT, token, line, col);
-		}
 		if (token === "kindof") {
 			return new Token(TOK_KINDOF, token, line, col);
-		}
-		if (token === "abstract") {
-			return new Token(TOK_ABSTRACT, token, line, col);
 		}
 		return new Token(TOK_IDENTIFIER, token, line, col);
 	}
@@ -491,6 +484,9 @@ class TokenReader {
 		}
 		if (c === ";") {
 			return new Token(TOK_TERM, ";", line, col);
+		}
+		if (c === "|") {
+			return new Token(TOK_TYPE_SEP, "|", line, col);
 		}
 				
 		return new Token(TOK_UNKOWN, c, line, col);

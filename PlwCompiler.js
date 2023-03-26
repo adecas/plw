@@ -24,10 +24,16 @@ class EvalResultType extends EvalResult {
 	constructor(tag, isRef) {
 		super(tag);
 		this.isRef = isRef;
+		this.key = null;
+		this.globalId = 0;
 	}
 	
 	typeKey() {
-		return "not managed " + evalType;
+		return this.key;
+	}
+	
+	structuralType() {
+		return this;
 	}
 }
 
@@ -35,12 +41,8 @@ class EvalTypeBuiltIn extends EvalResultType {
 	constructor(typeName, isRef) {
 		super("res-type-built-in", isRef);
 		this.typeName = typeName;
+		this.key = typeName;
 	}
-	
-	typeKey() {
-		return this.typeName;
-	}
-	
 }
 
 class EvalTypeRecordField {
@@ -70,52 +72,58 @@ class EvalTypeRecord extends EvalResultType {
 				noRefIndex++;
 			}
 		}
+		this.key = EvalTypeRecord.makeTypeKey(fieldCount, fields);
 	}
 	
-	typeKey() {
+	static makeTypeKey(fieldCount, fields) {
 		let name = "{";
-		for (let i = 0; i < this.fieldCount; i++) {
-			name += (i == 0 ? "" : ", ") + this.fields[i].fieldName + " " + this.fields[i].fieldType.typeKey();
+		for (let i = 0; i < fieldCount; i++) {
+			name += (i == 0 ? "" : ", ") + fields[i].fieldName + " " + fields[i].fieldType.typeKey();
 		}
 		return name + "}";
 	}
 }
 
-class EvalTypeVariantField {
-	constructor(fieldName, fieldType) {
-		this.fieldName = fieldName;
-		this.fieldType = fieldType;
-		this.builder = null;
-	}
-}
-
 class EvalTypeVariant extends EvalResultType {
-	constructor(fieldCount, fields) {
+	constructor(typeCount, types) {
 		super("res-type-variant", true);
-		this.fieldCount = fieldCount;
-		this.fields = fields;
+		this.typeCount = typeCount;
+		this.types = types;
+		this.key = EvalTypeVariant.makeTypeKey(typeCount, types);
 	}
 
-	typeKey() {
-		let name = "variant(";
-		for (let i = 0; i < this.fieldCount; i++) {
-			name += (i == 0 ? "" : ", ") + this.fields[i].fieldName;
-			if (this.fields[i].fieldType !== null) {
-				name += " " + this.fields[i].fieldType.typeKey();
+	static makeTypeKey(typeCount, types) {
+		let keys = [];
+		for (let i = 0; i < typeCount; i++) {
+			keys[i] = types[i].typeKey();
+		}
+		return keys.join('|');
+	}
+	
+	contains(type) {
+		if (type.tag === "res-type-variant") {
+			for (let i = 0; i < type.typeCount; i++) {
+				if (!this.contains(type.types[i])) {
+					return false;
+				}
+			}
+			return true;
+		}
+		for (let i = 0; i < this.typeCount; i++) {
+			if (this.types[i] === type) {
+				return true;
 			}
 		}
-		return name + ")";
+		return false;
 	}
+	
 }
 
 class EvalTypeArray extends EvalResultType {
 	constructor(underlyingType) {
 		super("res-type-array", true);
 		this.underlyingType = underlyingType;
-	}
-	
-	typeKey() {
-		return "[" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "]";
+		this.key = "[" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "]";
 	}
 }
 
@@ -123,69 +131,7 @@ class EvalTypeSequence extends EvalResultType {
 	constructor(underlyingType) {
 		super("res-type-sequence", true);
 		this.underlyingType = underlyingType;
-	}
-	
-	typeKey() {
-		return "sequence(" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + ")";
-	}
-}
-
-class EvalTypeAbstract extends EvalResultType {
-	constructor(methodCount, methods) {
-		super("res-type-abstract", true);
-		this.methodCount = methodCount;
-		this.methods = methods;
-	}
-	
-	typeKey() {
-		let name = "abstract(";
-		for(let i = 0; i < this.methodCount; i++) {
-			if (i > 0) {
-				name += ", ";
-			}
-			name += this.methods[i].typeKey();
-		}
-		return name += ")";
-	}
-}
-
-class EvalTypeAbstractMethod {
-	constructor(isFunction, methodName, paramCount, params, returnType) {
-		this.isFunction = isFunction;
-		this.methodName = methodName;
-		this.paramCount = paramCount;
-		this.params = params;
-		this.returnType = returnType; 
-	}
-	
-	typeKey() {
-		let name = this.methodName + "(";
-		for(let i = 0; i < this.paramCount; i++) {
-			if (i > 0) {
-				name += ", ";
-			}
-			name += this.params[i].typeKey();
-		}
-		return name + ")" + (this.returnType === null ? (this.isFunction ? " self" : "") : " " + this.returnType.typeKey());
-	}
-	
-	methodKey(concreteType, abstractType) {
-		let key = this.methodName + "(" + concreteType.typeKey();
-		for (let i = 0; i < this.paramCount; i++) {
-			key += "," + (this.params[i].paramType === null ? abstractType.typeKey() : this.params[i].paramType.typeKey());
-		}
-		return key + ")";
-	}
-}
-
-class EvalTypeAbstractParam {
-	constructor(paramName, paramType) {
-		this.paramName = paramName;
-		this.paramType = paramType; 
-	}
-	
-	typeKey() {
-		return this.paramName + (this.paramType === null ? " self" : " " + this.paramType.typeKey());
+		this.key = "sequence(" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + ")";
 	}
 }
 
@@ -194,11 +140,14 @@ class EvalTypeName extends EvalResultType {
 		super("res-type-name", underlyingType.isRef);
 		this.typeName = typeName;
 		this.underlyingType = underlyingType;
+		this.key = typeName;
+		this.structType = this.underlyingType.structuralType();
 	}
 	
-	typeKey() {
-		return this.typeName;
+	structuralType() {
+		return this.structType;
 	}
+		
 }
 
 class EvalResultParameter extends EvalResult {
@@ -227,7 +176,6 @@ class EvalResultFunction extends EvalResult {
 		this.isGenerator = isGenerator;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
-		this.abstractIndex = -1;
 	}
 	
 	static fromNative(functionName, parameterList, returnType, nativeIndex) {
@@ -255,7 +203,6 @@ class EvalResultProcedure extends EvalResult {
 		this.parameterList = parameterList;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
-		this.abstractIndex = -1;
 	}
 	
 	static fromNative(procedureName, parameterList, nativeIndex) {
@@ -419,6 +366,7 @@ class EvalError extends EvalResult {
 }
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
+const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", true);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
@@ -741,10 +689,6 @@ class CodeBlock {
 		this.code2(OPCODE_CALL_NATIVE, ptr);
 	}
 	
-	codeCallAbstract(methodIndex) {
-		this.code2(OPCODE_CALL_ABSTRACT, methodIndex);
-	}
-	
 	codeInitGenerator(ptr) {
 		this.code2(OPCODE_INIT_GENERATOR, ptr);
 	}
@@ -761,16 +705,21 @@ class CompilerContext {
 	
 	constructor() {
 		this.globalScope = CompilerScope.makeGlobal();
-		this.types = {
-			"integer": EVAL_TYPE_INTEGER,
-			"real": EVAL_TYPE_REAL,
-			"boolean": EVAL_TYPE_BOOLEAN,
-			"text": EVAL_TYPE_TEXT,
-			"char": EVAL_TYPE_CHAR
-		};
+		this.types = {};
 		this.functions = {};
 		this.procedures = {};
 		this.codeBlocks = [];
+		this.globalTypeIdSeq = 0;
+		this.addType(EVAL_TYPE_INTEGER);
+		this.addType(EVAL_TYPE_REAL);
+		this.addType(EVAL_TYPE_BOOLEAN);
+		this.addType(EVAL_TYPE_TEXT);
+		this.addType(EVAL_TYPE_CHAR);
+	}
+	
+	nextGlobalTypeId() {
+		this.globalTypeIdSeq++;
+		return this.globalTypeIdSeq;
 	}
 	
 	getFunction(functionKey) {
@@ -805,10 +754,11 @@ class CompilerContext {
 	}
 	
 	addType(evalType) {
-		let uniqueType = this.types[evalType.typeKey()];
-		if (uniqueType === undefined) {
+		let uniqueType = this.getType(evalType.typeKey());
+		if (uniqueType === null) {
+			evalType.globalId = this.nextGlobalTypeId();
 			this.types[evalType.typeKey()] = evalType;
-			if (evalType.tag === "res-type-array") {
+			if (evalType.structuralType().tag === "res-type-array") {
 				var lengthFunc = new EvalResultFunction(
 					"length",
 					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
@@ -851,10 +801,6 @@ class CompilerContext {
 			return evalType;
 		}
 		return uniqueType;
-	}
-	
-	removeType(typeKey) {
-		delete this.types[typeKey];		
 	}
 	
 	addCodeBlock(blockName) {
@@ -1050,108 +996,26 @@ class Compiler {
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-type-variant") {
-			for (let i = 1; i < expr.fieldCount; i++) {
-				for (let j = 0; j < i; j++) {
-					if (expr.fields[i].fieldName === expr.fields[j].fieldName) {
-						return EvalError.fieldAlreadyExists(expr.fields[i].fieldName).fromExpr(expr.fields[i]);
-					}
+			let types = [];
+			for (let i = 0; i < expr.typeCount; i++) {
+				let type = this.evalType(expr.types[i]);
+				if (type.isError()) {
+					return type;
 				}
+				if (type.tag === "res-type-variant") {
+					return EvalError.cantNestVariant(type.typeKey()).fromExpr(expr.types[i]);
+				}
+				if (types.indexOf(type) !== -1) {
+					return EvalError.fieldAlreadyExists(type.typeKey()).fromExpr(expr.types[i]);
+				}
+				types[i] = type;
 			}
-			let fields = [];
-			for (let i = 0; i < expr.fieldCount; i++) {
-				let fieldType = null;
-				if (expr.fields[i].fieldType !== null) {
-					fieldType = this.evalType(expr.fields[i].fieldType);
-					if (fieldType.isError()) {
-						return fieldType;
-					}
-				}
-				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
-			}
-			let variantType = new EvalTypeVariant(expr.fieldCount, fields);
-			let existingType = this.context.getType(variantType.typeKey());
-			if (existingType !== null) {
-				return existingType;
-			}
-			this.context.addType(variantType);
-			return variantType;
-		}
-		if (expr.tag === "ast-type-abstract") {
-			let methods = [];
-			for (let i = 0; i < expr.methodCount; i++) {
-				let methodExpr = expr.methods[i];
-				let paramListExpr = methodExpr.parameterList;
-				let params = [];
-				for (let j = 0; j < paramListExpr.parameterCount; j++) {
-					let paramExpr = paramListExpr.parameters[j];
-					let paramType = null;
-					if (paramExpr.parameterType.tag === "ast-type-named" && paramExpr.parameterType.typeName === "self") {
-						paramType = null;
-					} else {
-						paramType = this.evalType(paramExpr.parameterType);
-						if (paramType.isError()) {
-							return paramType;
-						}
-					}
-					params[j] = new EvalTypeAbstractParam(paramExpr.parameterName, paramType);
-				}
-				let isFunction = false;
-				let returnType = null;
-				if (methodExpr.returnType !== null) {
-					isFunction = true;
-					if (methodExpr.returnType.tag  === "ast-type-named" && methodExpr.returnType.typeName === "self") {
-						returnType = null;
-					} else {
-						returnType = this.evalType(methodExpr.returnType);
-						if (returnType.isError()) {
-							return returnType;
-						}
-					}
-				}
-				methods[i] = new EvalTypeAbstractMethod(isFunction, methodExpr.methodName, paramListExpr.parameterCount, params, returnType);
-			}
-			let abstractType = new EvalTypeAbstract(expr.methodCount, methods);
-			{
-				let uniqueType = this.context.getType(abstractType);
-				if (uniqueType !== null) {
-					return uniqueType;
-				}
-			}
-			abstractType = this.context.addType(abstractType);
-			//
-			// create the abstract functions and procedure for the abstract type
-			//
-			for (let i = 0; i < abstractType.methodCount; i++) {
-				let method = abstractType.methods[i];
-				let params = [ new EvalResultParameter("self", abstractType, false) ];
-				for (let j = 0; j < method.paramCount; j++) {
-					params[j + 1] = new EvalResultParameter(
-						method.params[j].paramName,
-						method.params[j].paramType === null ? abstractType : method.params[j].paramType,
-						false
-					);
-				}
-				let paramList = new EvalResultParameterList(method.paramCount + 1, params);
-				if (method.isFunction) {
-					let retType = method.returnType === null ? abstractType : method.returnType;
-					let evalFunc = new EvalResultFunction(method.methodName, paramList, retType, false);
-					if (this.context.getFunction(evalFunc) !== null) {
-						this.context.removeType(abstactType.typeKey());
-						return EvalError.functionAlreadyExists(evalFunc.funcKey()).fromExpr(expr);					
-					}
-					this.context.addFunction(evalFunc);
-					evalFunc.abstractIndex = i;
-				} else {
-					let evalProc = new EvalResultProcedure(method.methodName, paramList);
-					if (this.context.getProcedure(evalProc) !== null) {
-						this.context.removeType(abstactType.typeKey());
-						return EvalError.procedureAlreadyExists(evalProc.procKey()).fromExpr(expr);					
-					}
-					this.context.addProcedure(evalProc);
-					evalProc.abstractIndex = i;
-				}
-			}
-			return abstractType;
+			types.sort(function (a, b) { 
+				if (a.typeKey() === b.typeKey()) return 0;
+					if (a.typeKey() > b.typeKey()) return 1;
+					return -1;
+			});			
+			return this.context.addType(new EvalTypeVariant(expr.typeCount, types));
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
@@ -1441,14 +1305,11 @@ class Compiler {
 			if (caseType.isError()) {
 				return caseType;
 			}
-			while (caseType.tag === "res-type-name") {
-				caseType = caseType.underlyingType;
-			}			
-			if (caseType.tag !== "res-type-variant") {
+			if (caseType.structuralType().tag !== "res-type-variant") {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
 			}
 			let kindHasWhen = [];
-			for (let i = 0; i < caseType.fieldCount; i++) {
+			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
 			this.codeBlock.codeDup();
@@ -1458,27 +1319,26 @@ class Compiler {
 			let endLocCount = 0;
 			for (let i = 0; i < expr.whenCount; i++) {
 				this.codeBlock.codeDup();
-				let fieldIndex = 0;
-				while (fieldIndex < caseType.fieldCount) {
-					if (caseType.fields[fieldIndex].fieldName === expr.whens[i].kindName) {
-						break;
-					}
-					fieldIndex++;
+				let whenType = this.evalType(expr.whens[i].type);
+				if (whenType.isError()) {
+					return whenType;
 				}
-				if (fieldIndex === caseType.fieldCount) {
-					return EvalError.unknownVariantKind(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				let typeIndex = caseType.structuralType().types.indexOf(whenType);
+				if (typeIndex === -1) {
+					return EvalError.unknownVariantKind(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
-				if (kindHasWhen[fieldIndex] === true) {
-					return EvalError.variantKindAlreadyManaged(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				if (kindHasWhen[typeIndex] === true) {
+					return EvalError.variantKindAlreadyManaged(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
-				this.codeBlock.codePush(fieldIndex);
+				kindHasWhen[typeIndex] = true;
+				this.codeBlock.codePush(whenType.globalId);
 				this.codeBlock.codeEq();						
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.codeBlock.codePopVoid(1);
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, false);
+				this.scope.addVariable(expr.varName, whenType, false);
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
 				if (thenRet.isError()) {
 					return thenRet;
@@ -1850,10 +1710,8 @@ class Compiler {
 			this.codeBlock.codePush(expr.argList.argCount);
 			if (proc.nativeIndex !== -1) {
 				this.codeBlock.codeCallNative(proc.nativeIndex);
-			} else if (proc.codeBlockIndex !== -1) {
-				this.codeBlock.codeCall(proc.codeBlockIndex);
 			} else {
-				this.codeBlock.codeCallAbstract(proc.abstractIndex);
+				this.codeBlock.codeCall(proc.codeBlockIndex);
 			}
 			return EVAL_RESULT_OK;
 		}
@@ -1944,105 +1802,28 @@ class Compiler {
 				// special case when the left expression is an empty array
 				// we don't want to eval it, but directly create a basic array or array
 				// depending on the as type
-				let actAsType = asType;
-				while (actAsType.tag === "res-type-name") {
-					actAsType = actAsType.underlyingType;
-				}
-				if (actAsType.tag !== "res-type-array") {
+				if (asType.structuralType().tag !== "res-type-array") {
 					return EvalError.wrongType(asType, "array").fromExpr(expr.exprType);				
 				}
-				if (actAsType.underlyingType.isRef === true) {
+				if (asType.structuralType().underlyingType.isRef === true) {
 					this.codeBlock.codeCreateArray(0);
 				} else {
 					this.codeBlock.codeCreateBasicArray(0);
 				}
 				return asType;
 			}
-			let actAsType = asType;
-			while (actAsType.tag === "res-type-name") {
-				actAsType = actAsType.underlyingType;
-			}
-			if (actAsType.tag === "res-type-variant") {
-				if (expr.expr.tag === "ast-variable") {
-					let varName = expr.expr.varName;
-					let fieldFound = false;
-					for (let i = 0; i < actAsType.fieldCount; i++) {
-						if (actAsType.fields[i].fieldName === varName) {
-							if (actAsType.fields[i].fieldType === null) {
-								this.codeBlock.codePush(0);
-								this.codeBlock.codePush(i);
-								this.codeBlock.codeCreateRecord(2);
-								return asType;
-							}
-						}
-					}
-				} else if (expr.expr.tag === "ast-function" && expr.expr.argList.argCount === 1) {
-					let funcName = expr.expr.functionName;
-					for (let i = 0; i < actAsType.fieldCount; i++) {
-						if (actAsType.fields[i].fieldName === funcName) {
-							if (actAsType.fields[i].fieldType !== null) {
-								let argType = this.eval(expr.expr.argList.args[0]);
-								if (argType.isError()) {
-									return argType;
-								}
-								if (argType !== actAsType.fields[i].fieldType) {
-									return EvalError.wrongType(
-										argType,
-										actAsType.fields[i].fieldType.typeKey()
-									).fromExpr(expr.expr.argList.args[0]);
-								}
-								this.codeBlock.codePush(i);
-								this.codeBlock.codeCreateRecord(2);
-								return asType;
-							}
-						}
-					}
-				}
-			}
 			let valueType = this.eval(expr.expr);
 			if (valueType.isError()) {
 				return valueType;
 			}
-			if (valueType === asType) {
+			if (valueType === asType || valueType.structuralType() === asType.structuralType()) {
 				return asType;
 			}
-			actAsType = asType;
-			while (actAsType.tag === "res-type-name") {
-				actAsType = actAsType.underlyingType;
-				if (valueType === actAsType) {
-					return asType;
+			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueType)) {
+				if (valueType.tag !== "res-type-variant") {
+					this.codeBlock.codePush(valueType.globalId);
+					this.codeBlock.codeCreateRecord(2);
 				}
-			}
-			if (valueType.tag === "res-type-name" && asType === valueType.underlyingType) {
-				return asType;
-			}
-			if (actAsType.tag === "res-type-abstract") {
-				for (let i = 0; i < actAsType.methodCount; i++) {
-					let methodKey = actAsType.methods[i].methodKey(valueType, asType);
-					if (actAsType.methods[i].isFunction) {
-						let func = this.context.getFunction(methodKey);
-						if (func === null) {
-							return EvalError.unknownFunction(methodKey).fromExpr(expr.expr);
-						}
-						let retType = actAsType.methods[i].returnType;
-						if (retType === null) {
-							retType = asType;
-						}
-						if (retType !== func.returnType) {
-							return EvalError.wrongType(func.returnType, retType.typeKey()).fromExpr(expr.valueExpr);
-						}
-						this.codeBlock.codePush(func.codeBlockIndex);
-						this.codeBlock.codePush(func.nativeIndex);
-					} else {
-						let proc = this.context.getProcedure(methodKey);
-						if (proc === null) {
-							return EvalError.unknownProcedure(methodKey);
-						}
-						this.codeBlock.codePush(proc.codeBlockIndex);
-						this.codeBlock.codePush(proc.nativeIndex);
-					}
-				}
-				this.codeBlock.codeCreateRecord(1 + actAsType.methodCount * 2);
 				return asType;
 			}
 			return EvalError.wrongType(valueType, asType.typeKey()).fromExpr(expr.expr);				
@@ -2455,10 +2236,8 @@ class Compiler {
 				this.codeBlock.codeCallNative(func.nativeIndex);
 			} else if (func.isGenerator === true) {
 				this.codeBlock.codeInitGenerator(func.codeBlockIndex);
-			} else if (func.codeBlockIndex !== -1) {
-				this.codeBlock.codeCall(func.codeBlockIndex);
 			} else {
-				this.codeBlock.codeCallAbstract(func.abstractIndex);
+				this.codeBlock.codeCall(func.codeBlockIndex);
 			}
 			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
 		}
@@ -2547,10 +2326,7 @@ class Compiler {
 			if (caseType.isError()) {
 				return caseType;
 			}
-			while (caseType.tag === "res-type-name") {
-				caseType = caseType.underlyingType;
-			}
-			if (caseType.tag !== "res-type-variant") {
+			if (caseType.structuralType().tag !== "res-type-variant") {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
 			}
 			this.codeBlock.codeDup();
@@ -2560,33 +2336,31 @@ class Compiler {
 			let endLocCount = 0;
 			let resultType = null;
 			let kindHasWhen = [];
-			for (let i = 0; i < caseType.fieldCount; i++) {
+			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
 			for (let i = 0; i < expr.whenCount; i++) {
 				this.codeBlock.codeDup();
-				let fieldIndex = 0;
-				while (fieldIndex < caseType.fieldCount) {
-					if (caseType.fields[fieldIndex].fieldName === expr.whens[i].kindName) {
-						break;
-					}
-					fieldIndex++;
+				let whenType = this.evalType(expr.whens[i].type);
+				if (whenType.isError()) {
+					return whenType;
 				}
-				if (fieldIndex === caseType.fieldCount) {
-					return EvalError.unknownVariantKind(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				let typeIndex = caseType.structuralType().types.indexOf(whenType);
+				if (typeIndex === -1) {
+					return EvalError.unknownVariantKind(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
-				if (kindHasWhen[fieldIndex] === true) {
-					return EvalError.variantKindAlreadyManaged(expr.whens[i].kindName).fromExpr(expr.whens[i]);
+				if (kindHasWhen[typeIndex] === true) {
+					return EvalError.variantKindAlreadyManaged(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
-				kindHasWhen[fieldIndex] = true;
-				this.codeBlock.codePush(fieldIndex);
+				kindHasWhen[typeIndex] = true;
+				this.codeBlock.codePush(whenType.globalId);
 				this.codeBlock.codeEq();						
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.codeBlock.codePopVoid(1);
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
-				this.scope.addVariable(expr.whens[i].varName, caseType.fields[fieldIndex].fieldType, true);
+				this.scope.addVariable(expr.varName, whenType, true);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
 					return thenType;
@@ -2605,9 +2379,9 @@ class Compiler {
 			}
 			this.codeBlock.codePopVoid(1);
 			if (expr.elseExpr === null) {
-				for (let i = 0; i < caseType.fieldCount; i++) {
+				for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 					if (kindHasWhen[i] === false) {
-						return EvalError.variantKindNotManaged(caseType.fields[i].fieldName).fromExpr(expr);
+						return EvalError.variantKindNotManaged(caseType.structuralType().types[i].typeKey()).fromExpr(expr);
 					}
 				}
 			} else {

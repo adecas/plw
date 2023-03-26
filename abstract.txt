@@ -1,0 +1,130 @@
+META PROGRAMMING
+================
+
+any type
+--------
+
+any, ou utilise any
+
+	ex: any, [any], {a int, b any}
+	
+les types any ne peuvent etre déclaré qu'en parametre d'une function ou d'une procedure		
+
+
+macro function / procedure
+--------------------------
+
+quand un des parametres est de type any
+
+function toto(a int, b any) int begin
+	return a + length(b);
+end toto;
+
+lors de la compilation, quand toto est appelé avec une type concret:
+
+	soit la fonction concrete existe.
+	
+	soit la fonction concrete est créé a partir de la macro
+	
+		var a := toto(1, 2);
+		
+		essaie de compiler la fonction toto(int,int) avec le code de la macro
+		
+		echec si la fonction length(int) n'existe pas
+		
+note: le retour ne peut etre any que pour une macro
+
+	function add(a any, b any) any begin
+		return a + b;
+	end add;		
+		
+exemple
+-------
+
+type circle {radius: real};
+type rect {width: real, height: real};
+
+function perimeter(c circle) real begin
+	return 2 * PI * radius;
+end perimeter;
+
+function perimeter(r rect) real begin
+	return 2 * (r.width + r.height);
+end perimeter;
+
+procedure display_perimeters(shapes [any]) begin
+	for shape in shapes loop
+		print('Perimeter is: ' || text(perimeter(shape)));
+	end loop;
+end display_perimeter;
+
+
+variant
+-------
+
+Un variant declare plusieurs types possibles
+
+integer|text|real
+
+example:
+
+	function f(a integer) integer|text begin
+		return case a when 0 then 42 else '42' end;
+	end f;
+
+	var a := f(random(0, 1));	# a contient deux elements, la valeur de a, et l'index de son type dans le variant
+	
+	var b := ['42', 42];        # b est de type [integer|text]; 
+
+Quand on appelle une function avec un variant, on verifie qu'il existe une function
+pour tous les types de variant.
+
+	print(a);
+	
+		1 - verifie l'existence d'une function print(integer|text), si oui l'appelle
+		2 - verifie l'existance des functions print(integer) et print(text), sinon, erreur de compil
+		3 - genere une function de dispatch print(integer|text) qui dirige vers print(integer)
+		    ou print(text) suivant l'index du type du variant conservé au runtime
+		    
+note:
+
+	Pour le step one, s'il existe une fonction print(integer|text|real), on peut l'utiliser
+	
+kindof permet tester le type d'un variant
+
+	var b := ['42', 42, 42.0, false];					# b est de type [boolean|integer|real|text]
+
+	var c := kindof k := b[0]							# on peut faire aussi kindof <variablename>	
+				when integer then 'Hello ' || text(k)	# k est de type integer dans le bloc then
+				when text then 'Hello ' || k
+				else k									# k est de type boolean|real  
+			 end;										# c est de type boolean|real|text
+			 
+kindof existe aussi en statement
+
+	kindof k := b[0]
+	when text then
+		print('Hello ' || k);
+	end;
+		    
+
+Example global
+--------------
+
+Avec l'exemple si dessus on peut faire:
+
+type square {width real};
+
+function perimeter(s square) real begin
+	return 4 * s.width;
+end perimeter;	
+	
+var shapes := [] as [circle|rect|square]; # make a liste of shapes
+
+display_perimeters(shapes);
+
+
+
+
+
+

@@ -97,19 +97,11 @@ class AstTypeRecord extends AstNode {
 	}
 }
 
-class AstTypeVariantField extends AstNode {
-	constructor(fieldName, fieldType) {
-		super("ast-type-variant-field");
-		this.fieldName = fieldName;
-		this.fieldType = fieldType;
-	}
-}
-
 class AstTypeVariant extends AstNode {
-	constructor(fieldCount, fields) {
+	constructor(typeCount, types) {
 		super("ast-type-variant");
-		this.fieldCount = fieldCount;
-		this.fields = fields;
+		this.typeCount = typeCount;
+		this.types = types;
 	}
 }
 
@@ -391,8 +383,9 @@ class AstWhen extends AstNode {
 }
 
 class AstKindof extends AstNode {
-	constructor(caseExpr, whenCount, whens, elseExpr) {
+	constructor(varName, caseExpr, whenCount, whens, elseExpr) {
 		super("ast-kindof");
+		this.varName = varName;
 		this.caseExpr = caseExpr;
 		this.whenCount = whenCount;
 		this.whens = whens;
@@ -401,17 +394,17 @@ class AstKindof extends AstNode {
 }
 
 class AstKindofWhen extends AstNode {
-	constructor(kindName, varName, thenExpr) {
+	constructor(type, thenExpr) {
 		super("ast-kindof-when");
-		this.kindName = kindName;
-		this.varName = varName;
+		this.type = type;
 		this.thenExpr = thenExpr;
 	}
 }
 
 class AstKindofStmt extends AstNode {
-	constructor(caseExpr, whenCount, whens, elseBlock) {
+	constructor(varName, caseExpr, whenCount, whens, elseBlock) {
 		super("ast-kindof-stmt");
+		this.varName = varName;
 		this.caseExpr = caseExpr;
 		this.whenCount = whenCount;
 		this.whens = whens;
@@ -420,10 +413,9 @@ class AstKindofStmt extends AstNode {
 }
 
 class AstKindofWhenStmt extends AstNode {
-	constructor(kindName, varName, thenBlock) {
+	constructor(type, thenBlock) {
 		super("ast-kindof-when-stmt");
-		this.kindName = kindName;
-		this.varName = varName;
+		this.type = type;
 		this.thenBlock = thenBlock;
 	}
 }

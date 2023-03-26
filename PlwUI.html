@@ -299,12 +299,6 @@ else
 end if;
 </pre>
 
-<p id="snippet-arrays-title" class="snippet">Maps</p>
-<pre id="snippet-maps">
-var m := ['Paris': 75, 'Marseille': 13, 'Lyon': 69];
-var v := m['Paris'];
-</pre>
-
 <p id="snippet-basic-procedure-title" class="snippet">Basic Procedure</p>
 <pre id="snippet-basic-procedure">
 procedure say_hello(name text) begin
@@ -358,46 +352,6 @@ print('double(3): ' || text(double(3)));
 print('expected: 6');
 </pre>
 
-<p id="snippet-macro-title" class="snippet">Macro</p>
-<pre id="snippet-macro">
-macro procedure swap(ctx a, ctx b) begin
-	var tmp := a;
-	a := b;
-	b := tmp;
-end swap;
-var i1 := 42;
-var i2 := 51;
-swap(ctx i1, ctx i2);
-if i1 = 51 and i2 = 42 then
-	print('Good');
-else
-	print('Alternate reality');
-end if;
-var r1 := 42.0;
-var r2 := 51.0;
-swap(ctx r1, ctx r2);
-if i1 = 51.0 and i2 = 42.0 then
-	print('Good');
-else
-	print('Alternate reality');
-end if;
-macro function max(a, b) begin
-	if a > b then
-		return a;
-	end if;
-	return b;
-end max;
-if max(i1, i2) = 52 then
-	print('Good');
-else
-	print('Alternate reality');
-end if;
-if max(r1, r2) = 52.0 then
-	print('Good');
-else
-	print('Alternate reality');
-end if;
-</pre>
 
 <p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>
 <pre id="snippet-first-100-primes">
@@ -607,49 +561,25 @@ else
 end if;
 </pre>
 
-<p id="snippet-variant-records-title" class="snippet">Variant Records</p>
-<pre id="snippet-variant-records">
-type status variant(none, error text, done integer);
-procedure print(s status ) begin
-  print(kindof s
-	when none then 'none'
-	when error(msg) then 'error: ' || msg
-	when done(row_count) then 'done: ' || text(row_count)
-  end);
-end print;
-procedure print2(s status) begin
-  kindof s
-	when none then
-		print('none');
-	when error(msg) then
-		print('error: ' || msg);
-	when done(row_count) then
-		print('done: ' || text(row_count));
+<p id="snippet-variant-title" class="snippet">Variants</p>
+<pre id="snippet-variant">
+function f(a integer) integer|text begin
+  return case a
+    when 0 then 42 as integer|text
+    else '42'      as integer|text
   end;
-end print2;
-var vr := done(5) as variant(none, error text, done integer) as status;
-print(vr);
-print2(vr);
-vr := none as status;
-print(vr);
-print2(vr);
-vr := error('file not found') as status;
-print(vr);
-print2(vr);
-begin
-  const p := {x: 0, y: 0};
-  var v := some(p) as variant(none, some {x integer, y integer});
-  procedure toto(ctx a variant(none, some {x integer, y integer})) begin
-	kindof a when some(p2) then
-	  p2.x := 42;
-	end;
-  end toto;
-  toto(ctx v);
-  if p.x = 0 then
-	print('Good');
-  else
-	print('Error: alternate reality');
-  end if;
+end f;
+var a := f(0);
+print(kindof k := a
+  when integer then 'Integer: ' || text(k)
+  when text then 'Text: ' || k
+end);
+a := f(1);
+kindof k := a
+  when integer then
+  	print('Integer: ' || text(k));
+  when text then
+  	print('Text: ' || k);
 end;
 </pre>
 
@@ -836,32 +766,6 @@ exception
   else
 	print('easter egg exception');   
 end;
-</pre>
-
-<p id="snippet-abstract-types-title" class="snippet">Abstract types</p>
-<pre id="snippet-abstract-types">
-type circle {
-  name text,
-  diameter real
-};
-
-function shape_name(c circle) text begin
-  return c.name;
-end shape_name;
-
-function shape_perimeter(c circle) real begin
-  var pir := 3.14116 * c.diameter / 2.0;
-  return pir * pir;
-end shape_perimeter;
-
-var c := {name: 'circle', diameter: 10.0} as circle;
-
-# the compiler should find the function shape_name(circle) and shape_perimeter(circle)
-# and create an object with the refid of the circle and the codeBlockId of the functions
-# abstract layout: concreteRefId, func1, ..., funcN
-var shape := c as abstract(shape_name() text, shape_perimeter() real);
-
-print('The perimeter of the ' || shape_name(shape) || ' is ' || text(shape_perimeter(shape)));
 </pre>
 
 <script>fillSnippetSelect()</script>

@@ -424,6 +424,14 @@ class Parser {
 		if (kindofToken.tag !== TOK_KINDOF) {
 			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
 		}
+		let varName = this.readToken();
+		if (varName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+		}
+		let assignToken = this.readToken();
+		if (assignToken.tag !== TOK_ASSIGN) {
+			return ParserError.unexpectedToken(assignToken, [TOK_ASSIGN]);
+		}
 		let caseExpr = this.readExpression();
 		if (Parser.isError(caseExpr)) {
 			return caseExpr;
@@ -450,7 +458,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindof(caseExpr, whenIndex, whens, elseExpr);
+		return new AstKindof(varName.text, caseExpr, whenIndex, whens, elseExpr);
 	}
 	
 	readKindofWhen() {
@@ -458,22 +466,9 @@ class Parser {
 		if (whenToken.tag !== TOK_WHEN) {
 			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);
 		}
-		let kindNameToken = this.readToken();
-		if (kindNameToken.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(kindNameToken, [TOK_IDENTIFIER]);
-		}
-		let varName = null;
-		if (this.peekToken() === TOK_BEGIN_GROUP) {
-			this.readToken();
-			let varNameToken = this.readToken();
-			if (varNameToken.tag !== TOK_IDENTIFIER) {
-				return ParserError.unexpectedToken(varNameToken, [TOK_IDENTIFIER]);
-			}
-			varName = varNameToken.text;
-			let closeToken = this.readToken();
-			if (closeToken.tag !== TOK_END_GROUP) {
-				return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
-			}
+		let type = this.readType();
+		if (Parser.isError(type)) {
+			return type;
 		}
 		let thenToken = this.readToken();
 		if (thenToken.tag !== TOK_THEN) {
@@ -483,13 +478,21 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstKindofWhen(kindNameToken.text, varName, thenExpr);
+		return new AstKindofWhen(type, thenExpr);
 	}
 	
 	readKindofStmt() {
 		let kindofToken = this.readToken();
 		if (kindofToken.tag !== TOK_KINDOF) {
 			return ParserError.unexpectedToken(kindofToken, [TOK_KINDOF]);
+		}
+		let varName = this.readToken();
+		if (varName.tag !== TOK_IDENTIFIER) {
+			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
+		}
+		let assignToken = this.readToken();
+		if (assignToken.tag !== TOK_ASSIGN) {
+			return ParserError.unexpectedToken(assignToken, [TOK_ASSIGN]);
 		}
 		let caseExpr = this.readExpression();
 		if (Parser.isError(caseExpr)) {
@@ -516,7 +519,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock);
+		return new AstKindofStmt(varName.text, caseExpr, whenIndex, whens, elseBlock);
 	}
 
 	readKindofWhenStmt() {
@@ -524,28 +527,15 @@ class Parser {
 		if (whenToken.tag !== TOK_WHEN) {
 			return ParserError.unexpectedToken(whenToken, [TOK_WHEN]);
 		}
-		let kindNameToken = this.readToken();
-		if (kindNameToken.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(kindNameToken, [TOK_IDENTIFIER]);
-		}
-		let varName = null;
-		if (this.peekToken() === TOK_BEGIN_GROUP) {
-			this.readToken();
-			let varNameToken = this.readToken();
-			if (varNameToken.tag !== TOK_IDENTIFIER) {
-				return ParserError.unexpectedToken(varNameToken, [TOK_IDENTIFIER]);
-			}
-			varName = varNameToken.text;
-			let closeToken = this.readToken();
-			if (closeToken.tag !== TOK_END_GROUP) {
-				return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
-			}
+		let type = this.readType();
+		if (Parser.isError(type)) {
+			return type;
 		}
 		let thenBlock = this.readBlockUntil(TOK_THEN, [TOK_WHEN, TOK_ELSE, TOK_END]);
 		if (Parser.isError(thenBlock)) {
 			return thenBlock;
 		}
-		return new AstKindofWhenStmt(kindNameToken.text, varName, thenBlock);
+		return new AstKindofWhenStmt(type, thenBlock);
 	}
 
 	readExprGroup() {
@@ -639,20 +629,33 @@ class Parser {
 	}
 	
 	readType() {
+		let type = this.readTypeNoVariant();
+		if (Parser.isError(type) || this.peekToken() !== TOK_TYPE_SEP) {
+			return type;
+		}
+		let types = [type];
+		let typeCount = 1;
+		while (this.peekToken() === TOK_TYPE_SEP) {
+			this.readToken();
+			let type = this.readTypeNoVariant();
+			if (Parser.isError(type)) {
+				return type;
+			}
+			types[typeCount] = type;
+			typeCount++;
+		}
+		return new AstTypeVariant(typeCount, types);
+	}
+	
+	readTypeNoVariant() {
 		if (this.peekToken() === TOK_SEQUENCE) {
 			return this.readTypeSequence();
-		}
-		if (this.peekToken() === TOK_VARIANT) {
-			return this.readTypeVariant();
 		}
 		if (this.peekToken() === TOK_BEGIN_AGG) {
 			return this.readTypeRecord();
 		}
 		if (this.peekToken() === TOK_BEGIN_ARRAY) {
 			return this.readTypeArray();
-		}
-		if (this.peekToken() === TOK_ABSTRACT) {
-			return this.readTypeAbstract();
 		}
 		let typeName = this.readToken();
 		if (typeName.tag !== TOK_IDENTIFIER) {
@@ -751,90 +754,7 @@ class Parser {
 		}
 		return new AstTypeRecordField(fieldName.text, fieldType).fromToken(fieldName);	
 	}
-	
-	readTypeVariant() {
-		let variantToken = this.readToken();
-		if (variantToken.tag !== TOK_VARIANT) {
-			return ParserError.unexpectedToken(variantToken, [TOK_VARIANT]);
-		}
-		let openToken = this.readToken();
-		if (openToken.tag !== TOK_BEGIN_GROUP) {
-			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
-		}
-		let fields = [];
-		let fieldIndex = 0;
-		while (this.peekToken() !== TOK_END_GROUP) {
-			if (fieldIndex > 0) {
-				let sepToken = this.readToken();
-				if (sepToken.tag !== TOK_SEP) {
-					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
-				}
-			}
-			let fieldExpr = this.readTypeVariantField();
-			if (Parser.isError(fieldExpr)) {
-				return fieldExpr;
-			}
-			fields[fieldIndex] = fieldExpr;
-			fieldIndex++;
-		}
-		let closeToken = this.readToken();
-		if (closeToken.tag !== TOK_END_GROUP) {
-			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
-		}
-		return new AstTypeVariant(fieldIndex, fields).fromToken(openToken);		
-	}
-	
-	readTypeAbstract() {
-		let abstractToken = this.readToken();
-		if (abstractToken.tag !== TOK_ABSTRACT) {
-			return ParserError.unexpectedToken(abstractToken, [TOK_ABSTRACT]);
-		}
-		let openToken = this.readToken();
-		if (openToken.tag !== TOK_BEGIN_GROUP) {
-			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
-		}
-		let methodCount = 0;
-		let methods = [];
-		while (this.peekToken() !== TOK_END_GROUP) {
-			let method = this.readTypeAbstractMethod();
-			if (Parser.isError(method)) {
-				return method;
-			}
-			methods[methodCount] = method;
-			methodCount++;
-			if (this.peekToken() !== TOK_END_GROUP) {
-				let sepToken = this.readToken();
-				if (sepToken.tag !== TOK_SEP) {
-					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
-				}
-			}
-		}
-		let closeToken = this.readToken();
-		if (closeToken.tag !== TOK_END_GROUP) {
-			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
-		}
-		return new AstTypeAbstract(methodCount, methods).fromToken(abstractToken);
-	}
-	
-	readTypeAbstractMethod() {
-		let methodName = this.readToken();
-		if (methodName.tag !== TOK_IDENTIFIER) {
-			return ParserError.unexpectedToken(methodName, [TOK_IDENTIFIER]);
-		}
-		let parameterList = this.readParameterList();
-		if (Parser.isError(parameterList)) {
-			return parameterList;
-		}
-		let returnType = null;
-		if (this.peekToken() !== TOK_SEP && this.peekToken() !== TOK_END_GROUP) {
-			returnType = this.readType();
-			if (Parser.isError(returnType)) {
-				return returnType;
-			}
-		}
-		return new AstTypeAbstractMethod(methodName.text, parameterList, returnType).fromToken(methodName);
-	}
-	
+		
 	readTypeDeclaration() {
 		let typeToken = this.readToken();
 		if (typeToken.tag !== TOK_TYPE) {

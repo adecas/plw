@@ -919,52 +919,6 @@ class StackMachine {
 		return null;
 	}
 	
-	opcodeCallAbstract(funcId) {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.sp - 2];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		if (funcId < 0 || (1 + 2 * funcId) >= ref.totalSize) {
-			return StackMachineError.refAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let codeBlockId = ref.ptr[1 + 2 * funcId];
-		if (codeBlockId < 0 || codeBlockId > this.codeBlocks.length) {
-			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let concreteIsRef = false;
-		if (ref.refSize > 0) {
-			concreteIsRef = true;
-			this.refMan.incRefCount(ref.ptr[0], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		let concreteVal = ref.ptr[0];
-		this.refMan.decRefCount(refId, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = concreteVal;
-		this.stackMap[this.sp - 2] = concreteIsRef;
-		this.stack[this.sp] = this.codeBlockId;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.stack[this.sp] = this.ip;
-		this.stackMap[this.sp] = false;
-		this.sp++;					
-		this.stack[this.sp] = this.bp;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.bp = this.sp;
-		this.codeBlockId = codeBlockId;
-		this.ip = 0;
-		return null;
-	}
-	
 	opcodeCallNative(nativeId) {
 		if (nativeId < 0 || nativeId >= this.natives.length) {
 			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -1310,8 +1264,6 @@ class StackMachine {
 			return this.opcodeCreateArray(arg1);
 		case OPCODE_CALL:
 			return this.opcodeCall(arg1);
-		case OPCODE_CALL_ABSTRACT:
-			return this.opcodeCallAbstract(arg1);
 		case OPCODE_CALL_NATIVE:
 			return this.opcodeCallNative(arg1);
 		case OPCODE_INIT_GENERATOR:
