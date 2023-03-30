@@ -35,6 +35,10 @@ class EvalResultType extends EvalResult {
 	structuralType() {
 		return this;
 	}
+	
+	toAst() {
+		return null;
+	}
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
@@ -43,6 +47,10 @@ class EvalTypeBuiltIn extends EvalResultType {
 		this.typeName = typeName;
 		this.key = typeName;
 	}
+	
+	toAst() {
+		return new AstTypeNamed(this.typeName);
+	}
 }
 
 class EvalTypeRecordField {
@@ -50,6 +58,10 @@ class EvalTypeRecordField {
 		this.fieldName = fieldName;
 		this.fieldType = fieldType;
 		this.offset = 0;
+	}
+	
+	toAst() {
+		return new AstRecordField(this.fieldName, this.fieldType.toAst());
 	}
 }
 
@@ -81,6 +93,14 @@ class EvalTypeRecord extends EvalResultType {
 			name += (i == 0 ? "" : ", ") + fields[i].fieldName + " " + fields[i].fieldType.typeKey();
 		}
 		return name + "}";
+	}
+	
+	toAst() {
+		let astFields = [];
+		for (let i = 0; i < this.fieldCount; i++) {
+			astFields[i] = this.fields[i].toAst();
+		}
+		return new AstTypeRecord(this.fieldCount, astFields);
 	}
 }
 
@@ -117,6 +137,14 @@ class EvalTypeVariant extends EvalResultType {
 		return false;
 	}
 	
+	toAst() {
+		let astTypes = [];
+		for (let i = 0; i < this.typeCount; i++) {
+			astTypes[i] = this.types[i].toAst();
+		}
+		return new AstTypeVariant(this.typeCount, astTypes);
+	}
+	
 }
 
 class EvalTypeArray extends EvalResultType {
@@ -125,6 +153,10 @@ class EvalTypeArray extends EvalResultType {
 		this.underlyingType = underlyingType;
 		this.key = "[" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "]";
 	}
+	
+	toAst() {
+		return new AstTypeArray(this.underlyingType.toAst());
+	}
 }
 
 class EvalTypeSequence extends EvalResultType {
@@ -132,6 +164,10 @@ class EvalTypeSequence extends EvalResultType {
 		super("res-type-sequence", true);
 		this.underlyingType = underlyingType;
 		this.key = "sequence(" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + ")";
+	}
+	
+	toAst()  {
+		return new AstTypeSequence(this.underlyingType.toAst());
 	}
 }
 
@@ -146,6 +182,10 @@ class EvalTypeName extends EvalResultType {
 	
 	structuralType() {
 		return this.structType;
+	}
+	
+	toAst() {
+		return new AstTypeNamed(this.typeName);
 	}
 		
 }
@@ -366,7 +406,9 @@ class EvalError extends EvalResult {
 }
 
 const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
-const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", true);
+const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", false);
+const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
+const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
 const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
@@ -710,6 +752,8 @@ class CompilerContext {
 		this.procedures = {};
 		this.codeBlocks = [];
 		this.globalTypeIdSeq = 0;
+		this.addType(EVAL_TYPE_INFER);
+		this.addType(EVAL_TYPE_ANY);
 		this.addType(EVAL_TYPE_INTEGER);
 		this.addType(EVAL_TYPE_REAL);
 		this.addType(EVAL_TYPE_BOOLEAN);
@@ -955,6 +999,81 @@ class Compiler {
 		this.scope = this.scope.parent;
 	}
 	
+	generateVariantDispatchFunction(astFuncCall, argTypes, variantIndex) {
+		let params = [];
+		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
+			params[i] = new AstParameter("arg" + i, argTypes[i].toAst(), astFuncCall.argList.args[i].tag === "ast-ctx-arg");
+		}
+		let args = [];
+		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
+			if (i === variantIndex) {
+				args[i] = new AstVariable("v");
+			} else if (astFuncCall.argList.args[i].tag === "ast-ctx-arg") {
+				args[i] = astFuncCall.argList.args[i];
+			} else {
+				args[i] = new AstVariable("arg" + i);
+			}
+		}
+		let thenExpr = new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)); 
+		let whens = [];
+		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
+			whens[i] = new AstKindofWhen(
+				argTypes[variantIndex].types[i].toAst(),
+				"v", thenExpr);
+		}
+		let funcDecl = new AstFunctionDeclaration(
+			astFuncCall.functionName,
+			new AstParameterList(astFuncCall.argList.argCount, params),
+			EVAL_TYPE_INFER.toAst(),
+			new AstBlock(1, [ 
+				new AstReturn (
+					new AstKindof (
+						new AstVariable("arg" + variantIndex),
+						argTypes[variantIndex].typeCount,
+						whens,
+						null
+					))],
+				null),
+			false);
+		return this.evalStatement(funcDecl);
+	}
+	
+	generateVariantDispatchProcedure(astProcCall, argTypes, variantIndex) {
+		let params = [];
+		for (let i = 0; i < astProcCall.argList.argCount; i++) {
+			params[i] = new AstParameter("arg" + i, argTypes[i].toAst(), astProcCall.argList.args[i].tag === "ast-ctx-arg");
+		}
+		let args = [];
+		for (let i = 0; i < astProcCall.argList.argCount; i++) {
+			if (i === variantIndex) {
+				args[i] = new AstVariable("v");
+			} else if (astProcCall.argList.args[i].tag === "ast-ctx-arg") {
+				args[i] = astProcCall.argList.args[i];
+			} else {
+				args[i] = new AstVariable("arg" + i);
+			}
+		}
+		let thenExpr = new AstBlock(1,
+			[new AstProcedure(astProcCall.procedureName, new AstArgList(astProcCall.argList.argCount, args))], null); 
+		let whens = [];
+		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
+			whens[i] = new AstKindofWhenStmt(
+				argTypes[variantIndex].types[i].toAst(),
+				"v", thenExpr);
+		}
+		let procDecl = new AstProcedureDeclaration(
+			astProcCall.procedureName,
+			new AstParameterList(astProcCall.argList.argCount, params),
+			new AstBlock(1, [ 
+				new AstKindofStmt (
+					new AstVariable("arg" + variantIndex),
+					argTypes[variantIndex].typeCount,
+					whens,
+					null)],
+				null));
+		return this.evalStatement(procDecl);
+	}
+	
 	evalType(expr) {
 		if (expr.tag === "ast-null") {
 			return EVAL_TYPE_NULL;
@@ -971,12 +1090,18 @@ class Compiler {
 			if (underType.isError()) {
 				return underType;
 			}
+			if (underType === EVAL_TYPE_ANY) {
+				return EvalError.wrongType(underType, "not any").fromExpr(expr.underlyingType);					
+			}
 			return this.context.addType(new EvalTypeArray(underType));
 		}
 		if (expr.tag === "ast-type-sequence") {
 			let underType = this.evalType(expr.underlyingType);
 			if (underType.isError()) {
 				return underType;
+			}
+			if (underType === EVAL_TYPE_ANY) {
+				return EvalError.wrongType(underType, "not any").fromExpr(expr.underlyingType);					
 			}
 			return this.context.addType(new EvalTypeSequence(underType));
 		}
@@ -994,6 +1119,9 @@ class Compiler {
 				if (fieldType.isError()) {
 					return fieldType;
 				}
+				if (fieldType === EVAL_TYPE_ANY) {
+					return EvalError.wrongType(fieldType, "not any").fromExpr(expr.fields[i].fieldType);					
+				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
@@ -1004,6 +1132,9 @@ class Compiler {
 				let type = this.evalType(expr.types[i]);
 				if (type.isError()) {
 					return type;
+				}
+				if (type === EVAL_TYPE_ANY) {
+					return EvalError.wrongType(type, "not any").fromExpr(expr.types[i]);					
 				}
 				if (type.tag === "res-type-variant") {
 					return EvalError.cantNestVariant(type.typeKey()).fromExpr(expr.types[i]);
@@ -1036,6 +1167,9 @@ class Compiler {
 			let underlyingType = this.evalType(expr.typeExpr);
 			if (underlyingType.isError()) {
 				return underlyingType;
+			}
+			if (underlyingType === EVAL_TYPE_ANY) {
+				return EvalError.wrongType(underlyingType, "not any").fromExpr(expr.typeExpr);					
 			}
 			let namedType = new EvalTypeName(expr.typeName, underlyingType);
 			this.context.addType(namedType);
@@ -1576,7 +1710,9 @@ class Compiler {
 			if (retType !== null && frameScope.returnType === null) {
 				return EvalError.unexpectedReturnWithValue().fromExpr(expr);
 			}
-			if (retType !== frameScope.returnType) {
+			if (frameScope.returnType === EVAL_TYPE_INFER) {
+				frameScope.returnType = retType;
+			} else if (retType !== frameScope.returnType) {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
 			if (retType === null) {
@@ -1652,6 +1788,9 @@ class Compiler {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
 				}
+				if (evalFunc.returnType === EVAL_TYPE_INFER) {
+					evalFunc.returnType = this.scope.returnType;
+				}
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile function
@@ -1708,7 +1847,23 @@ class Compiler {
 			procKey += ")";
 			let proc = this.context.getProcedure(procKey);
 			if (proc === null) {
-				return EvalError.unknownProcedure(procKey).fromExpr(expr);
+				let variantIndex = -1;
+				for (let i = 0; i < expr.argList.argCount; i++) {
+					if (argTypes[i].tag === "res-type-variant") {
+						variantIndex = i;
+						break;
+					}
+				}
+				if (variantIndex !== -1 && expr.argList.args[variantIndex].tag !== "ast-ctx-arg") {
+					let genRes = this.generateVariantDispatchProcedure(expr, argTypes, variantIndex);
+					if (genRes.isError()) {
+						return genRes.fromExpr(expr);
+					}
+					proc = this.context.getProcedure(procKey);
+				}
+				if (proc === null) {
+					return EvalError.unknownProcedure(procKey).fromExpr(expr);
+				}
 			}
 			this.codeBlock.codePush(expr.argList.argCount);
 			if (proc.nativeIndex !== -1) {
@@ -1800,6 +1955,9 @@ class Compiler {
 			let asType = this.evalType(expr.exprType);
 			if (asType.isError()) {
 				return asType;
+			}
+			if (asType === EVAL_TYPE_ANY) {
+				return EvalError.wrongType(asType, "not any").fromExpr(expr.exprType);				
 			}
 			if (expr.expr.tag === "ast-value-array" && expr.expr.itemCount === 0) {
 				// special case when the left expression is an empty array
@@ -2236,7 +2394,23 @@ class Compiler {
 			funcKey += ")";
 			let func = this.context.getFunction(funcKey);
 			if (func === null) {
-				return EvalError.unknownFunction(funcKey).fromExpr(expr);
+				let variantIndex = -1;
+				for (let i = 0; i < expr.argList.argCount; i++) {
+					if (argTypes[i].tag === "res-type-variant") {
+						variantIndex = i;
+						break;
+					}
+				}
+				if (variantIndex !== -1 && expr.argList.args[variantIndex].tag !== "ast-ctx-arg") {
+					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex);
+					if (genRes.isError()) {
+						return genRes.fromExpr(expr);
+					}
+					func = this.context.getFunction(funcKey);
+				}
+				if (func === null) {
+					return EvalError.unknownFunction(funcKey).fromExpr(expr);
+				}
 			}
 			this.codeBlock.codePush(expr.argList.argCount);
 			if (func.nativeIndex !== -1) {

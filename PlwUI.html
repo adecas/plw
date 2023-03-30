@@ -583,6 +583,19 @@ kindof a
 end;
 </pre>
 
+<p id="snippet-variant-dispatch-title" class="snippet">Variants Dispatch</p>
+<pre id="snippet-variant-dispatch">
+function to_json(i integer) text begin
+	return text(i);
+end to_json;
+function to_json(b boolean) text begin
+	return text(b);
+end to_json;
+var v := 42 as boolean|integer;
+print(to_json(v));
+</pre>
+
+
 <p id="snippet-copy-on-write-title" class="snippet">Copy On Write</p>
 <pre id="snippet-copy-on-write">
 var v1 := [[10, 11], [20, 21], [30, 31]];
