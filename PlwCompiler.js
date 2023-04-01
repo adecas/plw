@@ -1006,18 +1006,33 @@ class Compiler {
 		}
 		let args = [];
 		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
-			if (i === variantIndex) {
-				args[i] = new AstVariable("v");
-			} else if (astFuncCall.argList.args[i].tag === "ast-ctx-arg") {
-				args[i] = astFuncCall.argList.args[i];
+			if (astFuncCall.argList.args[i].tag === "ast-ctx-arg") {
+				args[i] = new AstCtxArg(i == variantIndex ? "v" : "arg" + i);
 			} else {
-				args[i] = new AstVariable("arg" + i);
+				args[i] = new AstVariable(i == variantIndex ? "v" : "arg" + i);
 			}
 		}
-		let thenExpr = new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)); 
+		let thenStmts = null;
+		if (astFuncCall.argList.args[variantIndex].tag === "ast-ctx-arg") {
+			thenStmts = [
+				new AstVariableDeclaration("r",
+					new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)),
+					true),
+				new AstAssign(
+					new AstVariable("arg" + variantIndex),
+					new AstAs(
+						new AstVariable("v"),
+						argTypes[variantIndex].toAst())),
+				new AstReturn(new AstVariable("r"))];
+		} else {
+			thenStmts = [
+				new AstReturn(
+					new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)))];
+		}
+ 		let thenExpr = new AstBlock(thenStmts.length, thenStmts, null);		
 		let whens = [];
 		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
-			whens[i] = new AstKindofWhen(
+			whens[i] = new AstKindofWhenStmt(
 				argTypes[variantIndex].types[i].toAst(),
 				"v", thenExpr);
 		}
@@ -1026,13 +1041,11 @@ class Compiler {
 			new AstParameterList(astFuncCall.argList.argCount, params),
 			EVAL_TYPE_INFER.toAst(),
 			new AstBlock(1, [ 
-				new AstReturn (
-					new AstKindof (
-						new AstVariable("arg" + variantIndex),
-						argTypes[variantIndex].typeCount,
-						whens,
-						null
-					))],
+				new AstKindofStmt (
+					new AstVariable("arg" + variantIndex),
+					argTypes[variantIndex].typeCount,
+					whens,
+					null)],
 				null),
 			false);
 		return this.evalStatement(funcDecl);
@@ -1045,16 +1058,21 @@ class Compiler {
 		}
 		let args = [];
 		for (let i = 0; i < astProcCall.argList.argCount; i++) {
-			if (i === variantIndex) {
-				args[i] = new AstVariable("v");
-			} else if (astProcCall.argList.args[i].tag === "ast-ctx-arg") {
-				args[i] = astProcCall.argList.args[i];
+			if (astProcCall.argList.args[i].tag === "ast-ctx-arg") {
+				args[i] = new AstCtxArg(i === variantIndex ? "v" : "arg" + i);
 			} else {
-				args[i] = new AstVariable("arg" + i);
+				args[i] = new AstVariable(i === variantIndex ? "v" : "arg" + i);
 			}
 		}
-		let thenExpr = new AstBlock(1,
-			[new AstProcedure(astProcCall.procedureName, new AstArgList(astProcCall.argList.argCount, args))], null); 
+		let thenStmts = [new AstProcedure(astProcCall.procedureName, new AstArgList(astProcCall.argList.argCount, args))];
+		if (astProcCall.argList.args[variantIndex].tag === "ast-ctx-arg") {
+			thenStmts[thenStmts.length] = new AstAssign(
+				new AstVariable("arg" + variantIndex),
+				new AstAs(
+					new AstVariable("v"),
+					argTypes[variantIndex].toAst()));
+		}
+		let thenExpr = new AstBlock(thenStmts.length, thenStmts, null); 
 		let whens = [];
 		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
 			whens[i] = new AstKindofWhenStmt(
@@ -1071,6 +1089,7 @@ class Compiler {
 					whens,
 					null)],
 				null));
+		console.log(procDecl);
 		return this.evalStatement(procDecl);
 	}
 	
@@ -1446,6 +1465,7 @@ class Compiler {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
 			}
 			let kindHasWhen = [];
+			let returnCount = 0;
 			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
@@ -1480,6 +1500,9 @@ class Compiler {
 				if (thenRet.isError()) {
 					return thenRet;
 				}
+				if (thenRet === EVAL_RESULT_RETURN) {
+					returnCount++;
+				}
 				this.codeBlock.codePopVoid(1);
 				this.popScope();
 				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
@@ -1492,11 +1515,18 @@ class Compiler {
 				if (elseRet.isError()) {
 					return elseRet;
 				}
+				if (elseRet === EVAL_RESULT_RETURN) {
+					for (let i = 0; i < kindHasWhen.length; i++) {
+						if (kindHasWhen[i] === false) {
+							returnCount++;
+						}
+					}
+				}
 			}
 			for (let i = 0; i < endLocCount; i++) {
 				this.codeBlock.setLoc(endLocs[i]);
 			}
-			return EVAL_RESULT_OK;
+			return returnCount === kindHasWhen.length ? EVAL_RESULT_RETURN : EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-while") {
 			this.pushScopeLoop();
@@ -1854,7 +1884,7 @@ class Compiler {
 						break;
 					}
 				}
-				if (variantIndex !== -1 && expr.argList.args[variantIndex].tag !== "ast-ctx-arg") {
+				if (variantIndex !== -1) {
 					let genRes = this.generateVariantDispatchProcedure(expr, argTypes, variantIndex);
 					if (genRes.isError()) {
 						return genRes.fromExpr(expr);
@@ -2401,7 +2431,7 @@ class Compiler {
 						break;
 					}
 				}
-				if (variantIndex !== -1 && expr.argList.args[variantIndex].tag !== "ast-ctx-arg") {
+				if (variantIndex !== -1) {
 					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex);
 					if (genRes.isError()) {
 						return genRes.fromExpr(expr);

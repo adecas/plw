@@ -352,6 +352,20 @@ print('double(3): ' || text(double(3)));
 print('expected: 6');
 </pre>
 
+<p id="snippet-macros-title" class="snippet">Macros</p>
+<pre id="snippet-macros">
+procedure swap(ctx a any, ctx b any) begin
+  var tmp := a;
+  a := b;
+  b := tmp;
+end swap;
+var i1 := 42;
+var i2 := 51;
+swap(ctx i1, ctx i2);
+var t1 := '42';
+var t2 := '51';
+swap(ctx t1, ctx t2);
+</pre>
 
 <p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>
 <pre id="snippet-first-100-primes">
@@ -592,6 +606,19 @@ function to_json(b boolean) text begin
 	return text(b);
 end to_json;
 var v := 42 as boolean|integer;
+print(to_json(v));
+v := true as boolean|integer;
+print(to_json(v));
+procedure invert(ctx i integer) begin
+	i := -1;
+end invert;
+procedure invert(ctx b boolean) begin
+	b := not b;
+end invert;
+invert(ctx v);
+print(to_json(v));
+v := 42 as boolean|integer;
+invert(ctx v);
 print(to_json(v));
 </pre>
 

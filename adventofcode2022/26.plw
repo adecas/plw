@@ -463,7 +463,6 @@ function text(node_id integer, nodes [node]) text begin
 		end loop;
 		return t || ']';
 	end;
-	return 'error';
 end text; 
 
 procedure skip_blank(t text, ctx pos integer) begin
@@ -534,7 +533,6 @@ function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
 			return last1 - last2;
 		end;
 	end;
-	return 0;
 end compare_node;
 
 var nl := '

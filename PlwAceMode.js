@@ -9,7 +9,7 @@ var PlwHighlightRules = function() {
     var keywordMapper = this.createKeywordMapper({
         "keyword": 
         	"var alias const as type if then elsif else begin end exception raise case when " +
-        	"while loop for in reverse generator ctx function procedure return yield sequence variant kindof abstract exit",
+        	"while loop for in reverse generator ctx function procedure return yield sequence variant kindof exit null",
         "constant.language": "true false",
         "support.type":  "integer boolean text char real",
         "keyword.operator": "and or not" 
@@ -30,7 +30,7 @@ var PlwHighlightRules = function() {
             regex : "[a-zA-Z_$][a-zA-Z0-9_$]*\\b"
         }, {
             token : "keyword.operator",
-            regex : "\\+|\\-|\\/|\\/\\/|%|<|>|<=|=>|==|!=|<>|=|\\:=|\\|\\|"
+            regex : "\\+|\\-|\\/|\\*|\\*\\*|%|<|>|<=|=>|==|!=|<>|=|\\:=|\\|\\|"
         }, {
             token : "paren.lparen",
             regex : "[\\(]"
