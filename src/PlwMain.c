@@ -6,6 +6,7 @@
 #include "PlwNative.h"
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 void PlwSetError(PlwError *error, const char *code, char *message) {
 	error->code = code;
@@ -249,6 +250,8 @@ int main(int argc, char **argv) {
 		printf("Usage: plw <file.plwc>\n");
 		return -1;
 	}
+	
+	srandom(time(NULL));
 	
 	PlwError_Init(&error);
 	
