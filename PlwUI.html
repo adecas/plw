@@ -354,6 +354,14 @@ print('expected: 6');
 
 <p id="snippet-macros-title" class="snippet">Macros</p>
 <pre id="snippet-macros">
+function max(a any, b any) any begin
+	if a > b then
+		return a;
+	end if;
+	return b;
+end max;
+print(text(max(42, 51)));
+print(text(max(42.42, 51.51)));
 procedure swap(ctx a any, ctx b any) begin
   var tmp := a;
   a := b;
@@ -362,9 +370,11 @@ end swap;
 var i1 := 42;
 var i2 := 51;
 swap(ctx i1, ctx i2);
+print(text(i1) || ' ' || text(i2));
 var t1 := '42';
 var t2 := '51';
 swap(ctx t1, ctx t2);
+print(t1 || ' ' || t2);
 </pre>
 
 <p id="snippet-first-100-primes-title" class="snippet">First 100 Primes</p>
@@ -620,6 +630,33 @@ print(to_json(v));
 v := 42 as boolean|integer;
 invert(ctx v);
 print(to_json(v));
+</pre>
+
+<p id="snippet-meta-title" class="snippet">Meta</p>
+<pre id="snippet-meta">
+type circle {radius real};
+type rect {width real, height real};
+function perimeter(c circle) real begin
+  return 2.0 * 3.14 * c.radius;
+end perimeter;
+function perimeter(r rect) real begin
+  return 2.0 * (r.width + r.height);
+end perimeter;
+procedure display_perimeters(shapes any) begin
+  for shape in shapes loop
+    print('Perimeter is: ' || text(perimeter(shape)));
+  end loop;
+end display_perimeters;
+type square {width real};
+function perimeter(s square) real begin
+	return 4.0 * s.width;
+end perimeter;	
+var shapes := [
+	{radius: 2.5}             as circle as circle|rect|square,
+	{width: 1.5, height: 3.5} as rect   as circle|rect|square,
+	{width: 2.0}              as square as circle|rect|square
+];
+display_perimeters(shapes);
 </pre>
 
 

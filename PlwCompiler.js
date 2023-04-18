@@ -53,6 +53,15 @@ class EvalTypeBuiltIn extends EvalResultType {
 	}
 }
 
+const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
+const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", false);
+const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
+const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
+const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
+const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
+const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
+const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
+
 class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
 		this.fieldName = fieldName;
@@ -190,6 +199,8 @@ class EvalTypeName extends EvalResultType {
 		
 }
 
+const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
+
 class EvalResultParameter extends EvalResult {
 	constructor(parameterName, parameterType, isCtx) {
 		super("res-parameter");
@@ -205,6 +216,65 @@ class EvalResultParameterList extends EvalResult {
 		this.parameterCount = parameterCount;
 		this.parameters = parameters;
 	}
+	
+	indexOfAny() {
+		for (let i = 0; i < this.parameterCount; i++) {
+			if (this.parameters[i].parameterType === EVAL_TYPE_ANY) {
+				return i;
+			}
+		}
+		return -1;
+	}
+	
+	countOfAny() {
+		let count = 0;
+		for (let i = 0; i < this.parameterCount; i++) {
+			if (this.parameters[i].parameterType === EVAL_TYPE_ANY) {
+				count++;
+			}
+		}
+		return count;
+	}
+	
+	isMatch(argTypes, isCtxArgs) {
+		if (argTypes.length !== this.parameterCount || isCtxArgs.length !== this.parameterCount) {
+			return false;
+		}
+		for (let i = 0; i < this.parameterCount; i++) {
+			if (this.parameters[i].isCtx !== isCtxArgs[i]) {
+				return false;
+			}
+			if (this.parameters[i].parameterType !== EVAL_TYPE_ANY && this.parameters[i].parameterType !== argTypes[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+class EvalResultMacroFunction extends EvalResult {
+	constructor(functionName, parameterList, returnType, isGenerator, astStmt) {
+		super("res-macro-function");
+		this.functionName = functionName;
+		this.parameterList = parameterList;
+		this.returnType = returnType;
+		this.isGenerator = isGenerator;
+		this.astStmt = astStmt;
+	}
+	
+	functionShortKey() {
+		return this.functionName + "(" + this.parameterList.parameterCount + ")";
+	}
+	
+	functionKey() {
+		let funcKey = this.functionName + "(";
+		for (let i = 0; i < this.parameterList.parameterCount; i++) {
+			funcKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
+		}
+		return funcKey + ")";
+	}	
 }
 
 class EvalResultFunction extends EvalResult {
@@ -262,6 +332,30 @@ class EvalResultProcedure extends EvalResult {
 		return procKey + ")";
 	}
 }
+
+class EvalResultMacroProcedure extends EvalResult {
+	constructor(procedureName, parameterList, astStmt) {
+		super("res-macro-procedure");
+		this.procedureName = procedureName;
+		this.parameterList = parameterList;
+		this.astStmt = astStmt;
+	}
+	
+	procedureShortKey() {
+		return this.procedureName + "(" + this.parameterList.parameterCount + ")";
+	}
+	
+	procedureKey() {
+		let procKey = this.procedureName + "(";
+		for (let i = 0; i < this.parameterList.parameterCount; i++) {
+			procKey += (i > 0 ? "," : "") +
+				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
+				this.parameterList.parameters[i].parameterType.typeKey();
+		}
+		return procKey + ")";
+	}	
+}
+
 
 const EVAL_RESULT_RETURN = new EvalResult("res-return");
 const EVAL_RESULT_RAISE = new EvalResult("res-raise");
@@ -404,16 +498,6 @@ class EvalError extends EvalResult {
 	}
 		
 }
-
-const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
-const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", false);
-const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
-const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
-const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
-const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
-const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
-const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
-const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
 
 class CodeBlock {
 
@@ -750,6 +834,8 @@ class CompilerContext {
 		this.types = {};
 		this.functions = {};
 		this.procedures = {};
+		this.macroFunctions = {};
+		this.macroProcedures = {};
 		this.codeBlocks = [];
 		this.globalTypeIdSeq = 0;
 		this.addType(EVAL_TYPE_INFER);
@@ -853,6 +939,92 @@ class CompilerContext {
 		// console.log("Code block " + i + ": " + blockName);
 		return i;
 	}
+	
+	getMacroFunction(functionShortKey, functionKey) {
+		let bucket = this.macroFunctions[functionShortKey];
+		if (bucket === undefined) {
+			return null;
+		}
+		return bucket[functionKey] === undefined ? null : buckect[functionKey];
+	}
+	
+	addMacroFunction(macroFunction) {
+		let bucket = this.macroFunctions[macroFunction.functionShortKey()];
+		if (bucket === undefined) {
+			bucket = {};
+			this.macroFunctions[macroFunction.functionShortKey()] = bucket;
+		}
+		bucket[macroFunction.functionKey()] = macroFunction;
+	}
+	
+	findMacroFunction(functionName, argTypes, isCtxArgs) {
+		let bucket = this.macroFunctions[functionName + "(" + argTypes.length + ")"];
+		if (bucket === undefined) {
+			return null;
+		}
+		let minAnyCount = -1;
+		let maxFirstAnyIndex = -1;
+		let bestMacro = null;
+		for (const macroKey in bucket) {
+			let macroFunc = bucket[macroKey];
+			if (macroFunc.parameterList.isMatch(argTypes, isCtxArgs)) {
+				let anyCount = macroFunc.parameterList.countOfAny();
+				let firstAnyIndex = macroFunc.parameterList.indexOfAny();
+				if (minAnyCount === -1 || anyCount < minAnyCount) {
+					minAnyCount = anyCount;
+					maxFirstAnyIndex = firstAnyIndex;
+					bestMacro = macroFunc;
+				} else if (anyCount === minAnyCount && firstAnyIndex > maxFirstAnyIndex) {
+					maxFirstAnyIndex = firstAnyIndex;
+					bestMacro = macroFunc;					
+				}
+			}
+		}
+		return bestMacro;
+	}
+	
+	getMacroProcedure(procedureShortKey, procedureKey) {
+		let bucket = this.macroProcedures[procedureShortKey];
+		if (bucket === undefined) {
+			return null;
+		}
+		return bucket[procedureKey] === undefined ? null : buckect[procedureKey];
+	}
+	
+	addMacroProcedure(macroProcedure) {
+		let bucket = this.macroProcedures[macroProcedure.procedureShortKey()];
+		if (bucket === undefined) {
+			bucket = {};
+			this.macroProcedures[macroProcedure.procedureShortKey()] = bucket;
+		}
+		bucket[macroProcedure.procedureKey()] = macroProcedure;
+	}
+	
+	findMacroProcedure(procedureName, argTypes, isCtxArgs) {
+		let bucket = this.macroProcedures[procedureName + "(" + argTypes.length + ")"];
+		if (bucket === undefined) {
+			return null;
+		}
+		let minAnyCount = -1;
+		let maxFirstAnyIndex = -1;
+		let bestMacro = null;
+		for (const macroKey in bucket) {
+			let macroProc = bucket[macroKey];
+			if (macroProc.parameterList.isMatch(argTypes, isCtxArgs)) {
+				let anyCount = macroProc.parameterList.countOfAny();
+				let firstAnyIndex = macroProc.parameterList.indexOfAny();
+				if (minAnyCount === -1 || anyCount < minAnyCount) {
+					minAnyCount = anyCount;
+					maxFirstAnyIndex = firstAnyIndex;
+					bestMacro = macroProc;
+				} else if (anyCount === minAnyCount && firstAnyIndex > maxFirstAnyIndex) {
+					maxFirstAnyIndex = firstAnyIndex;
+					bestMacro = macroProc;					
+				}
+			}
+		}
+		return bestMacro;
+	}		
 			
 }
 
@@ -999,6 +1171,23 @@ class Compiler {
 		this.scope = this.scope.parent;
 	}
 	
+	generateFunctionFromMacro(functionName, argTypes, macroFunc) {
+		let params = [];
+		for (let i = 0; i < macroFunc.parameterList.parameterCount; i++) {
+			params[i] = new AstParameter(
+				macroFunc.parameterList.parameters[i].parameterName,
+				argTypes[i].toAst(),
+				macroFunc.parameterList.parameters[i].isCtx);
+		}
+		let funcDecl = new AstFunctionDeclaration(
+			macroFunc.functionName,
+			new AstParameterList(macroFunc.parameterList.parameterCount, params),
+			(macroFunc.returnType === EVAL_TYPE_ANY ? EVAL_TYPE_INFER : macroFunc.returnType).toAst(),
+			macroFunc.astStmt,
+			macroFunc.isGenerator);
+		return this.evalStatement(funcDecl);
+	}
+	
 	generateVariantDispatchFunction(astFuncCall, argTypes, variantIndex) {
 		let params = [];
 		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
@@ -1049,6 +1238,21 @@ class Compiler {
 				null),
 			false);
 		return this.evalStatement(funcDecl);
+	}
+	
+	generateProcedureFromMacro(procedureName, argTypes, macroProc) {
+		let params = [];
+		for (let i = 0; i < macroProc.parameterList.parameterCount; i++) {
+			params[i] = new AstParameter(
+				macroProc.parameterList.parameters[i].parameterName,
+				argTypes[i].toAst(),
+				macroProc.parameterList.parameters[i].isCtx);
+		}
+		let procDecl = new AstProcedureDeclaration(
+			macroProc.procedureName,
+			new AstParameterList(macroProc.parameterList.parameterCount, params),
+			macroProc.astStmt);
+		return this.evalStatement(procDecl);
 	}
 	
 	generateVariantDispatchProcedure(astProcCall, argTypes, variantIndex) {
@@ -1779,6 +1983,14 @@ class Compiler {
 			if (returnType.isError()) {
 				return returnType;
 			}
+			if (parameterList.indexOfAny() !== -1) {
+				let macroFunc = new EvalResultMacroFunction(expr.functionName, parameterList, returnType, expr.isGenerator, expr.statement);
+				if (this.context.getMacroFunction(macroFunc.functionShortKey(), macroFunc.functionKey()) !== null) {
+					return EvalError.functionAlreadyExists(macroFunc.functionKey()).fromExpr(expr);
+				}
+				this.context.addMacroFunction(macroFunc);
+				return EVAL_RESULT_OK;
+			}
 			let evalFunc = new EvalResultFunction(expr.functionName, parameterList, returnType, expr.isGenerator);
 			if (this.context.getFunction(evalFunc.functionKey()) !== null) {
 				return EvalError.functionAlreadyExists(evalFunc.functionKey()).fromExpr(expr);
@@ -1831,6 +2043,14 @@ class Compiler {
 			if (parameterList.isError(parameterList)) {
 				return parameterList;
 			}
+			if (parameterList.indexOfAny() !== -1) {
+				let macroProc = new EvalResultMacroProcedure(expr.procedureName, parameterList, expr.statement);
+				if (this.context.getMacroProcedure(macroProc.procedureShortKey(), macroProc.procedureKey()) !== null) {
+					return EvalError.procedureAlreadyExists(macroProc.procedureKey()).fromExpr(expr);
+				}
+				this.context.addMacroProcedure(macroProc);
+				return EVAL_RESULT_OK;
+			}			
 			let evalProc = new EvalResultProcedure(expr.procedureName, parameterList);
 			if (this.context.getProcedure(evalProc.procedureKey()) !== null) {
 				return EvalError.procedureAlreadyExists(evalProc.procedureKey()).fromExpr(expr);
@@ -1888,6 +2108,19 @@ class Compiler {
 					let genRes = this.generateVariantDispatchProcedure(expr, argTypes, variantIndex);
 					if (genRes.isError()) {
 						return genRes.fromExpr(expr);
+					}
+					proc = this.context.getProcedure(procKey);
+				} else {
+					let isCtxArgs = [];
+					for (let i = 0; i < expr.argList.argCount; i++) {
+						isCtxArgs[i] = expr.argList.args[i].tag === "ast-ctx-arg";
+					}
+					let macroProc = this.context.findMacroProcedure(expr.procedureName, argTypes, isCtxArgs);
+					if (macroProc !== null) {
+						let genRes = this.generateProcedureFromMacro(expr.procedureName, argTypes, macroProc);
+						if (genRes.isError()) {
+							return genRes.fromExpr(expr);
+						}
 					}
 					proc = this.context.getProcedure(procKey);
 				}
@@ -2435,6 +2668,19 @@ class Compiler {
 					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex);
 					if (genRes.isError()) {
 						return genRes.fromExpr(expr);
+					}
+					func = this.context.getFunction(funcKey);
+				} else {
+					let isCtxArgs = [];
+					for (let i = 0; i < expr.argList.argCount; i++) {
+						isCtxArgs[i] = expr.argList.args[i].tag === "ast-ctx-arg";
+					}				
+					let macroFunc = this.context.findMacroFunction(expr.functionName, argTypes, isCtxArgs);
+					if (macroFunc !== null) {
+						let genRes = this.generateFunctionFromMacro(expr.functionName, argTypes, macroFunc);
+						if (genRes.isError()) {
+							return genRes.fromExpr(expr);
+						}
 					}
 					func = this.context.getFunction(funcKey);
 				}

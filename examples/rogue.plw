@@ -1,3 +1,8 @@
+#############
+###
+### GEOMETRY
+###
+
 function min(a integer, b integer) integer begin
 	if a < b then
 		return a;
@@ -99,57 +104,13 @@ function line_dots_next(ctx ldc line_dots_context) {x integer, y integer} begin
 	return result;
 end line_dots_next;
 
-generator line_dots(x1 integer, y1 integer, x2 integer, y2 integer) {x integer, y integer} begin
-    var dx := abs(x2 - x1);
-    var sx := case when x1 < x2 then 1 else -1 end;
-    var dy := -abs(y2 - y1);
-    var sy := case when y1 < y2 then 1 else -1 end;
-    var error := dx + dy;
-    var again := true;
-    while again loop
-        yield {x: x1, y: y1};
-        if x1 = x2 and y1 = y2 then
-        	again := false;
-       	else
-		    var e2 := 2 * error;
-		    if e2 >= dy then
-		        if x1 = x2 then
-		        	again := false;
-		        else
-		        	error := error + dy;
-		        	x1 := x1 + sx;
-		        end if;
-		    end if;
-		    if e2 <= dx then
-		        if y1 = y2 then
-		        	again := false;
-		        else
-		        	error := error + dx;
-		        	y1 := y1 + sy;
-		        end if;
-		    end if;
-		end if;
-    end loop;
-end line_dots;
+#############
+###
+### TERMINAL
+###
 
-const GLYPH_SPACE := ' ';
-const GLYPH_PLAYER := '@';
-const GLYPH_WALL := '#';
-const GLYPH_FLOOR := '.';
-
-const CHAR_UP := char_at('i', 0);
-const CHAR_DOWN := char_at('k', 0);
-const CHAR_LEFT := char_at('j', 0);
-const CHAR_RIGHT := char_at('l', 0);
-const CHAR_QUIT := char_at('x', 0);
-const CHAR_UPRIGHT := char_at('o', 0);
-const CHAR_UPLEFT := char_at('u', 0);
-const CHAR_DOWNRIGHT := char_at(';', 0);
-const CHAR_DOWNLEFT := char_at(',', 0);
-const CHAR_PICKUP := char_at(' ', 0);
-const CHAR_INVENTORY := char_at('y', 0);
-const CHAR_SPACE := char_at(' ', 0);
-
+const SCREEN_WIDTH := 130;
+const SCREEN_HEIGHT := 30;
 
 const ANSI_CR := text([13 as char]);
 const ANSI_LF := text([10 as char]);
@@ -197,6 +158,23 @@ function ansi_color(fg_color text, bg_color text) text begin
 	return ANSI_CSI || fg_color || ';' || bg_color || 'm';
 end ansi_color;
 
+###########
+###
+### GLYPHS
+###
+
+const GLYPH_SPACE := ' ';
+const GLYPH_PLAYER := '@';
+const GLYPH_WALL := '#';
+const GLYPH_FLOOR := '.';
+const GLYPH_DOWNSTAIRS := '>';
+const GLYPH_SWORD := '/';
+const GLYPH_SHIELD := '(';
+const GLYPH_SCROLL := ')';
+const GLYPH_POTION := 'j';
+const GLYPH_GOBELIN := 'g';
+const GLYPH_ORC := 'o';
+
 type screen_cell {
 	glyph text,
 	fg_color text,
@@ -210,6 +188,14 @@ end screen_cell;
 const EMPTY_SCREEN_CELL := {glyph: GLYPH_SPACE, fg_color: ANSI_FG_WHITE, bg_color: ANSI_BG_BLACK} as screen_cell;
 const FLOOR_SCREEN_CELL := {glyph: GLYPH_FLOOR, fg_color: ANSI_FG_BLUE, bg_color: ANSI_BG_BLACK} as screen_cell;
 const WALL_SCREEN_CELL := {glyph: GLYPH_WALL, fg_color: ANSI_FG_GREEN, bg_color: ANSI_BG_BLACK} as screen_cell;
+const DOWNSTAIRS_SCREEN_CELL := {glyph: GLYPH_DOWNSTAIRS, fg_color: ANSI_FG_YELLOW, bg_color: ANSI_BG_BLACK} as screen_cell;
+
+#############
+###
+### ENTITIES
+###
+
+const ENTITY_ID_NONE := -1;
 
 type viewrange {
 	range integer,
@@ -225,30 +211,39 @@ type combatstat {
 	max_hp integer,
 	hp integer,
 	defense integer,
-	power integer
+	power integer,
+	confused_turns integer
 };
 
-function combatstat(max_hp integer, hp integer, defense integer, power integer) combatstat begin
-	return {max_hp: max_hp, hp: hp, defense: defense, power: power} as combatstat;
-end combatstat;
+type equip_slot integer;
+
+const EQUIP_SLOT_NONE    := -1 as equip_slot;
+const EQUIP_SLOT_MELEE   := 0 as equip_slot;
+const EQUIP_SLOT_DEFENSE := 1 as equip_slot;
+const EQUIP_SLOT_COUNT   := 2;
+const EQUIP_SLOT_NAMES   := ['Melee', 'Defense'];
 
 type item {
-	owner_id integer
+	owner_id         integer,
+	equippable_slot  equip_slot,
+	equipped         boolean
 };
-
-function item(owner_id integer) item begin
-	return {owner_id: owner_id} as item;
-end item;
 
 type potion {
 	hp integer
 };
 
-function potion(hp integer) potion begin
-	return {hp: hp} as potion;
-end potion;
+type scroll {
+	range           integer,
+	damage          integer,
+	effect_radius   integer,
+	confusion_turns integer
+};
 
-type scroll {range integer, damage integer};
+type combat_bonus {
+	defense_bonus	integer,
+	power_bonus		integer
+};
 
 type entity {
 	name				text,
@@ -257,80 +252,53 @@ type entity {
 	display				null|screen_cell,
 	viewrange			null|viewrange,
 	combat_stat			null|combatstat,
-	is_monster			boolean,
 	blocks_tile			boolean, 
 	item				null|item,
 	potion				null|potion,
-	scroll				null|scroll
+	scroll				null|scroll,
+	combat_bonus		null|combat_bonus		
 };
 
-function entity(
-	name		text,
-	position	point,
-	display		screen_cell,
-	viewrange	integer,
-	stat		combatstat,
-	is_monster	boolean
-) entity
-begin
+function entity(name text, position point, display screen_cell) entity begin
 	return {
 		name:			name,
 		is_active:		true,
 		position:		position 				as null|point,
 		display:		display					as null|screen_cell,
-		viewrange:   	viewrange(viewrange)	as null|viewrange,
-		combat_stat:	stat					as null|combatstat,
-		is_monster:		is_monster,
-		blocks_tile:	true,
+		viewrange:   	null					as null|viewrange,
+		combat_stat:	null					as null|combatstat,
+		blocks_tile:	false,
 		item:			null					as null|item,
 		potion:			null					as null|potion,
-		scroll:			null					as null|scroll
+		scroll:			null					as null|scroll,
+		combat_bonus:	null					as null|combat_bonus
 	} as entity;
 end entity;
 
-function entity(
-	name		text,
-	position	point,
-	display		screen_cell,
-	potion		potion
-) entity
-begin
-	return {
-		name:			name,
-		is_active:		true,
-		position:		position 			as null|point,
-		display:		display				as null|screen_cell,
-		viewrange:   	null				as null|viewrange,
-		combat_stat:	null				as null|combatstat,
-		is_monster:		false,
-		blocks_tile:	false,
-		item:			item(-1)			as null|item,
-		potion:			potion				as null|potion,
-		scroll:			null				as null|scroll
-	} as entity;
-end entity;
+function fighter_entity(e entity, viewrange integer, max_hp integer, defense integer, power integer) entity begin
+	e.viewrange   := {range: viewrange, flags: [] as [[boolean]], dirty: true} as viewrange as null|viewrange;
+	e.combat_stat := {max_hp: max_hp, hp: max_hp, defense: defense, power: power, confused_turns: 0} as combatstat as null|combatstat;
+	e.blocks_tile := true;
+	return e;
+end fighter_entity;
 
-function entity(
-	name				text,
-	position			point,
-	display				screen_cell,
-	scroll				scroll
-) entity
-begin
-	return {
-		name:			name,
-		is_active:		true,
-		position:		position 			as null|point,
-		display:		display				as null|screen_cell,
-		viewrange:   	null				as null|viewrange,
-		combat_stat:	null				as null|combatstat,
-		is_monster:		false,
-		blocks_tile:	false,
-		item:			item(-1)			as null|item,
-		potion:			null				as null|potion,
-		scroll:			scroll				as null|scroll
-	} as entity;
-end entity;
+function equippable_item_entity(e entity, slot equip_slot, defense_bonus integer, power_bonus integer) entity begin
+	e.item := {owner_id: ENTITY_ID_NONE, equippable_slot: slot, equipped: false} as item as null|item;
+	e.combat_bonus := {defense_bonus: defense_bonus, power_bonus: power_bonus} as combat_bonus as null|combat_bonus;
+	return e;
+end equippable_item_entity;
+
+function potion_entity(e entity, hp integer) entity begin
+	e.item   := {owner_id: ENTITY_ID_NONE, equippable_slot: EQUIP_SLOT_NONE, equipped: false} as item as null|item;
+	e.potion := {hp: hp} as potion as null|potion;
+	return e;
+end potion_entity;
+
+function scroll_entity(e entity, range integer, damage integer, effect_radius integer, confusion_turns integer) entity begin
+	e.item   := {owner_id: ENTITY_ID_NONE, equippable_slot: EQUIP_SLOT_NONE, equipped: false} as item as null|item;
+	e.scroll := {range: range, damage: damage, effect_radius: effect_radius, confusion_turns: confusion_turns} as scroll as null|scroll;
+	return e;
+end scroll_entity;
 
 procedure print_visibility_flags(flags [[boolean]]) begin
 	for y in 0 .. last_index(flags) loop
@@ -365,8 +333,33 @@ function in_viewrange(p point, entity entity) boolean begin
 	return false;
 end in_viewrange;
 
-const SCREEN_WIDTH := 130;
-const SCREEN_HEIGHT := 30;
+type equipment {
+	backpack_items [integer],
+	equip_items [integer]
+};
+
+function find_equipment(entities [entity], entity_id integer) equipment begin
+	var backpack_items := [] as [integer];
+	var equip_items := ENTITY_ID_NONE ** EQUIP_SLOT_COUNT;
+	for i in 0 .. last_index(entities) loop
+		var entity := entities[i];
+		kindof entity.item when item item then
+			if item.owner_id = entity_id then
+				if item.equipped then
+					equip_items[item.equippable_slot as integer] := i;
+				else
+					backpack_items := backpack_items || [i];
+				end if;
+			end if;
+		end;
+	end loop;
+	return {backpack_items: backpack_items, equip_items: equip_items} as equipment;
+end find_equipment;
+
+#############
+###
+### GAME LOG
+###
 
 const MAX_MESSAGES := 20;
 
@@ -377,11 +370,19 @@ procedure add_message(ctx messages [text], msg text) begin
 	messages := messages || [msg];
 end add_message;
 
+########
+###
+### MAP
+###
+
 type tile_type integer;
-const TILE_FLOOR := 0 as tile_type;
-const TILE_WALL  := 1 as tile_type;
+
+const TILE_FLOOR 		:= 0 as tile_type;
+const TILE_WALL  		:= 1 as tile_type;
+const TILE_DOWNSTAIRS	:= 2 as tile_type;
 
 type map {
+	depth integer,
 	tiles [[tile_type]],
 	revealed_tiles [[boolean]],
 	visible_tiles [[boolean]],
@@ -415,16 +416,16 @@ function tiles_with_vertical_tunnel(tiles [[tile_type]], y1 integer, y2 integer,
 	return tiles;
 end tiles_with_vertical_tunnel;
 
-function make_map(width integer, height integer) map begin
+function make_map(depth integer, width integer, height integer) map begin
 	var tiles := TILE_WALL ** width ** height;
 	var revealed_tiles := false ** width ** height;
 	var visible_tiles := false ** width ** height;
-	var blocking_entities := -1 ** width ** height;
-	var nonblocking_entities := -1 ** width ** height;
+	var blocking_entities := ENTITY_ID_NONE ** width ** height;
+	var nonblocking_entities := ENTITY_ID_NONE ** width ** height;
 	var rooms := [] as [rect];
-    const MAX_ROOMS := 15;
+    const MAX_ROOMS := 20;
     const MIN_SIZE := 6;
-    const MAX_SIZE := 10;
+    const MAX_SIZE := 14;
     for i in 0 .. MAX_ROOMS - 1 loop
         var w := random(MIN_SIZE, MAX_SIZE);
         var h := random(MIN_SIZE, MAX_SIZE);
@@ -453,7 +454,10 @@ function make_map(width integer, height integer) map begin
             rooms := rooms || [new_room];            
         end if;
     end loop;
+    var downstairs_pos := center(rooms[last_index(rooms)]);
+    tiles[downstairs_pos.y][downstairs_pos.x] := TILE_DOWNSTAIRS;
 	return {
+		depth: depth,
 		tiles: tiles,
 		revealed_tiles: revealed_tiles,
 		visible_tiles: visible_tiles,
@@ -464,7 +468,6 @@ function make_map(width integer, height integer) map begin
 		nonblocking_entities: nonblocking_entities
 	} as map;
 end make_map;
-
 
 function map_is_blocked(map map, pos point) boolean begin
 	return map.tiles[pos.y][pos.x] = TILE_WALL or map.blocking_entities[pos.y][pos.x] >= 0;
@@ -498,6 +501,11 @@ function visible_tile_flags(tiles [[tile_type]], x integer, y integer, range int
 	end loop;
 	return flags;
 end visible_tile_flags;
+
+###############
+###
+### PATHFINDER
+###
 
 generator map_neighbors(map map, p point) point begin
 	if p.y > 0 then
@@ -542,7 +550,12 @@ function find_path(map map, start_pos point, end_pos point) [point] begin
 	return [] as [point];
 end find_path;
 
-function new_entity(ctx entities [entity], ctx map map, e entity) integer begin
+############
+###
+### SPAWNER
+###
+
+function spawn_entity(ctx entities [entity], ctx map map, e entity) integer begin
 	var entity_id := length(entities);
 	entities := entities || [e];
 	kindof e.position when point p then
@@ -553,106 +566,188 @@ function new_entity(ctx entities [entity], ctx map map, e entity) integer begin
 		end if;
 	end;
 	return entity_id;
-end new_entity;
+end spawn_entity;
+
+procedure spawn_entity(ctx entities [entity], ctx map map, e entity) begin
+	var entity_id := spawn_entity(ctx entities, ctx map, e);
+end spawn_entity;
 
 procedure deactivate_entity(ctx entities [entity], ctx map map, entity_id integer) begin
 	entities[entity_id].is_active := false;
 	if entities[entity_id].blocks_tile then
 		kindof entities[entity_id].position when point p then
 			if map.blocking_entities[p.y][p.x] = entity_id then
-				map.blocking_entities[p.y][p.x] := -1;
+				map.blocking_entities[p.y][p.x] := ENTITY_ID_NONE;
 			end if;
 		end;
 	end if;
+	kindof entities[entity_id].item when item item then
+		item.owner_id := ENTITY_ID_NONE;
+		entities[entity_id].item := item as null|item;
+	end;
 end deactivate_entity;
 
 function spawn_player(ctx entities [entity], ctx map map) integer begin
 	var first_room := map.rooms[0];
 	var player_pos := {x: random(first_room.x1 + 1, first_room.x2), y: random(first_room.y1 + 1, first_room.y2)} as point;
-	var player_id := new_entity(
-		ctx entities,
-		ctx map,
-		entity(
-			'Player',
-			player_pos,
-			screen_cell(GLYPH_PLAYER, ANSI_FG_BRIGHT_YELLOW, ANSI_BG_BLACK),
-			6,
-			combatstat(100, 100, 5, 10),
-			false
-		)
-	);
-	return player_id;
+	return spawn_entity(ctx entities, ctx map,
+		fighter_entity(
+			entity('Player', player_pos, screen_cell(GLYPH_PLAYER, ANSI_FG_BRIGHT_YELLOW, ANSI_BG_BLACK)),
+			8, 100, 5, 10));
 end spawn_player;
 
-procedure populate_room(ctx entities [entity], ctx map map, room rect) begin
-	var monster_num := random(0, 3);
-	var spawn_points := [] as [point];
-	for i in 1 .. monster_num loop
-		var spawn_point := {x: random(room.x1 + 1, room.x2), y: random(room.y1 + 1, room.y2)} as point;
-		if not point_in_array(spawn_point, spawn_points) then
-			var monster_type := random(0, 1);
-			var glyph := case when monster_type = 0 then 'g' else 'o' end;
-			var monster_id := new_entity(
-				ctx entities,
-				ctx map,
-				entity(
-					case when monster_type = 0 then 'Gnome' else 'Orc' end,
-					spawn_point,
-					screen_cell(glyph, ANSI_FG_BRIGHT_RED, ANSI_BG_BLACK),
-					4,
-					combatstat(20, 20, 2, 10),
-					true
-				)
-			);
-			spawn_points := spawn_points || [spawn_point];
+procedure spawn_gobelin(ctx entities [entity], ctx map map, spawn_point point) begin
+	var viewrange := 4;
+	var hp        := 20;
+	var defense   := 2;
+	var attack    := 10;
+	spawn_entity(ctx entities, ctx map,
+		fighter_entity(entity('Gobelin', spawn_point, screen_cell(GLYPH_GOBELIN, ANSI_FG_BRIGHT_RED, ANSI_BG_BLACK)),
+		viewrange, hp, defense, attack));
+end spawn_gobelin;
+
+procedure spawn_orc(ctx entities [entity], ctx map map, spawn_point point) begin
+	var viewrange := 5;
+	var hp        := 25;
+	var defense   := 4;
+	var attack    := 12;
+	spawn_entity(ctx entities, ctx map,
+		fighter_entity(entity('Orc', spawn_point, screen_cell(GLYPH_ORC, ANSI_FG_BRIGHT_RED, ANSI_BG_BLACK)),
+		viewrange, hp, defense, attack));
+end spawn_orc;
+
+procedure spawn_lightning_scroll(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, scroll_entity(
+		entity('Lighning scroll', spawn_point, screen_cell(GLYPH_SCROLL, ANSI_FG_BRIGHT_CYAN, ANSI_BG_BLACK)),
+		6, 15, 0, 0));
+end spawn_lightning_scroll;
+
+procedure spawn_fireball_scroll(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, scroll_entity(
+		entity('Fireball scroll', spawn_point, screen_cell(GLYPH_SCROLL, ANSI_FG_BRIGHT_RED, ANSI_BG_BLACK)),
+		6, 50, 2, 0));
+end spawn_fireball_scroll;
+
+procedure spawn_confusion_scroll(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, scroll_entity(
+		entity('Confusion scroll', spawn_point, screen_cell(GLYPH_SCROLL, ANSI_FG_BRIGHT_MAGENTA, ANSI_BG_BLACK)),
+		6, 0, 0, 4));
+end spawn_confusion_scroll;
+
+procedure spawn_sword(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, equippable_item_entity(
+		entity('Sword', spawn_point, screen_cell(GLYPH_SWORD, ANSI_FG_BRIGHT_CYAN, ANSI_BG_BLACK)),
+		EQUIP_SLOT_MELEE, 0, 2));
+end spawn_sword;
+
+procedure spawn_shield(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, equippable_item_entity(
+		entity('Shield', spawn_point, screen_cell(GLYPH_SHIELD, ANSI_FG_BRIGHT_CYAN, ANSI_BG_BLACK)),
+		EQUIP_SLOT_DEFENSE, 2, 0));
+end spawn_shield;
+
+procedure spawn_potion(ctx entities [entity], ctx map map, spawn_point point) begin
+	spawn_entity(ctx entities, ctx map, potion_entity(
+		entity('Potion', spawn_point, screen_cell(GLYPH_POTION, ANSI_FG_BRIGHT_MAGENTA, ANSI_BG_BLACK)),
+		10));
+end spawn_potion;
+
+type spawn_id integer;
+type spawn_weight {id spawn_id, weight integer};
+
+function spawn_weight(id spawn_id, weight integer) spawn_weight begin
+	return {id: id, weight: weight} as spawn_weight;
+end spawn_weight;
+
+function random_spawn_id(weights [spawn_weight]) spawn_id begin
+	var total_weight := 0;
+	for w in weights loop
+		if w.weight > 0 then
+			total_weight := total_weight + w.weight;
 		end if;
 	end loop;
-	var item_num := random(0, 2);
-	for i in 0 .. item_num loop
+	var dice := random(0, total_weight - 1);
+	for i in 0 .. last_index(weights) - 1 loop
+		if weights[i].weight > 0 then
+			if dice < weights[i].weight then
+				return weights[i].id;
+			end if;
+			dice := dice - weights[i].weight;
+		end if;
+	end loop;
+	return weights[last_index(weights)].id;
+end random_spawn_id;
+
+const SPAWN_GOBELIN             := 0 as spawn_id;
+const SPAWN_ORC                 := 1 as spawn_id;
+const SPAWN_POTION              := 2 as spawn_id;
+const SPAWN_FIREBALL_SCROLL     := 3 as spawn_id;
+const SPAWN_CONFUSION_SCROLL    := 4 as spawn_id;
+const SPAWN_LIGHTNING_SCROLL    := 5 as spawn_id;
+const SPAWN_SWORD               := 6 as spawn_id;
+const SPAWN_SHIELD              := 7 as spawn_id;
+
+function spawn_weigths(depth integer) [spawn_weight] begin
+	return [
+		spawn_weight(SPAWN_GOBELIN,          10),
+		spawn_weight(SPAWN_ORC,    			  1 + depth),
+		spawn_weight(SPAWN_POTION,            7),
+		spawn_weight(SPAWN_FIREBALL_SCROLL,   2 + depth),
+		spawn_weight(SPAWN_CONFUSION_SCROLL,  2 + depth),
+		spawn_weight(SPAWN_LIGHTNING_SCROLL,  4),
+		spawn_weight(SPAWN_SWORD,             2),
+		spawn_weight(SPAWN_SHIELD,            2)
+	];
+end spawn_weigths;
+
+procedure spawn_random_entity(ctx entities [entity], ctx map map, spawn_point point, weights [spawn_weight]) begin
+	var id := random_spawn_id(weights);
+	if    id = SPAWN_GOBELIN          then spawn_gobelin(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_ORC              then spawn_orc(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_POTION           then spawn_potion(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_FIREBALL_SCROLL  then spawn_fireball_scroll(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_CONFUSION_SCROLL then spawn_confusion_scroll(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_LIGHTNING_SCROLL then spawn_lightning_scroll(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_SWORD            then spawn_sword(ctx entities, ctx map, spawn_point);
+	elsif id = SPAWN_SHIELD           then spawn_shield(ctx entities, ctx map, spawn_point);
+	end if;
+end spawn_random_entity;
+
+procedure populate_room(ctx entities [entity], ctx map map, room rect, weights [spawn_weight]) begin
+	var spawn_points := [] as [point];
+	var spawn_num := random(1, 4) + map.depth - 2;
+	for i in 1 .. spawn_num loop
 		var spawn_point := {x: random(room.x1 + 1, room.x2), y: random(room.y1 + 1, room.y2)} as point;
 		if not point_in_array(spawn_point, spawn_points) then
-			if random(0, 2) = 0 then
-				var potion_id := new_entity(
-					ctx entities,
-					ctx map,
-					entity(
-						'Lighning scroll',
-						spawn_point,
-						screen_cell(')', ANSI_FG_BRIGHT_CYAN, ANSI_BG_BLACK),
-						{range: 6, damage: 15} as scroll
-					)
-				);
-			else
-				var potion_id := new_entity(
-					ctx entities,
-					ctx map,
-					entity(
-						'Potion',
-						spawn_point,
-						screen_cell('j', ANSI_FG_BRIGHT_MAGENTA, ANSI_BG_BLACK),
-						potion(10)
-					)
-				);
-			end if;
+			spawn_random_entity(ctx entities, ctx map, spawn_point, weights);
 			spawn_points := spawn_points || [spawn_point];
-		end if;		
+		end if;
 	end loop;
 end populate_room;
 
 procedure populate_map(ctx entities [entity], ctx map map) begin
+	var weights := spawn_weigths(map.depth);
 	for i in 1 .. last_index(map.rooms) loop
-		populate_room(ctx entities, ctx map, map.rooms[i]);
+		populate_room(ctx entities, ctx map, map.rooms[i], weights);
 	end loop;
 end populate_map;
 
+############
+###
+### DISPLAY
+###
+
+const CHAR_SPACE := char_at(' ', 0);
 
 procedure render(ctx screen [[screen_cell]], entities [entity], map map) begin
 	for y in 0 .. SCREEN_HEIGHT - 1 loop
 		for x in 0 .. SCREEN_WIDTH - 1 loop
 			if map.visible_tiles[y][x] or map.revealed_tiles[y][x] then
 				screen[y][x] := case map.tiles[y][x]
-					when TILE_FLOOR then FLOOR_SCREEN_CELL
-					else WALL_SCREEN_CELL
+					when TILE_FLOOR      then FLOOR_SCREEN_CELL
+					when TILE_WALL       then WALL_SCREEN_CELL
+					when TILE_DOWNSTAIRS then DOWNSTAIRS_SCREEN_CELL
+					else EMPTY_SCREEN_CELL
 				end;
 				if map.visible_tiles[y][x] then
 					var entity_id := map.blocking_entities[y][x];
@@ -700,7 +795,7 @@ function screen_line_to_text(line [screen_cell]) text begin
 	return t;
 end screen_line_to_text;
 
-procedure display(screen [[screen_cell]], player entity, messages [text]) begin
+procedure display(screen [[screen_cell]], depth integer, player entity, messages [text]) begin
 	for i in 0 .. last_index(screen) loop
 		if i = 0 then
 			print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || screen_line_to_text(screen[i]) || ANSI_CR);			
@@ -709,7 +804,7 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 		end if;
 	end loop;
 	kindof player.combat_stat when combatstat cs then
-		var status_line := 'Health: ' || text(cs.hp) || '/' || text(cs.max_hp);
+		var status_line := 'Depth: ' || text(depth) || '    Health: ' || text(cs.hp) || '/' || text(cs.max_hp);
 		status_line := status_line || text(CHAR_SPACE ** (SCREEN_WIDTH - length(status_line)));
 		write(ansi_color(ANSI_FG_YELLOW, ANSI_BG_BLUE) || status_line || ansi_color(ANSI_FG_WHITE, ANSI_BG_BLACK));
 	end;
@@ -718,11 +813,16 @@ procedure display(screen [[screen_cell]], player entity, messages [text]) begin
 	end loop;
 end display;
 
+###############
+###
+### GAME LOGIC
+###
+
 procedure move_entity(ctx entities [entity], ctx map map, entity_id integer, pos point) begin
 	kindof entities[entity_id].position when point old_pos then
 		if not map_is_blocked(map, pos) then
 			if map.blocking_entities[old_pos.y][old_pos.x] = entity_id then
-				map.blocking_entities[old_pos.y][old_pos.x] := -1;
+				map.blocking_entities[old_pos.y][old_pos.x] := ENTITY_ID_NONE;
 			end if;
 			entities[entity_id].position := pos as null|point;
 			if entities[entity_id].blocks_tile then
@@ -741,7 +841,22 @@ procedure attack_entity(ctx entities [entity], ctx map map, ctx messages [text],
 	var target := entities[target_id];
 	kindof attacker.combat_stat when combatstat attacker_stat then
 		kindof target.combat_stat when combatstat target_stat then
-			var damage := attacker_stat.power - target_stat.defense;
+			var power_bonus := 0;
+			var defense_bonus := 0;
+			for i in 0 .. last_index(entities) loop
+				kindof entities[i].item when item item then
+					if item.owner_id = attacker_id then
+						kindof entities[i].combat_bonus when combat_bonus cb then
+							power_bonus := power_bonus + cb.power_bonus;
+						end;
+					elsif item.owner_id = target_id then
+						kindof entities[i].combat_bonus when combat_bonus cb then
+							defense_bonus := defense_bonus + cb.defense_bonus;
+						end;
+					end if;
+				end;
+			end loop;
+			var damage := attacker_stat.power + power_bonus - target_stat.defense - defense_bonus;
 			if damage < 0 then
 				damage := 0;
 			end if;
@@ -757,12 +872,13 @@ end attack_entity;
 
 procedure move_player(ctx entities [entity], ctx map map, ctx messages [text], player_id integer, dx integer, dy integer) begin
 	kindof entities[player_id].position when point p then
-		var new_pos := {x: p.x + dx, y: p.y + dy} as point;
-		var target_entity_id := map.blocking_entities[new_pos.y][new_pos.x];
-		if target_entity_id <> -1 then
+		p.x := p.x + dx;
+		p.y := p.y + dy;
+		var target_entity_id := map.blocking_entities[p.y][p.x];
+		if target_entity_id <> ENTITY_ID_NONE then
 			attack_entity(ctx entities, ctx map, ctx messages, player_id, target_entity_id);
 		else
-			move_entity(ctx entities, ctx map, player_id, {x: p.x + dx, y: p.y + dy} as point);
+			move_entity(ctx entities, ctx map, player_id, p);
 		end if;
 	end;
 end move_player;
@@ -770,16 +886,16 @@ end move_player;
 procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, player_id integer) begin
 	kindof entities[player_id].position when point p then
 		var picked_id := map.nonblocking_entities[p.y][p.x];
-		if picked_id = -1 then
+		if picked_id = ENTITY_ID_NONE then
 			add_message(ctx messages, 'Nothing to pick');
 		else
 			kindof entities[picked_id].item
 			when item item then
-				map.nonblocking_entities[p.y][p.x] := -1;
+				map.nonblocking_entities[p.y][p.x] := ENTITY_ID_NONE;
 				item.owner_id := player_id;
 				entities[picked_id].item := item as null|item;
 				entities[picked_id].position := null as null|point;
-				map.nonblocking_entities[p.y][p.x] := -1;
+				map.nonblocking_entities[p.y][p.x] := ENTITY_ID_NONE;
 				add_message(ctx messages, entities[player_id].name || ' picked ' || entities[picked_id].name);
 			else
 				add_message(ctx messages, 'You can''t pick ' || entities[picked_id].name);
@@ -788,7 +904,29 @@ procedure pickup_item(ctx entities [entity], ctx messages [text], ctx map map, p
 	end;	
 end pickup_item;
 
-procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer, ctx visibe_tile_flags_time integer) begin
+procedure equip_item(ctx entities [entity], item_id integer) begin
+	kindof entities[item_id].item when item item then
+		var owner_id := item.owner_id;
+		if owner_id = ENTITY_ID_NONE then
+			return;
+		end if;
+		if item.equippable_slot = EQUIP_SLOT_NONE then
+			return;
+		end if;
+		var equipment := find_equipment(entities, owner_id);
+		var already_equip_item_id := equipment.equip_items[item.equippable_slot as integer];
+		if already_equip_item_id <> ENTITY_ID_NONE then
+			kindof entities[already_equip_item_id].item when item ei then
+				ei.equipped := false;
+				entities[already_equip_item_id].item := ei as null|item;
+			end;
+		end if;
+		item.equipped := true;
+		entities[item_id].item := item as null|item;
+	end;
+end equip_item;
+
+procedure update_viewranges(ctx entities [entity], ctx map map, player_id integer, ctx visibe_tile_flags_time integer) begin
 	for i in 0 .. last_index(entities) loop
 		const entity := entities[i];
 		if entity.is_active then
@@ -822,73 +960,54 @@ procedure viewrange_tick(ctx entities [entity], ctx map map, player_id integer, 
 			end;
 		end if;
 	end loop;
-end viewrange_tick;
+end update_viewranges;
 
-procedure monster_tick(ctx entities [entity], ctx map map, ctx messages [text], player_id integer) begin
+procedure animate_fighters(ctx entities [entity], ctx map map, ctx messages [text], player_id integer) begin
 	for i in 0 .. last_index(entities) loop
-		const entity := entities[i];
-		if entity.is_active and entity.is_monster then
-			kindof entity.position when point p then
-				kindof entities[player_id].position when point player_pos then
-					if entities[player_id].is_active and in_viewrange(player_pos, entities[i]) then
-						var path := find_path(map, p, player_pos);
-						if length(path) > 0 then
-							var next_pos := path[0];
-							if next_pos = player_pos then
-								attack_entity(ctx entities, ctx map, ctx messages, i, player_id);
-							elsif not map_is_blocked(map, next_pos) then
-								add_message(ctx messages, entity.name || ': don''t run coward');
-								move_entity(ctx entities, ctx map, i, next_pos);
-							end if;
-						else
-							add_message(ctx messages, entity.name || ': come here if you''re a man');
-						end if;
+		if i <> player_id then
+			const entity := entities[i];
+			if entity.is_active then
+				kindof entity.combat_stat when combatstat cs then
+					if cs.confused_turns > 0 then
+						cs.confused_turns := cs.confused_turns - 1;
+						entities[i].combat_stat := cs as null|combatstat;
+					else
+						kindof entity.position when point p then
+							kindof entities[player_id].position when point player_pos then
+								if entities[player_id].is_active and in_viewrange(player_pos, entities[i]) then
+									var path := find_path(map, p, player_pos);
+									if length(path) > 0 then
+										var next_pos := path[0];
+										if next_pos = player_pos then
+											attack_entity(ctx entities, ctx map, ctx messages, i, player_id);
+										elsif not map_is_blocked(map, next_pos) then
+											move_entity(ctx entities, ctx map, i, next_pos);
+										end if;
+									else
+										add_message(ctx messages, entity.name || ': come here if you''re a man');
+									end if;
+								end if;
+							end;
+						end;
 					end if;
 				end;
-			end;
+			end if;
 		end if;
 	end loop;	
-end monster_tick;
+end animate_fighters;
 
-function choose_target_position(ctx screen [[screen_cell]], entities[entity], map map, messages [text], player_id integer) null|point begin
-	kindof entities[player_id].position when point pos then
-		while true loop
-			render(ctx screen, entities, map);
-			screen[pos.y][pos.x].bg_color := ANSI_BG_CYAN;
-			display(screen, entities[player_id], messages);
-			var input := get_char();
-			if input = CHAR_UP then
-				pos.y := pos.y - 1;
-			elsif input = CHAR_DOWN then
-				pos.y := pos.y + 1;
-			elsif input = CHAR_LEFT then
-				pos.x := pos.x - 1;
-			elsif input = CHAR_RIGHT then
-				pos.x := pos.x + 1;
-			elsif input = CHAR_UPRIGHT then
-				pos.y := pos.y - 1;
-				pos.x := pos.x + 1;
-			elsif input = CHAR_UPLEFT then
-				pos.y := pos.y - 1;
-				pos.x := pos.x - 1;
-			elsif input = CHAR_DOWNRIGHT then
-				pos.y := pos.y + 1;
-				pos.x := pos.x + 1;
-			elsif input = CHAR_DOWNLEFT then
-				pos.y := pos.y + 1;
-				pos.x := pos.x - 1;
-			elsif input = CHAR_PICKUP then
-				return pos as null|point;
-			elsif input = CHAR_QUIT then
-				exit;
-			end if;
-		end loop;
+procedure heal_entity(ctx entities [entity], entity_id integer, hp integer) begin
+	kindof entities[entity_id].combat_stat when combatstat cs then
+		cs.hp := cs.hp + hp;
+		if cs.hp > cs.max_hp then
+			cs.hp := cs.max_hp;
+		end if;
+		entities[entity_id].combat_stat := cs as null|combatstat;
 	end;
-	return null as null|point;
-end choose_target_position;
+end heal_entity;
 
 procedure entity_use_item(
-	ctx screen		[[screen_cell]],
+	ctx screen		any,
 	ctx entities	[entity],
 	ctx map			map,
 	ctx messages	[text],
@@ -897,61 +1016,187 @@ procedure entity_use_item(
 )
 begin
 	kindof entities[item_id].potion when potion p then
-		kindof entities[entity_id].combat_stat when combatstat cs then
-			cs.hp := cs.hp + p.hp;
-			entities[entity_id].combat_stat := cs as null|combatstat;
-			entities[item_id].is_active := false;
-			entities[item_id].item := item(-1) as null|item;
-			add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
-		end;
+		heal_entity(ctx entities, entity_id, p.hp);
+		deactivate_entity(ctx entities, ctx map, item_id);
+		add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
 	end;
 	kindof entities[item_id].scroll when scroll s then
-		var target_pos := choose_target_position(ctx screen, entities, map, messages, entity_id);
+		var target_pos := choose_target_position(ctx screen, entities, map, messages, entity_id, s.range);
 		kindof target_pos when point p then
-			var target_id := map.blocking_entities[p.y][p.x];
-			if target_id <> -1 then
-				kindof entities[target_id].combat_stat when combatstat cs then
-					cs.hp := cs.hp - s.damage;
-					entities[target_id].combat_stat := cs as null|combatstat;
-					add_message(
-						ctx messages,
-						entities[entity_id].name || ' dealt ' || text(s.damage) || ' damage to ' || entities[target_id].name
-					);
-					if cs.hp <= 0 then
-						deactivate_entity(ctx entities, ctx map, target_id);
-					end if;
-				end;
-			end if;
-			entities[item_id].is_active := false;
-			entities[item_id].item := item(-1) as null|item;
 			add_message(ctx messages, entities[entity_id].name || ' used ' || entities[item_id].name);
+			for y in p.y - s.effect_radius .. p.y + s.effect_radius loop
+				for x in p.x - s.effect_radius .. p.x + s.effect_radius loop
+					var target_id := map.blocking_entities[y][x];
+					if target_id <> ENTITY_ID_NONE then
+						kindof entities[target_id].combat_stat when combatstat cs then
+							if s.damage > 0 then
+								cs.hp := cs.hp - s.damage;
+								add_message(
+									ctx messages,
+									entities[entity_id].name || ' dealt ' || text(s.damage) || ' damage to ' || entities[target_id].name
+								);
+							end if;
+							if s.confusion_turns > 0 and cs.confused_turns < s.confusion_turns then
+								cs.confused_turns := s.confusion_turns;
+								add_message(
+									ctx messages,
+									entities[entity_id].name || ' confused ' || entities[target_id].name ||
+										' for ' || text(s.confusion_turns) || ' turns' 
+								);
+							end if;
+							entities[target_id].combat_stat := cs as null|combatstat;
+							if cs.hp <= 0 then
+								deactivate_entity(ctx entities, ctx map, target_id);
+							end if;
+						end;
+					end if;
+				end loop;
+			end loop;
+			deactivate_entity(ctx entities, ctx map, item_id);
 		end;
 	end;
 end entity_use_item;
 
-function choose_inventory_item(entities [entity], player_id integer) integer begin
-	while true loop
-		var items := [] as [integer];
-		for i in 0 .. last_index(entities) loop
-			kindof entities[i].item when item item then
-				if item.owner_id = player_id then
-					items := items || [i];
+procedure go_next_level(ctx entities [entity], ctx map map, ctx player_id integer, ctx messages [text]) begin
+	var can_descend := false;
+	kindof entities[player_id].position when point p then
+		if map.tiles[p.y][p.x] = TILE_DOWNSTAIRS then
+			can_descend := true;
+		end if;
+	end;
+	if not can_descend then
+		add_message(ctx messages, 'You cannot descend to the new level here');
+		return;
+	end if;
+	var new_player_id := 0;
+	var new_entities := [] as [entity];
+	for i in 0 .. last_index(entities) loop
+		if i = player_id then
+			new_entities := new_entities || [entities[i]];
+			new_player_id := last_index(new_entities);
+		elsif entities[i].is_active then
+			kindof entities[i].item when item itm then
+				if itm.owner_id = player_id then
+					new_entities := new_entities || [entities[i]];
 				end if;
 			end;
-		end loop;
-		print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'Inventory (' || text(length(items)) || ' items):' || ANSI_CR);			
-		for i in 0 .. last_index(items) loop
-			print(text(i + 1) || ': ' || entities[items[i]].name || ANSI_CR);
-		end loop;
-		print('x: Exit inventory' || ANSI_CR);
-		var input := get_char();
-		exit when input = CHAR_QUIT;
-		var item_id := input as integer - char_code('1', 0);
-		if item_id >= 0 and item_id < 9 and item_id < length(items) then
-			return items[item_id];
 		end if;
 	end loop;
-	return -1;
+	player_id := new_player_id;
+	entities := new_entities;
+	map := make_map(map.depth + 1, SCREEN_WIDTH, SCREEN_HEIGHT);
+	var first_room := map.rooms[0];
+	var player_pos := {x: random(first_room.x1 + 1, first_room.x2), y: random(first_room.y1 + 1, first_room.y2)} as point;
+	map.blocking_entities[player_pos.y][player_pos.x] := player_id;
+	entities[player_id].position := player_pos as null|point;
+	kindof entities[player_id].viewrange when viewrange vr then
+		vr.dirty := true;
+		entities[player_id].viewrange := vr as null|viewrange;
+	end;
+	populate_map(ctx entities, ctx map);
+	add_message(ctx messages, 'You descend to the new level');
+end go_next_level;
+
+#####################
+###
+### GAME INPUT LOOPS
+###
+
+const IN_CHAR_UP := char_at('i', 0);
+const IN_CHAR_DOWN := char_at('k', 0);
+const IN_CHAR_LEFT := char_at('j', 0);
+const IN_CHAR_RIGHT := char_at('l', 0);
+const IN_CHAR_QUIT := char_at('x', 0);
+const IN_CHAR_UPRIGHT := char_at('o', 0);
+const IN_CHAR_UPLEFT := char_at('u', 0);
+const IN_CHAR_DOWNRIGHT := char_at(';', 0);
+const IN_CHAR_DOWNLEFT := char_at(',', 0);
+const IN_CHAR_PICKUP := char_at(' ', 0);
+const IN_CHAR_INVENTORY := char_at('y', 0);
+const IN_CHAR_DOWNSTAIRS := char_at('n', 0);
+const IN_CHAR_SKIPTURN := char_at('p', 0);
+
+function choose_target_position(ctx screen [[screen_cell]], entities[entity], map map, messages [text], player_id integer, range integer) null|point begin
+	kindof entities[player_id].position when point pos then
+		var target_pos := pos;
+		while true loop
+			render(ctx screen, entities, map);
+			screen[target_pos.y][target_pos.x].bg_color := ANSI_BG_CYAN;
+			display(screen, map.depth, entities[player_id], messages);
+			var new_pos := target_pos;
+			var input := get_char();
+			if input = IN_CHAR_UP then
+				new_pos.y := new_pos.y - 1;
+			elsif input = IN_CHAR_DOWN then
+				new_pos.y := new_pos.y + 1;
+			elsif input = IN_CHAR_LEFT then
+				new_pos.x := new_pos.x - 1;
+			elsif input = IN_CHAR_RIGHT then
+				new_pos.x := new_pos.x + 1;
+			elsif input = IN_CHAR_UPRIGHT then
+				new_pos.y := new_pos.y - 1;
+				new_pos.x := new_pos.x + 1;
+			elsif input = IN_CHAR_UPLEFT then
+				new_pos.y := new_pos.y - 1;
+				new_pos.x := new_pos.x - 1;
+			elsif input = IN_CHAR_DOWNRIGHT then
+				new_pos.y := new_pos.y + 1;
+				new_pos.x := new_pos.x + 1;
+			elsif input = IN_CHAR_DOWNLEFT then
+				new_pos.y := new_pos.y + 1;
+				new_pos.x := new_pos.x - 1;
+			elsif input = IN_CHAR_PICKUP then
+				return target_pos as null|point;
+			elsif input = IN_CHAR_QUIT then
+				exit;
+			end if;
+			if new_pos.x >= pos.x - range and new_pos.x <= pos.x + range and
+			   new_pos.y >= pos.y - range and new_pos.y <= pos.y + range and 
+			   in_viewrange(new_pos, entities[player_id])
+			then
+				target_pos := new_pos;
+			end if;
+		end loop;
+	end;
+	return null as null|point;
+end choose_target_position;
+
+function choose_inventory_item(ctx entities [entity], player_id integer) integer begin
+	while true loop
+		var equipment := find_equipment(entities, player_id);
+		print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'Backpack (' || text(length(equipment.backpack_items)) || ' items):' || ANSI_CR);			
+		for i in 0 .. last_index(equipment.backpack_items) loop
+			print(text(i + 1) || ': ' || entities[equipment.backpack_items[i]].name || ANSI_CR);
+		end loop;
+		print('');
+		print('Equipped:');
+		for i in 0 .. EQUIP_SLOT_COUNT - 1 loop
+			var slot_name := EQUIP_SLOT_NAMES[i];
+			var item_name := case equipment.equip_items[i]
+				when ENTITY_ID_NONE then 'none'
+				else entities[equipment.equip_items[i]].name
+			end;
+			print(slot_name || ': ' || item_name);
+		end loop;
+		print('');
+		print('x: Exit inventory' || ANSI_CR);
+		var input := get_char();
+		exit when input = IN_CHAR_QUIT;
+		var item_num := input as integer - char_code('1', 0);
+		if item_num >= 0 and item_num < 9 and item_num < length(equipment.backpack_items) then
+			var item_id := equipment.backpack_items[item_num];
+			kindof entities[item_id].item when item item then
+				if item.equippable_slot <> EQUIP_SLOT_NONE then
+					equip_item(ctx entities, item_id);
+					item_id := ENTITY_ID_NONE;
+				end if;
+			end;
+			if item_id <> ENTITY_ID_NONE then
+				return item_id;
+			end if;
+		end if;
+	end loop;
+	return ENTITY_ID_NONE;
 end choose_inventory_item;
 
 procedure game_over_loop() begin
@@ -963,7 +1208,7 @@ procedure main_loop() begin
 	var entities := [] as [entity];
 	var screen := EMPTY_SCREEN_CELL ** SCREEN_WIDTH ** SCREEN_HEIGHT;
 	var messages := [] as [text];
-	var map := make_map(SCREEN_WIDTH, SCREEN_HEIGHT);
+	var map := make_map(1, SCREEN_WIDTH, SCREEN_HEIGHT);
 	var player_id := spawn_player(ctx entities, ctx map);
 	populate_map(ctx entities, ctx map);
 	var frame_count := 0;
@@ -972,12 +1217,13 @@ procedure main_loop() begin
 	var monster_tick_time := 0;
 	var render_time := 0;
 	var display_time := 0;
-	while true loop
+	var exit_main_loop := false;
+	while not exit_main_loop loop
 		frame_count := frame_count + 1;
 		var t1 := now();
-		viewrange_tick(ctx entities, ctx map, player_id, ctx visibe_tile_flags_time);
+		update_viewranges(ctx entities, ctx map, player_id, ctx visibe_tile_flags_time);
 		var t2 := now();
-		monster_tick(ctx entities, ctx map, ctx messages, player_id);
+		animate_fighters(ctx entities, ctx map, ctx messages, player_id);
 		var t3 := now();
 		if not entities[player_id].is_active then
 			game_over_loop();
@@ -985,39 +1231,52 @@ procedure main_loop() begin
 		end if;
 		render(ctx screen, entities, map);
 		var t4 := now();
-		display(screen, entities[player_id], messages);
+		display(screen, map.depth, entities[player_id], messages);
 		var t5 := now();
 		viewrange_tick_time := viewrange_tick_time + t2 - t1;
 		monster_tick_time := monster_tick_time + t3 - t2;
 		render_time := render_time + t4 - t3;
 		display_time := display_time + t5 - t4; 
-		var input := get_char();
-		if input = CHAR_UP then
-			move_player(ctx entities, ctx map, ctx messages, player_id, 0, -1);
-		elsif input = CHAR_DOWN then
-			move_player(ctx entities, ctx map, ctx messages, player_id, 0, 1);
-		elsif input = CHAR_LEFT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, -1, 0);
-		elsif input = CHAR_RIGHT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, 1, 0);
-		elsif input = CHAR_UPRIGHT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, 1, -1);
-		elsif input = CHAR_UPLEFT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, -1, -1);
-		elsif input = CHAR_DOWNRIGHT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, 1, 1);
-		elsif input = CHAR_DOWNLEFT then
-			move_player(ctx entities, ctx map, ctx messages, player_id, -1, 1);
-		elsif input = CHAR_PICKUP then
-			pickup_item(ctx entities, ctx messages, ctx map, player_id);
-		elsif input = CHAR_INVENTORY then
-			var item_id := choose_inventory_item(entities, player_id);
-			if item_id <> -1 then
-				entity_use_item(ctx screen, ctx entities, ctx map, ctx messages, player_id, item_id);
+		var exit_input_loop := false;
+		while not exit_input_loop loop
+			exit_input_loop := true;
+			var input := get_char();
+			if input = IN_CHAR_UP then
+				move_player(ctx entities, ctx map, ctx messages, player_id, 0, -1);
+			elsif input = IN_CHAR_DOWN then
+				move_player(ctx entities, ctx map, ctx messages, player_id, 0, 1);
+			elsif input = IN_CHAR_LEFT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, -1, 0);
+			elsif input = IN_CHAR_RIGHT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, 1, 0);
+			elsif input = IN_CHAR_UPRIGHT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, 1, -1);
+			elsif input = IN_CHAR_UPLEFT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, -1, -1);
+			elsif input = IN_CHAR_DOWNRIGHT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, 1, 1);
+			elsif input = IN_CHAR_DOWNLEFT then
+				move_player(ctx entities, ctx map, ctx messages, player_id, -1, 1);
+			elsif input = IN_CHAR_PICKUP then
+				pickup_item(ctx entities, ctx messages, ctx map, player_id);
+			elsif input = IN_CHAR_INVENTORY then
+				var item_id := choose_inventory_item(ctx entities, player_id);
+				if item_id <> ENTITY_ID_NONE then
+					entity_use_item(ctx screen, ctx entities, ctx map, ctx messages, player_id, item_id);
+				end if;
+			elsif input = IN_CHAR_DOWNSTAIRS then
+				go_next_level(ctx entities, ctx map, ctx player_id, ctx messages);
+			elsif input = IN_CHAR_SKIPTURN then
+				add_message(ctx messages, 'Player skip his turn');
+				heal_entity(ctx entities, player_id, 1);
+			elsif input = IN_CHAR_QUIT then
+				exit_main_loop := true;
+			else
+				add_message(ctx messages, 'Unknown input ' || text(input));
+				display(screen, map.depth, entities[player_id], messages);
+				exit_input_loop := false;
 			end if;
-		elsif input = CHAR_QUIT then
-			exit;
-		end if;
+		end loop;
 	end loop;
 	write(ANSI_CLEAR_TERMINAL || ANSI_SHOW_CURSOR || ANSI_RESET_COLOR);
 	print('frame_count         : ' || text(frame_count));
@@ -1026,7 +1285,6 @@ procedure main_loop() begin
 	print('monster_tick_time   : ' || text(monster_tick_time / frame_count));
 	print('render_time         : ' || text(render_time / frame_count));
 	print('display_time        : ' || text(display_time / frame_count));
-
 end main_loop;
 
 main_loop();
