@@ -7,6 +7,7 @@ let tokenReader = null;
 let parser = null;
 let compiler = null;
 let terminalInputStatus = "";
+let terminalInputBuffer = [];
 
 
 function addTextOut(text) {
@@ -42,28 +43,52 @@ function getConsoleInStatus(status) {
 	return terminalInputStatus;
 }
 
+function inputLoop() {
+	while (getConsoleInStatus() === "@get_char") {
+		if (terminalInputBuffer.length <= 0) {
+			return false;
+		}
+		setConsoleInStatus("");
+		let ch = terminalInputBuffer[0];
+		terminalInputBuffer = terminalInputBuffer.slice(1);
+		stackMachine.stack[stackMachine.sp - 1] = ch;
+		stackMachine.stackMap[stackMachine.sp - 1] = false;
+		let smRet = stackMachine.runLoop();
+		if (smRet !== null && smRet.errorMsg === "@get_char") {
+			setConsoleInStatus("@get_char");
+		} else if (smRet !== null) {
+			printTextOut(JSON.stringify(smRet));
+			return false;
+		}
+	}
+	return true;
+}
+
 function execLoop() {
+	if (!inputLoop()) {
+		return;
+	}
 	while (parser.peekToken() !== TOK_EOF) {
 		let expr = parser.readStatement();
 		if (Parser.isError(expr)) {
 			printTextOutObject(expr);
-			break;
+			return;
 		}
 		compiler.resetCode();
 		let result = compiler.evalStatement(expr);
 		if (result.isError()) {
 			printTextOutObject(result);
-			break;
-		} else {
-			let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
-			if (smRet !== null && smRet.errorMsg === "@get_char") {
-				setConsoleInStatus("@get_char");
-				break;
+			return;
+		}
+		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		if (smRet !== null && smRet.errorMsg === "@get_char") {
+			setConsoleInStatus("@get_char");
+			if (!inputLoop()) {
+				return;
 			}
-			if (smRet !== null) {
-				printTextOut(JSON.stringify(smRet));
-				break;
-			}
+		} else if (smRet !== null) {
+			printTextOut(JSON.stringify(smRet));
+			return;
 		}
 	}
 }
@@ -202,23 +227,11 @@ function onInputFileChange() {
 }
 
 function onTerminalKey(key) {
+	for (let i = 0; i < key.length; i++) {
+		terminalInputBuffer[terminalInputBuffer.length] = key.charCodeAt(i);
+	}
 	if (getConsoleInStatus() === "@get_char") {
-		setConsoleInStatus("");
-		if (key.length > 0) {
-			let ch = key.charCodeAt(0);
-			stackMachine.stack[stackMachine.sp - 1] = ch;
-			stackMachine.stackMap[stackMachine.sp - 1] = false;
-			let smRet = stackMachine.runLoop();
-			if (smRet !== null) {
-				if (smRet.errorMsg === "@get_char") {
-					setConsoleInStatus("@get_char");
-				} else {
-					setConsoleInStatus("");
-				}
-			} else {
-				execLoop();
-			}
-		}	
+		execLoop();
 	}
 }
 

@@ -124,6 +124,96 @@ var shapes := [] as [circle|rect|square]; # make a liste of shapes
 display_perimeters(shapes);
 
 
+Optimisation Simple
+===================
+
+function invert(p {x integer, y integer}) {x integer, y integer} begin
+	p.x := -p.x;
+	p.y := -p.y;
+	return p;
+end invert;
+
+var p := {x: 1, y: 2};
+
+p := invert(p);
+
+Avant d'appeler la fonction invert, on peut decrementer le refcount de p
+
+Sauf si l'appel invert est dans un bloc avec exception handling
+	et que p n'est pas déclaré dans le scope de ce bloc
+	
+	var p := {x: 1, y: 2};
+
+	begin
+		p := invert(p);
+	exception
+		when out_of_mem then
+			...
+	end;
+
+Si p est une expression ...
+
+	l[i] := invert(l[i]);
+
+Il ne faut pas que l'expression contienne une variable qui soit un param ctx
+
+	l[i] := invert(l[i], ctx i);
+	
+Strategie:
+
+	Lors d'un assignement
+	
+		Si l'expression de gauche est une ref
+	
+		Si l'expression de gauche est contenu dans l'expression de droite
+		
+		Si aucune variable de l'expression de gauche n'est un param ctx dans l'expression de droite
+
+		Appelons root le premier terme de l'expression de gauche
+		
+		Si il n'y a pas d'exception handling entre le scope ou root est declaré (exclu) et le scope courant		
+		
+		Lors de l'evaluation de l'expression de gauche a droite
+		
+			On n'incremente pas la ref finale. Comment ???
+			
+			Move Opcode ?
+		
+		
+	
+	
+	
+		 
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
