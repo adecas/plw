@@ -253,7 +253,6 @@ type combat_bonus {
 type entity {
 	name				text,
 	is_active			boolean,
-	hidden				boolean,
 	position			null|point,
 	display				null|screen_cell,
 	viewrange			null|viewrange,
@@ -729,7 +728,7 @@ function spawn_weigths(depth integer) [spawn_weight] begin
 		spawn_weight(SPAWN_SHIELD,            3),
 		spawn_weight(SPAWN_LONG_SWORD,        depth - 1),
 		spawn_weight(SPAWN_TOWER_SHIELD,      depth - 1),
-		spawn_weight(SPAWN_TRAP,      		  200)
+		spawn_weight(SPAWN_TRAP,      		  1)
 	];
 end spawn_weigths;
 
@@ -1315,12 +1314,12 @@ procedure main_loop() begin
 		end loop;
 	end loop;
 	write(ANSI_CLEAR_TERMINAL || ANSI_SHOW_CURSOR || ANSI_RESET_COLOR);
-	print('frame_count         : ' || text(frame_count));
-	print('viewrange_tick_time : ' || text(viewrange_tick_time / frame_count));
-	print('visibe_tile_flags_time : ' || text(visibe_tile_flags_time / frame_count));
-	print('monster_tick_time   : ' || text(monster_tick_time / frame_count));
-	print('render_time         : ' || text(render_time / frame_count));
-	print('display_time        : ' || text(display_time / frame_count));
+	print('frame_count             : ' || text(frame_count));
+	print('viewrange_tick_time     : ' || text(viewrange_tick_time / frame_count));
+	print('visible_tile_flags_time : ' || text(visibe_tile_flags_time / frame_count));
+	print('monster_tick_time       : ' || text(monster_tick_time / frame_count));
+	print('render_time             : ' || text(render_time / frame_count));
+	print('display_time            : ' || text(display_time / frame_count));
 end main_loop;
 
 main_loop();

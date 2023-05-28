@@ -44,8 +44,17 @@ PlwInt PlwArrayRef_Size(PlwArrayRef *ref) {
 	return ref->size;
 }
 
+void PlwArrayRef_SetSize(PlwArrayRef *ref, PlwInt size) {
+	ref->size = size;
+}
+
+
 PlwRefId *PlwArrayRef_Ptr(PlwArrayRef *ref) {
 	return ref->ptr;
+}
+
+void PlwArrayRef_SetPtr(PlwArrayRef *ref, PlwRefId *ptr) {
+	ref->ptr = ptr;
 }
 
 void PlwArrayRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error) {

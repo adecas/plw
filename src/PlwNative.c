@@ -1,4 +1,5 @@
 #include "PlwNative.h"
+#include "PlwAbstractRef.h"
 #include "PlwStringRef.h"
 #include "PlwArrayRef.h"
 #include "PlwBasicArrayRef.h"
@@ -349,6 +350,7 @@ static void PlwNativeFunc_Text_ArrayOfInteger(PlwStackMachine *sm, PlwError *err
 	PlwInt i;
 	char buffer[128];
 	PlwInt itemLen;
+	
 	refId = sm->stack[sm->sp - 2];
 	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwBasicArrayRefTagName, error);
 	if (PlwIsError(error)) {
@@ -414,6 +416,7 @@ static void PlwNativeFunc_Text_ArrayOfText(PlwStackMachine *sm, PlwError *error)
 	PlwStringRef *itemRef;
 	char *itemPtr;
 	PlwInt itemLen;
+	
 	refId = sm->stack[sm->sp - 2];
 	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwArrayRefTagName, error);
 	if (PlwIsError(error)) {
@@ -477,6 +480,7 @@ static void PlwNativeFunc_Concat_Text_Text(PlwStackMachine *sm, PlwError *error)
 	size_t len2;
 	char *ptr;
 	PlwRefId resultRefId;
+
 	refId1 = sm->stack[sm->sp - 3];
 	ref1 = PlwRefManager_GetRefOfType(sm->refMan, refId1, PlwStringRefTagName, error);
 	if (PlwIsError(error)) {
@@ -491,27 +495,40 @@ static void PlwNativeFunc_Concat_Text_Text(PlwStackMachine *sm, PlwError *error)
 	ptr2 = PlwStringRef_Ptr(ref2);
 	len1 = strlen(ptr1);
 	len2 = strlen(ptr2);
-	ptr = PlwAlloc(len1 + len2 + 1, error);
-	if (PlwIsError(error)) {
-		return;
+	if (AsPlwAbstractRef(ref1)->refCount == 1) {
+		ptr1 = PlwRealloc(ptr1, len1 + len2 + 1, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		memcpy(ptr1 + len1, ptr2, len2 + 1);
+		PlwStringRef_SetPtr(ref1, ptr1);
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+	} else {
+		ptr = PlwAlloc(len1 + len2 + 1, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		memcpy(ptr, ptr1, len1);
+		memcpy(ptr + len1, ptr2, len2 + 1);
+		resultRefId = PlwStringRef_Make(sm->refMan, ptr, error);
+		if (PlwIsError(error)) {
+			PlwFree(ptr);
+			return;
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId1, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		sm->stack[sm->sp - 3] = resultRefId;
+		sm->stackMap[sm->sp - 3] = PlwTrue;
 	}
-	memcpy(ptr, ptr1, len1);
-	memcpy(ptr + len1, ptr2, len2 + 1);
-	resultRefId = PlwStringRef_Make(sm->refMan, ptr, error);
-	if (PlwIsError(error)) {
-		PlwFree(ptr);
-		return;
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId1, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId2, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	sm->stack[sm->sp - 3] = resultRefId;
-	sm->stackMap[sm->sp - 3] = PlwTrue;
 	sm->sp -= 2;
 
 }
@@ -525,6 +542,7 @@ static void PlwNativeFunc_Subtext_Text_Integer_Integer(PlwStackMachine *sm, PlwE
 	PlwInt sublen;
 	char *resultPtr;
 	PlwRefId resultRefId;
+
 	refId = sm->stack[sm->sp - 4];
 	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwStringRefTagName, error);
 	if (PlwIsError(error)) {
@@ -572,6 +590,7 @@ static void PlwNativeFunc_Subtext_Text_Integer(PlwStackMachine *sm, PlwError *er
 	PlwInt sublen;
 	char *resultPtr;
 	PlwRefId resultRefId;
+	
 	refId = sm->stack[sm->sp - 3];
 	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwStringRefTagName, error);
 	if (PlwIsError(error)) {
@@ -617,6 +636,7 @@ static void PlwNativeFunc_CharCode_Text_Integer(PlwStackMachine *sm, PlwError *e
 	PlwStringRef *ref;
 	char *ptr;
 	PlwInt charCode;
+	
 	refId = sm->stack[sm->sp - 3];
 	index = sm->stack[sm->sp - 2];
 	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwStringRefTagName, error);
@@ -933,27 +953,41 @@ static void PlwNativeFunc_ConcatBasicArray_Ref_Ref(PlwStackMachine *sm, PlwError
 	ptr2 = PlwBasicArrayRef_Ptr(ref2);
 	size1 = PlwBasicArrayRef_Size(ref1);
 	size2 = PlwBasicArrayRef_Size(ref2);
-	ptr = PlwAlloc((size1 + size2) * sizeof(PlwInt), error);
-	if (PlwIsError(error)) {
-		return;
+	if (AsPlwAbstractRef(ref1)->refCount == 1) {
+		ptr1 = PlwRealloc(ptr1, (size1 + size2) * sizeof(PlwInt), error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		memcpy(ptr1 + size1, ptr2, size2 * sizeof(PlwInt));
+		PlwBasicArrayRef_SetPtr(ref1, ptr1);
+		PlwBasicArrayRef_SetSize(ref1, size1 + size2);
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+	} else {
+		ptr = PlwAlloc((size1 + size2) * sizeof(PlwInt), error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		memcpy(ptr, ptr1, size1 * sizeof(PlwInt));
+		memcpy(ptr + size1, ptr2, size2 * sizeof(PlwInt));
+		resultRefId = PlwBasicArrayRef_Make(sm->refMan, size1 + size2, ptr, error);
+		if (PlwIsError(error)) {
+			PlwFree(ptr);
+			return;
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId1, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		sm->stack[sm->sp - 3] = resultRefId;
+		sm->stackMap[sm->sp - 3] = PlwTrue;
 	}
-	memcpy(ptr, ptr1, size1 * sizeof(PlwInt));
-	memcpy(ptr + size1, ptr2, size2 * sizeof(PlwInt));
-	resultRefId = PlwBasicArrayRef_Make(sm->refMan, size1 + size2, ptr, error);
-	if (PlwIsError(error)) {
-		PlwFree(ptr);
-		return;
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId1, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId2, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	sm->stack[sm->sp - 3] = resultRefId;
-	sm->stackMap[sm->sp - 3] = PlwTrue;
 	sm->sp -= 2;
 }
 
@@ -983,33 +1017,57 @@ static void PlwNativeFunc_ConcatArray_Ref_Ref(PlwStackMachine *sm, PlwError *err
 	ptr2 = PlwArrayRef_Ptr(ref2);
 	size1 = PlwArrayRef_Size(ref1);
 	size2 = PlwArrayRef_Size(ref2);
-	ptr = PlwAlloc((size1 + size2) * sizeof(PlwRefId), error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	memcpy(ptr, ptr1, size1 * sizeof(PlwRefId));
-	memcpy(ptr + size1, ptr2, size2 * sizeof(PlwRefId));
-	resultRefId = PlwArrayRef_Make(sm->refMan, size1 + size2, ptr, error);
-	if (PlwIsError(error)) {
-		PlwFree(ptr);
-		return;
-	}
-	for (i = 0; i < size1 + size2; i++) {
-		PlwRefManager_IncRefCount(sm->refMan, ptr[i], error);
+	if (AsPlwAbstractRef(ref1)->refCount == 1) {
+		ptr1 = PlwRealloc(ptr1, (size1 + size2) * sizeof(PlwInt), error);
 		if (PlwIsError(error)) {
 			return;
 		}
+		memcpy(ptr1 + size1, ptr2, size2 * sizeof(PlwInt));
+		PlwArrayRef_SetPtr(ref1, ptr1);
+		PlwArrayRef_SetSize(ref1, size1 + size2);
+		if (AsPlwAbstractRef(ref2)->refCount == 1) {
+			PlwArrayRef_SetSize(ref2, 0);
+		} else {
+			for (i = 0; i < size2; i++) {
+				PlwRefManager_IncRefCount(sm->refMan, ptr2[i], error);
+				if (PlwIsError(error)) {
+					return;
+				}
+			}		
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}		
+	} else {
+		ptr = PlwAlloc((size1 + size2) * sizeof(PlwRefId), error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		memcpy(ptr, ptr1, size1 * sizeof(PlwRefId));
+		memcpy(ptr + size1, ptr2, size2 * sizeof(PlwRefId));
+		resultRefId = PlwArrayRef_Make(sm->refMan, size1 + size2, ptr, error);
+		if (PlwIsError(error)) {
+			PlwFree(ptr);
+			return;
+		}
+		for (i = 0; i < size1 + size2; i++) {
+			PlwRefManager_IncRefCount(sm->refMan, ptr[i], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId1, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		PlwRefManager_DecRefCount(sm->refMan, refId2, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		sm->stack[sm->sp - 3] = resultRefId;
+		sm->stackMap[sm->sp - 3] = PlwTrue;
 	}
-	PlwRefManager_DecRefCount(sm->refMan, refId1, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	PlwRefManager_DecRefCount(sm->refMan, refId2, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	sm->stack[sm->sp - 3] = resultRefId;
-	sm->stackMap[sm->sp - 3] = PlwTrue;
 	sm->sp -= 2;
 }
 

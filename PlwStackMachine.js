@@ -990,6 +990,18 @@ class StackMachine {
 		return null;
 	}
 	
+	opcodePushGlobalMove(offset) {
+		if (offset < 0 || offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp] = this.stack[offset];
+		this.stackMap[this.sp] = this.stackMap[offset];
+		this.stack[offset] = -1;
+		this.stackMap[offset] = false;
+		this.sp++;
+		return null;
+	}
+	
 	opcodePushGlobalForMutate(offset) {
 		if (offset < 0 || offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -1010,7 +1022,7 @@ class StackMachine {
 		this.sp++;
 		return null;
 	}
-
+	
 	opcodePushLocal(offset) {
 		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
@@ -1023,6 +1035,18 @@ class StackMachine {
 				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
 			}
 		}
+		this.sp++;
+		return null;
+	}
+	
+	opcodePushLocalMove(offset) {
+		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		this.stack[this.sp] = this.stack[this.bp + offset];
+		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
+		this.stack[this.bp + offset] = -1;
+		this.stackMap[this.bp + offset] = false;
 		this.sp++;
 		return null;
 	}
@@ -1234,10 +1258,14 @@ class StackMachine {
 			return this.opcodePush(arg1);
 		case OPCODE_PUSH_GLOBAL:
 			return this.opcodePushGlobal(arg1);
+		case OPCODE_PUSH_GLOBAL_MOVE:
+			return this.opcodePushGlobalMove(arg1);
 		case OPCODE_PUSH_GLOBAL_FOR_MUTATE:
 			return this.opcodePushGlobalForMutate(arg1);
 		case OPCODE_PUSH_LOCAL:
 			return this.opcodePushLocal(arg1);
+		case OPCODE_PUSH_LOCAL_MOVE:
+			return this.opcodePushLocalMove(arg1);
 		case OPCODE_PUSH_LOCAL_FOR_MUTATE:
 			return this.opcodePushLocalForMutate(arg1);
 		case OPCODE_PUSH_INDIRECTION:

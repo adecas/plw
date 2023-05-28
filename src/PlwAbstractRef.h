@@ -19,6 +19,8 @@ typedef struct PlwAbstractRef {
 	PlwInt refCount;
 } PlwAbstractRef;
 
+#define AsPlwAbstractRef(p) ((PlwAbstractRef *)(p))
+
 void PlwAbstractRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error);
 
 void PlwAbstractRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result);

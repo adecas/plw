@@ -983,6 +983,22 @@ static void PlwStackMachine_OpcodePushGlobal(PlwStackMachine *sm, PlwInt offset,
 	sm->sp++;
 }
 
+static void PlwStackMachine_OpcodePushGlobalMove(PlwStackMachine *sm, PlwInt offset, PlwError *error) {
+	if (offset < 0 || offset >= sm->sp) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	PlwStackMachine_GrowStack(sm, 1, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	sm->stack[sm->sp] = sm->stack[offset];
+	sm->stackMap[sm->sp] = sm->stackMap[offset];
+	sm->stack[offset] = -1;
+	sm->stackMap[offset] = PlwFalse;
+	sm->sp++;
+}
+
 static void PlwStackMachine_OpcodePushGlobalForMutate(PlwStackMachine *sm, PlwInt offset, PlwError *error) {
 	if (offset < 0 || offset >= sm->sp) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
@@ -1025,6 +1041,22 @@ static void PlwStackMachine_OpcodePushLocal(PlwStackMachine *sm, PlwInt offset, 
 			return;
 		}
 	}
+	sm->sp++;
+}
+
+static void PlwStackMachine_OpcodePushLocalMove(PlwStackMachine *sm, PlwInt offset, PlwError *error) {
+	if (sm->bp + offset < 0 || sm->bp + offset >= sm->sp) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	PlwStackMachine_GrowStack(sm, 1, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	sm->stack[sm->sp] = sm->stack[sm->bp + offset];
+	sm->stackMap[sm->sp] = sm->stackMap[sm->bp + offset];
+	sm->stack[sm->bp + offset] = -1;
+	sm->stackMap[sm->bp + offset] = PlwFalse;
 	sm->sp++;
 }
 
@@ -1567,11 +1599,17 @@ static void PlwStackMachine_Opcode2(PlwStackMachine *sm, PlwInt code, PlwInt arg
 	case PLW_OPCODE_PUSH_GLOBAL:
 		PlwStackMachine_OpcodePushGlobal(sm, arg1, error);
 		break;
+	case PLW_OPCODE_PUSH_GLOBAL_MOVE:
+		PlwStackMachine_OpcodePushGlobalMove(sm, arg1, error);
+		break;
 	case PLW_OPCODE_PUSH_GLOBAL_FOR_MUTATE:
 		PlwStackMachine_OpcodePushGlobalForMutate(sm, arg1, error);
 		break;
 	case PLW_OPCODE_PUSH_LOCAL:
 		PlwStackMachine_OpcodePushLocal(sm, arg1, error);
+		break;
+	case PLW_OPCODE_PUSH_LOCAL_MOVE:
+		PlwStackMachine_OpcodePushLocalMove(sm, arg1, error);
 		break;
 	case PLW_OPCODE_PUSH_LOCAL_FOR_MUTATE:
 		PlwStackMachine_OpcodePushLocalForMutate(sm, arg1, error);

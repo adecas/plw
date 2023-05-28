@@ -511,6 +511,10 @@ class CodeBlock {
 		this.floatConstSize = 0;
 	}
 	
+	currentLoc() {
+		return this.codeSize - 1;
+	}
+	
 	addStrConst(str) {
 		for (let i = 0; i < this.strConstSize; i++) {
 			if (this.strConsts[i] === str) {
@@ -582,6 +586,10 @@ class CodeBlock {
 	codePushLocal(offset) {
 		this.code2(OPCODE_PUSH_LOCAL, offset);
 	}
+	
+	codePushLocalMove(offset) {
+		this.code2(OPCODE_PUSH_LOCAL_MOVE, offset);
+	}	
 	
 	codePushLocalForMutate(offset) {
 		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
@@ -1028,9 +1036,38 @@ class CompilerContext {
 			
 }
 
+class VariableStatLoc {
+	constructor(loc, line, col) {
+		this.loc = loc;
+		this.line = line;
+		this.col = col;
+	}
+}
+
+class VariableStat {
+
+	constructor() {
+		this.moveLocCount = 0;
+		this.moveLocs = [];
+		this.tmpMoveLoc = null;
+	}
+
+	addReadLoc(loc, expr) {
+		this.tmpMoveLoc = new VariableStatLoc(loc, expr.line, expr.col);
+	}
+	
+	addReset() {
+		if (this.tmpMoveLoc !== null) {
+			this.moveLocs[this.moveLocCount] = this.tmpMoveLoc;
+			this.moveLocCount++;
+			this.tmpMoveLoc = null;
+		}
+	}	
+	
+}
 
 class CompilerVariable {
-	constructor(varName, varType, isCtx, isConst, isGlobal, isParameter, offset) {
+	constructor(varName, varType, isCtx, isConst, isGlobal, isParameter, offset, isWithStat) {
 		this.varName = varName;
 		this.varType = varType;
 		this.isCtx = isCtx;
@@ -1038,7 +1075,12 @@ class CompilerVariable {
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
 		this.offset = offset;
-	}
+		if (isWithStat) {
+			this.stat = new VariableStat();
+		} else {
+			this.stat = null;
+		}
+	}		
 }
 
 
@@ -1091,6 +1133,22 @@ class CompilerScope {
 		return currentScope;
 	}
 	
+	clearVarStatTmp() {
+		let currentScope = this;
+		while (currentScope.parent !== null) {
+			for (let i = 0; i < currentScope.variableCount; i++) {
+				let varStat = currentScope.variables[i].stat;
+				if (varStat != null) {
+					varStat.tmpMoveLoc = null;
+				}
+			}
+			if (currentScope.isFrame) {
+				break;
+			}
+			currentScope = currentScope.parent;
+		}
+	}
+				
 	getLocalVariable(varName) {
 		for (let i = 0; i < this.variableCount; i++) {
 			if (this.variables[i].varName === varName) {
@@ -1122,7 +1180,7 @@ class CompilerScope {
 	}
 	
 	addParameter(varName, varType, isCtx, offset) {
-		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, offset);
+		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, offset, varType.isRef);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;	
@@ -1130,7 +1188,8 @@ class CompilerScope {
 
 
 	addVariable(varName, varType, isConst) {
-		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableCount);
+		let isWithStat = varType.isRef && this.parent !== null;
+		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableCount, isWithStat);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		return newVar;	
@@ -1168,6 +1227,35 @@ class Compiler {
 	}
 	
 	popScope() {
+		let msg = "";
+		for (let i = 0; i < this.scope.variableCount; i++) {
+			let variable = this.scope.variables[i];
+			if (variable.stat !== null) {
+				variable.stat.addReset();
+				for (let k = 0; k < variable.stat.moveLocCount; k++) {
+					let loc = variable.stat.moveLocs[k];
+					msg += variable.varName + "(" + loc.line + "," + loc.col + ") ";
+					let codeOffset = loc.loc;
+					if (codeOffset < 0 || codeOffset >= this.codeBlock.codeSize) {
+						console.log("Inconsistent loc " + loc.loc);
+					} else {
+						let opcode = this.codeBlock.codes[codeOffset];
+						if (opcode === OPCODE_PUSH_GLOBAL) {
+							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_GLOBAL_MOVE;
+						} else if (opcode === OPCODE_PUSH_LOCAL) {
+							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_LOCAL_MOVE;
+						} else if (opcode === OPCODE_PUSH_INDIRECT) {
+							// Do nothing
+						} else {
+							console.log("Inconsistent opcode " + this.codeBlock.codes[loc.loc]);
+						}
+					}
+				}
+			}
+		}
+		if (msg !== "") {
+			console.log("Moves: " + msg); 
+		}
 		this.scope = this.scope.parent;
 	}
 	
@@ -1293,7 +1381,6 @@ class Compiler {
 					whens,
 					null)],
 				null));
-		console.log(procDecl);
 		return this.evalStatement(procDecl);
 	}
 	
@@ -1435,6 +1522,9 @@ class Compiler {
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
 				}
+				if (variable.stat !== null) {
+					variable.stat.addReset();
+				}
 				return EVAL_RESULT_OK;
 			}
 			if (expr.left.tag === "ast-index") {
@@ -1517,6 +1607,7 @@ class Compiler {
 			let exceptionLoc = -1;
 			this.pushScopeBlock();
 			if (expr.exception !== null) {
+				this.scope.clearVarStatTmp();
 				exceptionLoc = this.codeBlock.codeCreateExceptionHandler(0);
 				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true);
 			}
@@ -1534,6 +1625,15 @@ class Compiler {
 					this.codeBlock.codePopVoid(this.scope.variableCount);
 				}
 			}
+			for (let i = 0; i < this.scope.variableCount; i++) {
+				let v = this.scope.variables[i];
+				for (let k = 0; k < v.valueCount; k++) {
+					let offset = v.lastReadOffsets[k];
+					if (offset !== -1) {
+						this.codeBlock.codes[offset] = PUSH_LOCAL_MOVE;
+					}
+				}
+			}
 			this.popScope();
 			if (expr.exception === null) {
 				return ret;
@@ -1543,10 +1643,12 @@ class Compiler {
 				endLoc = this.codeBlock.codeJmp(0);
 			}
 			this.codeBlock.setLoc(exceptionLoc);
+			this.scope.clearVarStatTmp();
 			let exRet = this.evalStatement(expr.exception);
 			if (exRet.isError()) {
 				return exRet;
 			}
+			this.scope.clearVarStatTmp();
 			if (endLoc !== -1) {
 				this.codeBlock.setLoc(endLoc);
 			}
@@ -1579,10 +1681,12 @@ class Compiler {
 				}
 				this.codeBlock.codeEq();
 				let nextLoc = this.codeBlock.codeJz(0);
+				this.scope.clearVarStatTmp();
 				let stmtRes = this.evalStatement(whenStmt.statement);
 				if (stmtRes.isError()) {
 					return stmtRes;
 				}
+				this.scope.clearVarStatTmp();
 				if (
 					(ret === null || stmtRes === EVAL_RESULT_OK) ||
 					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
@@ -1601,10 +1705,12 @@ class Compiler {
 				}
 				this.codeBlock.codeRaise();
 			} else {
+				this.scope.clearVarStatTmp();
 				let stmtRes = this.evalStatement(expr.defaultStmt);
 				if (stmtRes.isError()) {
 					return stmtRes;
 				}
+				this.scope.clearVarStatTmp();
 				if (
 					(ret === null || stmtRes === EVAL_RESULT_OK) ||
 					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
@@ -1635,10 +1741,12 @@ class Compiler {
 				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
 			}
 			let falseLoc = this.codeBlock.codeJz(0);
+			this.scope.clearVarStatTmp();
 			let trueRet =  this.evalStatement(expr.trueStatement);
 			if (trueRet.isError()) {
 				return trueRet;
 			}
+			this.scope.clearVarStatTmp();
 			let endLoc = expr.falseStatement === null ? -1 : this.codeBlock.codeJmp(0);
 			this.codeBlock.setLoc(falseLoc);
 			if (expr.falseStatement === null) {
@@ -1648,6 +1756,7 @@ class Compiler {
 			if (falseRet.isError()) {
 				return falseRet;
 			}
+			this.scope.clearVarStatTmp();
 			this.codeBlock.setLoc(endLoc);
 			if (trueRet === EVAL_RESULT_RAISE && falseRet === EVAL_RESULT_RAISE) {
 				return EVAL_RESULT_RAISE; 
@@ -1700,10 +1809,12 @@ class Compiler {
 				this.codeBlock.codePush(0);
 				this.codeBlock.codePushPtrOffset();
 				this.scope.addVariable(expr.whens[i].varName, whenType, false);
+				this.scope.clearVarStatTmp();
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
 				if (thenRet.isError()) {
 					return thenRet;
 				}
+				this.scope.clearVarStatTmp();
 				if (thenRet === EVAL_RESULT_RETURN) {
 					returnCount++;
 				}
@@ -1715,10 +1826,12 @@ class Compiler {
 			}
 			this.codeBlock.codePopVoid(2);
 			if (expr.elseBlock !== null) {
+				this.scope.clearVarStatTmp();
 				let elseRet = this.evalStatement(expr.elseBlock);
 				if (elseRet.isError()) {
 					return elseRet;
 				}
+				this.scope.clearVarStatTmp();
 				if (elseRet === EVAL_RESULT_RETURN) {
 					for (let i = 0; i < kindHasWhen.length; i++) {
 						if (kindHasWhen[i] === false) {
@@ -1743,10 +1856,12 @@ class Compiler {
 				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
 			}
 			let endLoc = this.codeBlock.codeJz(0);
+			this.scope.clearVarStatTmp();
 			let stmtRet = this.evalStatement(expr.statement);
 			if (stmtRet.isError()) {
 				return stmtRet;
 			}
+			this.scope.clearVarStatTmp();
 			this.codeBlock.codeJmp(testLoc);
 			this.codeBlock.setLoc(endLoc);
 			for (let i = 0; i < this.scope.exitLocCount; i++) {
@@ -1785,10 +1900,12 @@ class Compiler {
 					this.codeBlock.codeLte();
 				}
 				let endLoc = this.codeBlock.codeJz(0);
+				this.scope.clearVarStatTmp();
 				let stmtRet = this.evalStatement(expr.statement);
 				if (stmtRet.isError()) {
 					return stmtRet;
 				}
+				this.scope.clearVarStatTmp();
 				this.codeBlock.codePush(1);
 				if (expr.isReverse) {
 					this.codeBlock.codeSub();
@@ -1818,10 +1935,12 @@ class Compiler {
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeEnded();
 					let endLoc = this.codeBlock.codeJnz(0);
+					this.scope.clearVarStatTmp();
 					let stmtRet = this.evalStatement(expr.statement);
 					if (stmtRet.isError()) {
 						return stmtRet;
 					}
+					this.scope.clearVarStatTmp();
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeNext();
 					this.codeBlock.codePopLocal(indexVar.offset);
@@ -1858,10 +1977,12 @@ class Compiler {
 					this.codeBlock.codePushLocal(indexVar.offset);
 					this.codeBlock.codePushPtrOffset();
 					this.codeBlock.codePopLocal(itemVar.offset);
+					this.scope.clearVarStatTmp();
 					let stmtRet = this.evalStatement(expr.statement);
 					if (stmtRet.isError()) {
 						return stmtRet;
 					}
+					this.scope.clearVarStatTmp();
 					this.codeBlock.codePush(1);
 					if (expr.isReverse === true) {
 						this.codeBlock.codeSub();
@@ -2160,6 +2281,9 @@ class Compiler {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
+			}
+			if (v.stat !== null) {
+				v.stat.addReadLoc(this.codeBlock.currentLoc() - 1, expr);
 			}
 			return v.varType;
 		}
@@ -2559,12 +2683,13 @@ class Compiler {
 			}
 			if (v.isCtx) {
 				this.codeBlock.codePushIndirect(v.offset);
+			} else if (v.isGlobal) {
+				this.codeBlock.codePushGlobal(v.offset);
 			} else {
-				if (v.isGlobal) {
-					this.codeBlock.codePushGlobal(v.offset);
-				} else {
-					this.codeBlock.codePushLocal(v.offset);
-				}
+				this.codeBlock.codePushLocal(v.offset);
+			}
+			if (v.stat !== null) {
+				v.stat.addReadLoc(this.codeBlock.currentLoc() - 1, expr);
 			}
 			return v.varType;
 		}

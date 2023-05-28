@@ -11,6 +11,8 @@ PlwRefId PlwStringRef_Make(PlwRefManager *refMan, char *ptr, PlwError *error);
 
 char *PlwStringRef_Ptr(PlwStringRef *ref);
 
+void PlwStringRef_SetPtr(PlwStringRef *ref, char *ptr);
+
 void PlwStringRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error);
 
 void PlwStringRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result);

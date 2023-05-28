@@ -167,17 +167,125 @@ Strategie:
 	
 		Si l'expression de gauche est contenu dans l'expression de droite
 		
-		Si aucune variable de l'expression de gauche n'est un param ctx dans l'expression de droite
+		Si aucune variable de l'expression de gauche n'est modifiée par l'expression de droite (est un param ctx dans l'expression de droite)
 
 		Appelons root le premier terme de l'expression de gauche
 		
 		Si il n'y a pas d'exception handling entre le scope ou root est declaré (exclu) et le scope courant		
 		
-		Lors de l'evaluation de l'expression de gauche a droite
+		Avant le call de la fonction, on assigne 0 a l'expression de gauche
 		
-			On n'incremente pas la ref finale. Comment ???
+		
+Quick Win Strategie:
+
+	A chaque variable on associe deux listes de location, une confirmed, et une tmp
+	
+	quand une variable sort du scope, on remplace les push_local des locs des deux listes par un push_local_move
+	
+	Une assignation de la variable transfert les locs tmp dans confirmes
+	
+	Un read de la variable remplace les locs tmp par une liste d'un element avec la loc courante
+	
+	Gestion d'evaluation conditionnelle (if/else, case/when):
+	
+		Au début:
+			* transfert les confirmed et tmp dans une variableLocal before
 			
-			Move Opcode ?
+		Avant l'eval conditionelle:
+			* vide les confirmed, copie les before.tmp dans tmp
+		
+		Apres l'eval conditionelle:
+			* transfert les confirmed et tmp dans une variable locale condEvalN 
+
+		A la fin:
+			* copie les before.confirmed dans confirmed
+			* ajoute tous les condEvalN.confirmed sauf si la loc est dans before.tmp
+			* Si toues les cas gérés, ajoute les before.tmp dans confirmed si la loc est dans tous les condEvalN.confirmed,
+			* Ajoute tous les condEvalN.tmp dans tmp, sauf si la loc est dans before.tmp
+			* Ajoute les before.tmp dans tmp, seulement is le tmp de la variable est question est vide
+	
+	
+	
+-- cas basique
+ 1: begin
+ 2:   var toto := 'hello';			-- [], []
+ 3:   print(toto);					-- [], [3]
+ 4:   print(toto);					-- [], [4]
+ 5:   toto := 'hello';				-- [4], []
+ 6:   print(toto);					-- [4], [6]
+ 7: end; 
+	
+-- cas if read
+ 1: begin
+ 2:   var toto := 'hello';			-- [], []
+ 3:   print(toto);					-- [], [3]
+ 4:   toto := 'hello';			    -- [3], []
+ 5:   print(toto);					-- [3], [5]	-> before
+ 6:   if true then					-- [], [5]
+ 7:     print(toto);				-- [], [7]	-> condEval1
+ 8:   end if;						-- [3], [7]
+ 9:   print(toto);					-- [3], [9]
+10: end;
+
+-- cas if write
+ 1: begin
+ 2:   var toto := 'hello';			-- [], []
+ 3:   print(toto);					-- [], [3]
+ 4:   toto := 'hello';			    -- [3], []
+ 5:   print(toto);					-- [3], [5]	-> before
+ 6:   if true then					-- [], [5]
+ 7:     toto := hello;				-- [5], []	-> condEval1
+ 8:   end if;						-- 
+ 9:   print(toto);					-- 
+10: end;
+	
+-- cas if/else read
+ 1: begin
+ 2:   var toto := 'hello';			-- [], []
+ 3:   print(toto);					-- [], [3]
+ 4:   toto := 'hello';			    -- [3], []
+ 5:   print(toto);					-- [3], [5]		-> before
+ 6:   if true then					-- [], [5]
+ 7:     print(toto);				-- [], [7]		-> condEval1
+ 8:   else							-- [], [5]
+ 9:     print(toto);				-- [], [9]		-> condEval2	
+10:   end if;						-- [3], [7, 9]
+11:   print(toto);					-- [3], [11]
+12: end; 
+		
+
+	
+	
+	
+		
+		
+		
+		
+		
+	
+	
+	
+	
+	
+	
+	
+	
+	
+		
+	
+	
+	
+
+
+
+
+
+
+
+
+
+
+		
 		
 		
 	

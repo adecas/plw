@@ -54,25 +54,27 @@ const OPCODE_JNZ										= 44;
 const OPCODE_JMP										= 45;
 const OPCODE_PUSH										= 46;
 const OPCODE_PUSH_GLOBAL								= 47;
-const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 48;
-const OPCODE_PUSH_LOCAL									= 49;
-const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 50;
-const OPCODE_PUSH_INDIRECTION							= 51;
-const OPCODE_PUSH_INDIRECT								= 52;
-const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 53;
-const OPCODE_POP_GLOBAL									= 54;
-const OPCODE_POP_LOCAL									= 55;
-const OPCODE_POP_INDIRECT								= 56;
-const OPCODE_POP_VOID									= 57;
-const OPCODE_CREATE_STRING								= 58;
-const OPCODE_CREATE_RECORD								= 59;
-const OPCODE_CREATE_BASIC_ARRAY							= 60;
-const OPCODE_CREATE_ARRAY							 	= 61;
-const OPCODE_CALL										= 62;
-const OPCODE_CALL_NATIVE								= 63;
-const OPCODE_INIT_GENERATOR								= 64;
-const OPCODE_CREATE_EXCEPTION_HANDLER					= 65;
-const OPCODE_PUSHF										= 66;
+const OPCODE_PUSH_GLOBAL_MOVE							= 48;
+const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 49;
+const OPCODE_PUSH_LOCAL									= 50;
+const OPCODE_PUSH_LOCAL_MOVE                            = 51;
+const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 52;
+const OPCODE_PUSH_INDIRECTION							= 53;
+const OPCODE_PUSH_INDIRECT								= 54;
+const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 55;
+const OPCODE_POP_GLOBAL									= 56;
+const OPCODE_POP_LOCAL									= 57;
+const OPCODE_POP_INDIRECT								= 58;
+const OPCODE_POP_VOID									= 59;
+const OPCODE_CREATE_STRING								= 60;
+const OPCODE_CREATE_RECORD								= 61;
+const OPCODE_CREATE_BASIC_ARRAY							= 62;
+const OPCODE_CREATE_ARRAY							 	= 63;
+const OPCODE_CALL										= 64;
+const OPCODE_CALL_NATIVE								= 65;
+const OPCODE_INIT_GENERATOR								= 66;
+const OPCODE_CREATE_EXCEPTION_HANDLER					= 67;
+const OPCODE_PUSHF										= 68;
 
 const PLW_OPCODES = [
 	"",
@@ -123,8 +125,10 @@ const PLW_OPCODES = [
 	"JMP",
 	"PUSH",
 	"PUSH_GLOBAL",
+	"PUSH_GLOBAL_MOVE",
 	"PUSH_GLOBAL_FOR_MUTATE",
 	"PUSH_LOCAL",
+	"PUSH_LOCAL_MOVE",
 	"PUSH_LOCAL_FOR_MUTATE",
 	"PUSH_INDIRECTION",
 	"PUSH_INDIRECT",

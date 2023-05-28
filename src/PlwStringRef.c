@@ -42,6 +42,10 @@ char *PlwStringRef_Ptr(PlwStringRef *ref) {
 	return ref->ptr;
 }
 
+void PlwStringRef_SetPtr(PlwStringRef *ref, char *ptr) {
+	ref->ptr = ptr;
+}
+
 void PlwStringRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error) {
 	PlwRefManError_InvalidOperation(error, PlwStringRefTagName, "SetOffsetValue");
 }

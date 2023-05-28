@@ -403,6 +403,40 @@ end;
 print('first_primes: ' || text(first_primes));
 </pre>
 
+<p id="snippet-recursive-facto-title" class="snippet">Move Optimization</p>
+<pre id="snippet-recursive-facto">
+begin
+  var toto := 'hello';
+  print(toto);
+  toto := 'world';
+  print(toto);
+end;
+procedure toto() begin
+  var toto := 'hello';
+  print(toto);
+  toto := 'world';
+  print(toto);
+end toto;
+begin
+	var toto := 'Hello';
+	var titi := 'World';
+	if true then
+		print(toto);
+		toto := 'World';
+	else
+		print(titi);
+	end if;
+end;
+begin
+  var begin_time := now();
+  var toto := [0];
+  for i in 1 .. 10000 loop
+    toto := toto || [i];
+  end loop;
+  print('Elapsed ' || text(now() - begin_time) || ' ms');
+end;
+</pre>
+
 <p id="snippet-recursive-facto-title" class="snippet">Recursive Facto</p>
 <pre id="snippet-recursive-facto">
 function facto(a integer) integer begin
