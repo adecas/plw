@@ -1449,6 +1449,82 @@ static void PlwStackMachine_OpcodePushf(PlwStackMachine *sm, PlwInt floatId, Plw
 	sm->sp++;	
 }
 
+static void PlwStackMachine_OpcodeEqTuple(PlwStackMachine *sm, PlwInt count, PlwError *error) {
+	PlwInt idx1;
+	PlwInt idx2;
+	PlwBoolean result;
+	PlwInt i;
+	if (sm->sp < count * 2) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	idx1 = sm->sp - 2 * count;
+	idx2 = sm->sp - count;
+	result = PlwTrue;
+	for (i = 0; i < count; i++) {
+		if (sm->stackMap[idx1]) {
+			result = PlwRefManager_CompareRefs(sm->refMan, sm->stack[idx1], sm->stack[idx2], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+			PlwRefManager_DecRefCount(sm->refMan, sm->stack[idx1], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+			PlwRefManager_DecRefCount(sm->refMan, sm->stack[idx2], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+		} else {
+			result = sm->stack[idx1] == sm->stack[idx2];
+		}
+		if (!result) {
+			break;
+		}
+		idx1++;
+		idx2++;
+	}
+	sm->stack[sm->sp - 2 * count] = result;
+	sm->stackMap[sm->sp - 2 * count] = PlwFalse;
+	sm->sp -= 2 * count - 1;
+}
+
+static void PlwStackMachine_OpcodeRetTuple(PlwStackMachine *sm, PlwInt count, PlwError *error) {
+	PlwInt previousBp;
+	PlwInt previousIp;
+	PlwInt previousCodeBlockId;
+	PlwInt argCount;
+	PlwInt i;
+	if (sm->bp < 4 || sm->bp > sm->sp) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	previousBp = sm->stack[sm->bp - 1];
+	previousIp = sm->stack[sm->bp - 2];
+	previousCodeBlockId = sm->stack[sm->bp - 3];
+	argCount = sm->stack[sm->bp - 4];
+	if (sm->bp < 4 + argCount) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	for (i = sm->sp - count - 1; i >= sm->bp - 4 - argCount; i--) {
+		if (sm->stackMap[i]) {
+			PlwRefManager_DecRefCount(sm->refMan, sm->stack[i], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+		}
+	}
+	for (i = 0; i < count; i++) {
+		sm->stack[sm->bp - 4 - argCount + i] = sm->stack[sm->sp - count + i];
+		sm->stackMap[sm->bp - 4 - argCount + i] = sm->stackMap[sm->sp - count + i];
+	}
+	sm->sp = sm->bp - 4 - argCount + count;
+	sm->bp = previousBp;
+	sm->codeBlockId = previousCodeBlockId;
+	sm->ip = previousIp;
+}
+
 static void PlwStackMachine_Opcode1(PlwStackMachine *sm, PlwInt code, PlwError *error) {
 	switch(code) {
 	case PLW_OPCODE_SUSPEND:
@@ -1661,6 +1737,12 @@ static void PlwStackMachine_Opcode2(PlwStackMachine *sm, PlwInt code, PlwInt arg
 		break;
 	case PLW_OPCODE_PUSHF:
 		PlwStackMachine_OpcodePushf(sm, arg1, error);
+		break;
+	case PLW_OPCODE_EQ_TUPLE:
+		PlwStackMachine_OpcodeEqTuple(sm, arg1, error);
+		break;
+	case PLW_OPCODE_RET_TUPLE:
+		PlwStackMachine_OpcodeRetTuple(sm, arg1, error);
 		break;
 	default:
 		PlwStackMachineError_UnknownOp(error, code);

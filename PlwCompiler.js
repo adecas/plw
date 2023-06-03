@@ -39,6 +39,14 @@ class EvalResultType extends EvalResult {
 	toAst() {
 		return null;
 	}
+	
+	slotCount() {
+		return 1;
+	}
+	
+	slotType(slot) {
+		return this;
+	}
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
@@ -111,6 +119,47 @@ class EvalTypeRecord extends EvalResultType {
 		}
 		return new AstTypeRecord(this.fieldCount, astFields);
 	}
+}
+
+class EvalTypeTuple extends EvalResultType {
+	constructor(typeCount, types) {
+		super("res-type-tuple", false);
+		this.typeCount = typeCount;
+		this.types = types;
+		this.key = EvalTypeTuple.makeTypeKey(typeCount, types);
+		this.slotTypeCount = 0;
+		this.slotTypes = [];
+		for (let i = 0; i < this.typeCount; i++) {
+			for (let k = 0; k < this.types[i].slotCount(); k++) {
+				this.slotTypes[this.slotTypeCount] = this.types[i].slotType(k);
+				this.slotTypeCount++;
+			}
+		}
+	}
+
+	static makeTypeKey(typeCount, types) {
+		let keys = [];
+		for (let i = 0; i < typeCount; i++) {
+			keys[i] = types[i].typeKey();
+		}
+		return "(" + keys.join(',') + ")";
+	}
+	
+	slotCount() {
+		return this.slotTypeCount;
+	}
+	
+	slotType(slot) {
+		return this.slotTypes[slot];
+	}
+	
+	toAst() {
+		let astTypes = [];
+		for (let i = 0; i < this.typeCount; i++) {
+			astTypes[i] = this.types[i].toAst();
+		}
+		return new AstTypeTuple(this.typeCount, astTypes);
+	}	
 }
 
 class EvalTypeVariant extends EvalResultType {
@@ -196,6 +245,14 @@ class EvalTypeName extends EvalResultType {
 	toAst() {
 		return new AstTypeNamed(this.typeName);
 	}
+	
+	slotCount() {
+		return this.structType.slotCount();
+	}
+	
+	slotType(slot) {
+		return this.structType.slotType(slot);
+	}	
 		
 }
 
@@ -495,6 +552,14 @@ class EvalError extends EvalResult {
 	
 	static emptyArrayMustBeTyped() {
 		return new EvalError("Empty array must be typed with the as operator");
+	}
+	
+	static tupleSizeMismatch(expected, val) {
+		return new EvalError("Tuple with " + val + " items when " + expected + " were expected");
+	}
+	
+	static todo(msg) {
+		return new EvalError("TODO " + msg);
 	}
 		
 }
@@ -831,6 +896,14 @@ class CodeBlock {
 		this.code2(OPCODE_CREATE_EXCEPTION_HANDLER, offset);
 		return this.codeSize - 1;
 	}
+	
+	codeEqTuple(count) {
+		this.code2(OPCODE_EQ_TUPLE, count);
+	}
+	
+	codeRetTuple(count) {
+		this.code2(OPCODE_RET_TUPLE, count);
+	}
 			
 }
 
@@ -1117,6 +1190,7 @@ class CompilerScope {
 		this.parameters = [];
 		this.variableCount = 0;
 		this.parameterCount = 0;
+		this.variableOffset = 0;
 		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableCount);
 		this.exitLocs = [];
 		this.exitLocCount = 0;
@@ -1179,19 +1253,27 @@ class CompilerScope {
 		return null;
 	}
 	
-	addParameter(varName, varType, isCtx, offset) {
-		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, offset, varType.isRef);
+	addParameter(varName, varType, isCtx) {
+		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, 0, varType.isRef);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
-		return newVar;	
+		return newVar;
 	}
-
+	
+	endAddParameter() {
+		let currentOffset = -4;
+		for (let i = this.parameterCount - 1; i >= 0; i--) {
+			currentOffset = currentOffset - this.parameters[i].varType.slotCount();
+			this.parameters[i].offset = currentOffset;
+		}
+	}
 
 	addVariable(varName, varType, isConst) {
 		let isWithStat = varType.isRef && this.parent !== null;
-		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableCount, isWithStat);
+		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableOffset, isWithStat);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
+		this.variableOffset += varType.slotCount();
 		return newVar;	
 	}
 	
@@ -1432,6 +1514,9 @@ class Compiler {
 				if (fieldType === EVAL_TYPE_ANY) {
 					return EvalError.wrongType(fieldType, "not any").fromExpr(expr.fields[i].fieldType);					
 				}
+				if (fieldType.slotCount() > 1) {
+					return EvalError.todo("Manage multi slot types in record").fromExpr(expr.fields[i].fieldType);
+				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
 			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
@@ -1445,6 +1530,9 @@ class Compiler {
 				}
 				if (type === EVAL_TYPE_ANY) {
 					return EvalError.wrongType(type, "not any").fromExpr(expr.types[i]);					
+				}
+				if (type.slotCount() > 1) {
+					return EvalError.todo("Manage multi slot types in variant").fromExpr(expr.types[i]);
 				}
 				if (type.tag === "res-type-variant") {
 					return EvalError.cantNestVariant(type.typeKey()).fromExpr(expr.types[i]);
@@ -1460,6 +1548,20 @@ class Compiler {
 					return -1;
 			});			
 			return this.context.addType(new EvalTypeVariant(expr.typeCount, types));
+		}
+		if (expr.tag === "ast-type-tuple") {
+			let types = [];
+			for (let i = 0; i < expr.typeCount; i++) {
+				let type = this.evalType(expr.types[i]);
+				if (type.isError()) {
+					return type;
+				}
+				if (type === EVAL_TYPE_ANY) {
+					return EvalError.wrongType(type, "not any").fromExpr(expr.types[i]);					
+				}
+				types[i] = type;
+			}
+			return this.context.addType(new EvalTypeTuple(expr.typeCount, types));
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
@@ -1486,14 +1588,28 @@ class Compiler {
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-variable-declaration") {
-			if (this.scope.getLocalVariable(expr.varName) !== null) {
-				return EvalError.variableAlreadyExists(expr.varName).fromExpr(expr);
+			for (let i = 0; i < expr.varNameCount; i++) {
+				if (this.scope.getLocalVariable(expr.varNames[i]) !== null) {
+					return EvalError.variableAlreadyExists(expr.varNames[i]).fromExpr(expr);
+				}
 			}
 			let initValueType = this.eval(expr.valueExpr);
 			if (initValueType.isError()) {
 				return initValueType;
 			}
-			this.scope.addVariable(expr.varName, initValueType, expr.isConst);
+			if (expr.varNameCount === 1) {
+				this.scope.addVariable(expr.varNames[0], initValueType, expr.isConst);
+				return EVAL_RESULT_OK;
+			}
+			if (initValueType.tag !== "res-type-tuple") {
+				return EvalError.wrongType(initValueType, "tuple").fromExpr(expr.valueExpr);
+			}					
+			if (expr.varNameCount !== initValueType.typeCount) {
+				return EvalError.tupleSizeMismatch(expr.varNameCount, initValueType.typeCount).fromExpr(expr.valueExpr);
+			}
+			for (let i = 0; i < expr.varNameCount; i++) {
+				this.scope.addVariable(expr.varNames[i], initValueType.types[i], expr.isConst);
+			}
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-assign") {
@@ -1526,6 +1642,54 @@ class Compiler {
 					variable.stat.addReset();
 				}
 				return EVAL_RESULT_OK;
+			}
+			if (expr.left.tag === "ast-value-tuple") {
+				let tupleExpr = expr.left;
+				let variables = [];
+				for (let i = 0; i < tupleExpr.itemCount; i++) {
+					if (tupleExpr.items[i].tag !== "ast-variable") {
+						return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
+					}
+					let varName = tupleExpr.items[i].varName;
+					let variable = this.scope.getVariable(varName);
+					if (variable === null) {
+						return EvalError.unknownVariable(varName).fromExpr(expr.left);
+					}
+					if (variable.isConst) {
+						return EvalError.cantMutateConst(varName).fromExpr(expr.left);
+					}
+					variables[i] = variable;					
+				}
+				// evaluate the value
+				let valueType = this.eval(expr.right);
+				if (valueType.isError()) {
+					return valueType;
+				}
+				if (valueType.tag !== "res-type-tuple") {
+					return EvalError.wrongType(valueType, "tuple").fromExpr(expr.right);
+				}					
+				if (tupleExpr.itemCount !== valueType.typeCount) {
+					return EvalError.tupleSizeMismatch(tupleExpr.itemCount, valueType.typeCount).fromExpr(expr.right);
+				}
+				for (let i = 0; i < tupleExpr.itemCount; i++) {
+					if (valueType.types[i] !== variables[i].varType) {
+						return EvalError.wrongType(valueType.types[i], variables[i].varType.typeKey()).fromExpr(expr.right);					
+					}
+				}
+				// assign the value
+				for (let i = tupleExpr.itemCount - 1; i >= 0; i--) {
+					if (variables[i].isCtx) {
+						this.codeBlock.codePopIndirect(variables[i].offset);
+					} else if (variables[i].isGlobal) {
+						this.codeBlock.codePopGlobal(variables[i].offset);
+					} else {
+						this.codeBlock.codePopLocal(variables[i].offset);
+					}
+					if (variables[i].stat !== null) {
+						variables[i].stat.addReset();
+					}
+				}
+				return EVAL_RESULT_OK;				
 			}
 			if (expr.left.tag === "ast-index") {
 				let indexExpr = expr.left;
@@ -1621,17 +1785,8 @@ class Compiler {
 				}
 			}
 			if (ret === EVAL_RESULT_OK) {
-				if (this.scope.variableCount > 0) {
-					this.codeBlock.codePopVoid(this.scope.variableCount);
-				}
-			}
-			for (let i = 0; i < this.scope.variableCount; i++) {
-				let v = this.scope.variables[i];
-				for (let k = 0; k < v.valueCount; k++) {
-					let offset = v.lastReadOffsets[k];
-					if (offset !== -1) {
-						this.codeBlock.codes[offset] = PUSH_LOCAL_MOVE;
-					}
+				if (this.scope.variableOffset > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 			}
 			this.popScope();
@@ -1725,8 +1880,8 @@ class Compiler {
 				ret = EVAL_RESULT_OK;
 			}
 			if (ret === EVAL_RESULT_OK) {
-				if (this.scope.variableCount > 0) {
-					this.codeBlock.codePopVoid(this.scope.variableCount);
+				if (this.scope.variableOffset > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 			}
 			this.popScope();			
@@ -1917,7 +2072,9 @@ class Compiler {
 				for (let i = 0; i < this.scope.exitLocCount; i++) {
 					this.codeBlock.setLoc(this.scope.exitLocs[i]);
 				}
-				this.codeBlock.codePopVoid(this.scope.variableCount);
+				if (this.scope.variableOffset > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableOffset);
+				}
 				this.popScope();
 				return EVAL_RESULT_OK;
 			} else {
@@ -1997,7 +2154,9 @@ class Compiler {
 				for (let i = 0; i < this.scope.exitLocCount; i++) {
 					this.codeBlock.setLoc(this.scope.exitLocs[i]);
 				}
-				this.codeBlock.codePopVoid(this.scope.variableCount);
+				if (this.scope.variableOffset > 0) {
+					this.codeBlock.codePopVoid(this.scope.variableOffset);
+				}
 				this.popScope();
 				return EVAL_RESULT_OK;
 			}
@@ -2005,16 +2164,18 @@ class Compiler {
 		}
 		if (expr.tag === "ast-exit") {
 			let currentScope = this.scope;
-			let variableCount = 0;
+			let variableOffset = 0;
 			while (currentScope !== null && currentScope.isLoop == false) {
-				variableCount += currentScope.variableCount;
+				variableOffset += currentScope.variableOffset;
 				currentScope = currentScope.parent; 
 			}
 			if (currentScope === null) {
 				return EvalError.unexpectedExit().fromExpr(expr);
 			}
 			if (expr.condition === null) {
-				this.codeBlock.codePopVoid(variableCount);
+				if (variableOffset > 0) {
+					this.codeBlock.codePopVoid(variableOffset);
+				}
 				currentScope.exitLocs[currentScope.exitLocCount] = this.codeBlock.codeJmp(0);
 				currentScope.exitLocCount++;
 			} else {
@@ -2026,7 +2187,9 @@ class Compiler {
 					return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
 				}
 				let falseLoc = this.codeBlock.codeJz(0);
-				this.codeBlock.codePopVoid(variableCount);
+				if (variableOffset > 0) {
+					this.codeBlock.codePopVoid(variableOffset);
+				}
 				currentScope.exitLocs[currentScope.exitLocCount] = this.codeBlock.codeJmp(0);
 				currentScope.exitLocCount++;
 				this.codeBlock.setLoc(falseLoc);
@@ -2072,6 +2235,8 @@ class Compiler {
 			}
 			if (retType === null) {
 				this.codeBlock.codeRet();
+			} else if (retType.slotCount() > 1) {
+				this.codeBlock.codeRetTuple(retType.slotCount());
 			} else {
 				this.codeBlock.codeRetVal();
 			}
@@ -2123,22 +2288,23 @@ class Compiler {
 				this.codeBlock = this.context.codeBlocks[codeBlockIndex];
 				evalFunc.codeBlockIndex = codeBlockIndex;
 				this.pushScopeFunction(evalFunc.isGenerator, returnType);
-				for (let i = 0; i < parameterList.parameterCount; i++) {
-					if (evalFunc.isGenerator === true) {
+				if (evalFunc.isGenerator === true) {
+					for (let i = 0; i < parameterList.parameterCount; i++) {
 						this.scope.addVariable(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
 							false
 						);
-					} else {
+					}
+				} else {
+					for (let i = 0; i < parameterList.parameterCount; i++) {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType,
-							parameterList.parameters[i].isCtx,
-							i - parameterList.parameterCount - 4,
-							false
+							parameterList.parameters[i].isCtx
 						);
 					}
+					this.scope.endAddParameter();
 				}
 				let ret = this.evalStatement(expr.statement);
 				if (ret.isError()) {
@@ -2187,9 +2353,9 @@ class Compiler {
 					this.scope.addParameter(
 						parameterList.parameters[i].parameterName,
 						parameterList.parameters[i].parameterType,
-						parameterList.parameters[i].isCtx,
-						i - parameterList.parameterCount - 4
+						parameterList.parameters[i].isCtx
 					);
+					this.scope.endAddParameter();
 				}
 				let ret = this.evalStatement(expr.statement);
 				if (ret.isError()) {
@@ -2204,12 +2370,14 @@ class Compiler {
 		}
 		if (expr.tag === "ast-procedure") {
 			let argTypes = [];
+			let argSlotCount = 0;
 			for (let i = 0; i < expr.argList.argCount; i++) {
 				let argType = this.eval(expr.argList.args[i]);
 				if (argType.isError()) {
 					return argType;
 				}
 				argTypes[i] = argType;
+				argSlotCount += argType.slotCount();
 			}
 			let procKey = expr.procedureName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
@@ -2249,7 +2417,7 @@ class Compiler {
 					return EvalError.unknownProcedure(procKey).fromExpr(expr);
 				}
 			}
-			this.codeBlock.codePush(expr.argList.argCount);
+			this.codeBlock.codePush(argSlotCount);
 			if (proc.nativeIndex !== -1) {
 				this.codeBlock.codeCallNative(proc.nativeIndex);
 			} else {
@@ -2398,6 +2566,17 @@ class Compiler {
 			this.codeBlock.codeCreateString(strId);
 			return EVAL_TYPE_TEXT;
 		}
+		if (expr.tag === "ast-value-tuple") {
+			let itemTypes = [];
+			for (let i = 0; i < expr.itemCount; i++) {
+				let itemType = this.eval(expr.items[i]);
+				if (itemType.isError()) {
+					return itemType;
+				}
+				itemTypes[i] = itemType;
+			}
+			return this.context.addType(new EvalTypeTuple(expr.itemCount, itemTypes));
+		}
 		if (expr.tag === "ast-value-array") {
 			if (expr.itemCount === 0) {
 				return EvalError.emptyArrayMustBeTyped().fromExpr(expr);
@@ -2463,7 +2642,7 @@ class Compiler {
 				if (leftType.isError()) {
 					return leftType;
 				}
-				if (leftType !== EVAL_TYPE_TEXT && leftType.tag !== "res-type-array") {
+				if (leftType.structuralType() !== EVAL_TYPE_TEXT && leftType.structuralType().tag !== "res-type-array") {
 					return EvalError.wrongType(leftType, "text or array").fromExpr(expr.left);
 				}
 				let rightType = this.eval(expr.right);
@@ -2474,9 +2653,9 @@ class Compiler {
 					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
 				this.codeBlock.codePush(2);
-				if (leftType === EVAL_TYPE_TEXT) {
+				if (leftType.structuralType() === EVAL_TYPE_TEXT) {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
-				} else if (leftType.underlyingType.isRef === false) {
+				} else if (leftType.structuralType().underlyingType.isRef === false) {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat_basic_array(ref,ref)").nativeIndex)
 				} else {
 					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
@@ -2625,13 +2804,16 @@ class Compiler {
 				if (rightType !== leftType) {
 					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
-				if (rightType.isRef) {
-					this.codeBlock.codeEqRef();
+				if (rightType.slotCount() > 1) {
+					this.codeBlock.codeEqTuple(rightType.slotCount());
 					if (expr.operator === TOK_NE) {
 						this.codeBlock.codeNot();
 					}
 				} else if (rightType.isRef) {
-					return EvalError.wrongType(rightType, "comparable type").fromExpr(expr.right);
+					this.codeBlock.codeEqRef();
+					if (expr.operator === TOK_NE) {
+						this.codeBlock.codeNot();
+					}
 				} else {
 					if (leftType === EVAL_TYPE_REAL) {
 						if (expr.operator === TOK_EQ) {
@@ -2681,12 +2863,14 @@ class Compiler {
 			if (v === null) {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
 			}
-			if (v.isCtx) {
-				this.codeBlock.codePushIndirect(v.offset);
-			} else if (v.isGlobal) {
-				this.codeBlock.codePushGlobal(v.offset);
-			} else {
-				this.codeBlock.codePushLocal(v.offset);
+			for (let i = 0; i < v.varType.slotCount(); i++) {
+				if (v.isCtx) {
+					this.codeBlock.codePushIndirect(v.offset + i);
+				} else if (v.isGlobal) {
+					this.codeBlock.codePushGlobal(v.offset + i);
+				} else {
+					this.codeBlock.codePushLocal(v.offset + i);
+				}
 			}
 			if (v.stat !== null) {
 				v.stat.addReadLoc(this.codeBlock.currentLoc() - 1, expr);
@@ -2768,12 +2952,14 @@ class Compiler {
 		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
+			let argSlotCount = 0;
 			for (let i = 0; i < expr.argList.argCount; i++) {
 				let argType = this.eval(expr.argList.args[i]);
 				if (argType.isError()) {
 					return argType;
 				}
 				argTypes[i] = argType;
+				argSlotCount += argType.slotCount();
 			}
 			let funcKey = expr.functionName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
@@ -2813,7 +2999,7 @@ class Compiler {
 					return EvalError.unknownFunction(funcKey).fromExpr(expr);
 				}
 			}
-			this.codeBlock.codePush(expr.argList.argCount);
+			this.codeBlock.codePush(argSlotCount);
 			if (func.nativeIndex !== -1) {
 				this.codeBlock.codeCallNative(func.nativeIndex);
 			} else if (func.isGenerator === true) {

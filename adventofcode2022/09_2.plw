@@ -2007,37 +2007,37 @@ type point {
 };
 
 type world {
-	head_pos point,
-	tail_pos point,
+	pos [point],
 	tail_visited [point]
 };
 
 var world := {
-	head_pos: {x: 0, y: 0} as point,
-	tail_pos: {x: 0, y: 0} as point,
-	tail_visited: [] as [point]
+	pos: {x: 0, y: 0} as point ** 10,
+	tail_visited: [{x: 0, y: 0} as point]
 } as world;
 
-procedure move(ctx world world, dx integer, dy integer) begin
-	world.head_pos.x := world.head_pos.x + dx;
-	world.head_pos.y := world.head_pos.y + dy;
-	if world.head_pos.x > world.tail_pos.x + 1 then
-		world.tail_pos.x := world.tail_pos.x + 1;
-		world.tail_pos.y := world.head_pos.y;
-	elsif world.head_pos.x < world.tail_pos.x - 1 then
-		world.tail_pos.x := world.tail_pos.x - 1;
-		world.tail_pos.y := world.head_pos.y;
+function move(world world, dx integer, dy integer) world begin
+	world.pos[0].x := world.pos[0].x + dx;
+	world.pos[0].y := world.pos[0].y + dy;
+	for i in 1 .. last_index(world.pos) loop
+		if abs(world.pos[i - 1].x - world.pos[i].x) > 1 or
+		   abs(world.pos[i - 1].y - world.pos[i].y) > 1
+		then
+			if world.pos[i - 1].x = world.pos[i].x then
+				world.pos[i].y := world.pos[i].y + case when world.pos[i - 1].y > world.pos[i].y then 1 else -1 end;
+			elsif world.pos[i - 1].y = world.pos[i].y then
+				world.pos[i].x := world.pos[i].x + case when world.pos[i - 1].x > world.pos[i].x then 1 else -1 end;
+			else
+				world.pos[i].y := world.pos[i].y + case when world.pos[i - 1].y > world.pos[i].y then 1 else -1 end;
+				world.pos[i].x := world.pos[i].x + case when world.pos[i - 1].x > world.pos[i].x then 1 else -1 end;
+			end if;
+		end if;
+	end loop;
+	var tail_pos := world.pos[last_index(world.pos)];
+	if not (tail_pos in world.tail_visited) then
+		world.tail_visited := world.tail_visited || [tail_pos];
 	end if;
-	if world.head_pos.y > world.tail_pos.y + 1 then
-		world.tail_pos.y := world.tail_pos.y + 1;
-		world.tail_pos.x := world.head_pos.x;
-	elsif world.head_pos.y < world.tail_pos.y - 1 then
-		world.tail_pos.y := world.tail_pos.y - 1;
-		world.tail_pos.x := world.head_pos.x;
-	end if;
-	if not (world.tail_pos in world.tail_visited) then
-		world.tail_visited := world.tail_visited || [world.tail_pos];
-	end if;
+	return world;
 end move;
 
 var nl := '
@@ -2052,14 +2052,14 @@ for i in 0 .. last_index(lines) loop
 		var dx := case dir when 'R' then 1 when 'L' then -1 else 0 end;
 		var dy := case dir when 'U' then -1 when 'D' then 1 else 0 end;
 		for j in 1 .. count loop
-			move(ctx world, dx, dy);	
+			world := move(world, dx, dy);	
 		end loop;
 	end if;
 end loop;
 
 print(text(length(world.tail_visited)));
 
-if length(world.tail_visited) = 6266 then
+if length(world.tail_visited) = 2369 then
 	print('Correct');
 else
 	print('Error');

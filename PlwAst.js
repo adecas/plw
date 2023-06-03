@@ -65,6 +65,14 @@ class AstValueArray extends AstNode {
 	}
 }
 
+class AstValueTuple extends AstNode {
+	constructor(itemCount, items) {
+		super("ast-value-tuple");
+		this.itemCount = itemCount;
+		this.items = items;
+	}
+}
+
 class AstValueRecordField extends AstNode {
 	constructor(fieldName, valueExpr) {
 		super("ast-value-record-field");
@@ -94,6 +102,14 @@ class AstTypeRecord extends AstNode {
 		super("ast-type-record");
 		this.fieldCount = fieldCount;
 		this.fields = fields;
+	}
+}
+
+class AstTypeTuple extends AstNode {
+	constructor(typeCount, types) {
+		super("ast-type-tuple");
+		this.typeCount = typeCount;
+		this.types = types;
 	}
 }
 
@@ -131,9 +147,10 @@ class AstOperatorUnary extends AstNode {
 }
 
 class AstVariableDeclaration extends AstNode {
-	constructor(varName, valueExpr, isConst) {
+	constructor(varNameCount, varNames, valueExpr, isConst) {
 		super("ast-variable-declaration");
-		this.varName = varName;
+		this.varNameCount = varNameCount;
+		this.varNames = varNames;
 		this.valueExpr = valueExpr;
 		this.isConst = isConst;
 	}
@@ -285,7 +302,7 @@ class AstFunctionDeclaration extends AstNode {
 		this.returnType = returnType;
 		this.statement = statement;
 		this.isGenerator = isGenerator;
-	} 
+	}
 }
 
 class AstProcedureDeclaration extends AstNode {

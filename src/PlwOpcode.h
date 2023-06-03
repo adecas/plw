@@ -75,6 +75,8 @@
 #define PLW_OPCODE_INIT_GENERATOR							66
 #define PLW_OPCODE_CREATE_EXCEPTION_HANDLER					67
 #define PLW_OPCODE_PUSHF									68
+#define PLW_OPCODE_EQ_TUPLE									69
+#define PLW_OPCODE_RET_TUPLE								70
 
 extern const char * const PlwOpcodes[];
 

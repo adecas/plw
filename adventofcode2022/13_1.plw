@@ -465,30 +465,33 @@ function text(node_id integer, nodes [node]) text begin
 	end;
 end text; 
 
-procedure skip_blank(t text, ctx pos integer) begin
+function skip_blank(t text, pos integer) integer begin
 	while char_at(t, pos) = char_at(' ', 0) loop
 		pos := pos + 1;
 	end loop;
+	return pos;
 end skip_blank;
 
 
-function parse_node(ctx nodes [node], t text, ctx pos integer) integer begin
-	skip_blank(t, ctx pos);
+function parse_node(nodes [node], t text, pos integer) (nodes [node], pos integer, item integer) begin
+	pos := skip_blank(t, pos);
 	if char_at(t, pos) = char_at('[', 0) then
 		pos := pos + 1;
-		skip_blank(t, ctx pos);
+		pos := skip_blank(t, pos);
 		var list := [] as [integer];
 		while char_at(t, pos) <> char_at(']', 0) loop
-			list := list || [parse_node(ctx nodes, t, ctx pos)];
-			skip_blank(t, ctx pos);
+			var item := 0;
+			(nodes, pos, item) := parse_node(nodes, t, pos);
+			list := list || [item];
+			pos := skip_blank(t, pos);
 			if char_at(t, pos) = char_at(',', 0) then
 				pos := pos + 1;
-				skip_blank(t, ctx pos);
+				pos := skip_blank(t, pos);
 			end if;
 		end loop;
 		nodes := nodes || [list as node];
 		pos := pos + 1;
-		return last_index(nodes);
+		return (nodes, pos, last_index(nodes));
 	end if;
 	var end_pos := pos;
 	while char_code(t, end_pos) >= char_code('0', 0) and
@@ -498,15 +501,17 @@ function parse_node(ctx nodes [node], t text, ctx pos integer) integer begin
 	end loop;
 	nodes := nodes || [integer(subtext(t, pos, end_pos - pos)) as node];
 	pos := end_pos;
-	return last_index(nodes);
+	return (nodes, pos, last_index(nodes));
 end parse_node;
 
-function parse_node(t text, ctx nodes [node]) integer begin
+function parse_node(t text, nodes [node]) (nodes [node], item integer) begin
 	var pos := 0;
-	return parse_node(ctx nodes, t, ctx pos);
+	var item := 0;
+	(nodes, pos, item) := parse_node(nodes, t, pos);
+	return (nodes, item);
 end parse_node;
 
-function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
+function compare_node(n1 integer, n2 integer, nodes [node]) integer begin
 	kindof nodes[n1]
 	when integer v1 then
 		kindof nodes[n2]
@@ -514,18 +519,18 @@ function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
 			return v1 - v2;
 		when [integer] l2 then
 			nodes := nodes || [[n1] as node];
-			return compare_node(last_index(nodes), n2, ctx nodes);
+			return compare_node(last_index(nodes), n2, nodes);
 		end;
 	when [integer] l1 then
 		kindof nodes[n2]
 		when integer v2 then
-			return -compare_node(n2, n1, ctx nodes);
+			return -compare_node(n2, n1, nodes);
 		when [integer] l2 then
 			var last1 := last_index(l1);
 			var last2 := last_index(l2);
 			var min_last := case when last1 < last2 then last1 else last2 end;
 			for i in 0 .. min_last loop
-				 var c := compare_node(l1[i], l2[i], ctx nodes);
+				 var c := compare_node(l1[i], l2[i], nodes);
 				 if c <> 0 then
 				 	return c;
 				 end if;
@@ -543,9 +548,11 @@ var pairnum := 1;
 var sum := 0;
 while i < length(lines) loop
 	var nodes := [] as [node];
-	var n1 := parse_node(lines[i], ctx nodes);
-	var n2 := parse_node(lines[i + 1], ctx nodes);
-	var order := compare_node(n1, n2, ctx nodes);
+	var n1 := 0;
+	(nodes, n1) :=  parse_node(lines[i], nodes);
+	var n2 := 0;
+	(nodes, n2) := parse_node(lines[i + 1], nodes);
+	var order := compare_node(n1, n2, nodes);
 	if order <= 0 then
 		sum := sum + pairnum;
 	end if;

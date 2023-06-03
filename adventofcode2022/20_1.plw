@@ -5012,22 +5012,18 @@ input := '
 ';
 
 
-
 var nums := [] as [integer];
 
 for line in split(input, '
 ') loop
 	if length(line) > 0 then
-		nums := nums || [integer(line) * 811589153];
+		nums := nums || [integer(line)];
 	end if;
 end loop;
 
-var orig_order := 0 ** length(nums);
-for i in 0 .. last_index(nums) loop
-	orig_order[i] := i;
-end loop;
+var moved := false ** length(nums);
 
-procedure move(ctx a [integer], s integer, d integer) begin
+function move(a [integer], s integer, d integer) [integer] begin
 	if d < s then
 		var t := a[s];
 		for i in reverse d + 1 .. s loop
@@ -5041,9 +5037,10 @@ procedure move(ctx a [integer], s integer, d integer) begin
 		end loop;
 		a[d] := t;  
 	end if;
+	return a;
 end move;
 
-procedure move(ctx a [boolean], s integer, d integer) begin
+function move(a [boolean], s integer, d integer) [boolean] begin
 	if d < s then
 		var t := a[s];
 		for i in reverse d + 1 .. s loop
@@ -5057,31 +5054,26 @@ procedure move(ctx a [boolean], s integer, d integer) begin
 		end loop;
 		a[d] := t;  
 	end if;
+	return a;
 end move;
 
-print(text(nums));
-
-for round in 1 .. 10 loop
-	for i in 0 .. last_index(orig_order) loop
-		var s := index_of(i, orig_order);
-		if nums[s] <> 0 then
-			var d := s + nums[s];
-			if d <= 0 then
-				d := (d % (length(nums) - 1)) + length(nums) - 1;
-			elsif d >= length(nums) then
-				d := d % (length(nums) - 1);
-				if d = 0 then
-					d := length(nums) - 1;
-				end if;
-			end if;
-			move(ctx nums, s, d);
-			move(ctx orig_order, s, d);
-		end if;
-		# print('nums ' || text(i) || ': ' || text(nums) || ', orig_order; ' || text(orig_order));
-		# var c := get_char();
+while true loop
+	var s := index_of(false, moved);
+	exit when s = -1;
+	var d := s + nums[s];
+	while d <= 0 loop
+		d := d + length(nums) - 1;
 	end loop;
+	while d >= length(nums) loop
+		d := d - length(nums) + 1;
+	end loop;
+	#print('s: ' || text(s) || ', d: ' || text(d));
+	nums := move(nums, s, d);
+	moved := move(moved, s, d);
+	moved[d] := true;
 	# print(text(nums));
-	# print(text(orig_order));
+	# print(text(moved));
+	#var c := get_char();
 end loop;
 
 var zp := index_of(0, nums);
@@ -5091,7 +5083,7 @@ var c3 := nums[(zp + 3000) % length(nums)];
 print('c1 ' || text(c1) || ' c2 ' || text(c2) || ' c3 ' || text(c3));
 print('sum ' || text(c1 + c2 + c3));
 
-if c1 + c2 + c3 = 656575624777 then
+if c1 + c2 + c3 = 8302 then
 	print('Correct');
 else
 	print('Error');

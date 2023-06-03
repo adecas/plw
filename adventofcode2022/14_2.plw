@@ -181,24 +181,24 @@ var width := max_x - min_x + 1;
 var height := max_y + 1;
 var map := false ** width ** height;
 
-procedure draw_horizontal(y integer, x1 integer, x2 integer, ctx map [[boolean]]) begin
+function draw_horizontal(y integer, x1 integer, x2 integer, map [[boolean]]) [[boolean]] begin
 	if x1 > x2 then
-		draw_horizontal(y, x2, x1, ctx map);
-		return;
+		return draw_horizontal(y, x2, x1, map);
 	end if;
 	for x in x1 .. x2 loop
 		map[y][x] := true;
 	end loop;
+	return map;
 end draw_horizontal;
 
-procedure draw_vertical(x integer, y1 integer, y2 integer, ctx map [[boolean]]) begin
+function draw_vertical(x integer, y1 integer, y2 integer, map [[boolean]]) [[boolean]] begin
 	if y1 > y2 then
-		draw_vertical(x, y2, y1, ctx map);
-		return;
+		return draw_vertical(x, y2, y1, map);
 	end if;
 	for y in y1 .. y2 loop
 		map[y][x] := true;
 	end loop;
+	return map;
 end draw_vertical;
 
 for line in split(input, nl) loop
@@ -211,9 +211,9 @@ for line in split(input, nl) loop
 			var y := integer(nums[1]);
 			if last_x <> - 1 then
 				if x = last_x then
-					draw_vertical(x - min_x, last_y, y, ctx map);
+					map := draw_vertical(x - min_x, last_y, y, map);
 				else
-					draw_horizontal(y, last_x - min_x, x - min_x, ctx map);
+					map := draw_horizontal(y, last_x - min_x, x - min_x, map);
 				end if;
 			end if;
 			last_x := x;
@@ -222,7 +222,7 @@ for line in split(input, nl) loop
 	end if;
 end loop;
 
-draw_horizontal(height - 1, 0, width - 1, ctx map);
+map := draw_horizontal(height - 1, 0, width - 1, map);
 
 procedure print_map(map [[boolean]]) begin
 	for y in 0 .. last_index(map) loop

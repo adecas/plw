@@ -67,6 +67,8 @@ const char * const PlwOpcodes[] = {
 	"CALL_NATIVE",
 	"INIT_GENERATOR",
 	"CREATE_EXCEPTION_HANDLER",
-	"PUSHF"
+	"PUSHF",
+	"EQ_TUPLE",
+	"RET_TUPLE"
 };
 

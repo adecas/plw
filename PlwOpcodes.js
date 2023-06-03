@@ -75,6 +75,8 @@ const OPCODE_CALL_NATIVE								= 65;
 const OPCODE_INIT_GENERATOR								= 66;
 const OPCODE_CREATE_EXCEPTION_HANDLER					= 67;
 const OPCODE_PUSHF										= 68;
+const OPCODE_EQ_TUPLE									= 69;
+const OPCODE_RET_TUPLE									= 70;
 
 const PLW_OPCODES = [
 	"",
@@ -145,6 +147,8 @@ const PLW_OPCODES = [
 	"CALL_NATIVE",
 	"INIT_GENERATOR",
 	"CREATE_EXCEPTION_HANDLER",
-	"PUSHF"
+	"PUSHF",
+	"EQ_TUPLE",
+	"RET_TUPLE"
 ];
 

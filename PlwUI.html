@@ -325,6 +325,41 @@ else
 end if;
 </pre>
 
+<p id="snippet-tuple-title" class="snippet">Tuple</p>
+<pre id="snippet-tuple">
+var a := (1, 2);
+var (b, c) := a;
+print(text(b));
+print(text(c));
+(b, c) := (42, 51);
+print(text(b));
+print(text(c));
+if (b, c) = (42, 51) then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+function swap(a integer, b integer) (a integer, b integer) begin
+	return (b, a);
+end swap;
+(b, c) := swap(b, c);
+if (b, c) = (51, 42) then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+function swap2(t (a text, b text)) (a text, b text) begin
+	var (a, b) := t;
+	return (b, a);
+end swap2;
+var (d, e) := swap2((text(b), text(c)));
+if d = '42' and e = '51' then
+  print('Good');
+else
+  print('Alternalte reality');
+end if;
+</pre>
+
 <p id="snippet-context-param-title" class="snippet">Context Parameter</p>
 <pre id="snippet-context-param">
 var id := 42;

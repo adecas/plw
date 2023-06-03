@@ -465,30 +465,33 @@ function text(node_id integer, nodes [node]) text begin
 	end;
 end text; 
 
-procedure skip_blank(t text, ctx pos integer) begin
+function skip_blank(t text, pos integer) integer begin
 	while char_at(t, pos) = char_at(' ', 0) loop
 		pos := pos + 1;
 	end loop;
+	return pos;
 end skip_blank;
 
 
-function parse_node(ctx nodes [node], t text, ctx pos integer) integer begin
-	skip_blank(t, ctx pos);
+function parse_node(nodes [node], t text, pos integer) (nodes [node], pos integer) begin
+	pos := skip_blank(t, pos);
 	if char_at(t, pos) = char_at('[', 0) then
 		pos := pos + 1;
-		skip_blank(t, ctx pos);
+		pos := skip_blank(t, pos);
 		var list := [] as [integer];
 		while char_at(t, pos) <> char_at(']', 0) loop
-			list := list || [parse_node(ctx nodes, t, ctx pos)];
-			skip_blank(t, ctx pos);
+			var item := 0;
+			(nodes, pos) := parse_node(nodes, t, pos);
+			list := list || [last_index(nodes)];
+			pos := skip_blank(t, pos);
 			if char_at(t, pos) = char_at(',', 0) then
 				pos := pos + 1;
-				skip_blank(t, ctx pos);
+				pos := skip_blank(t, pos);
 			end if;
 		end loop;
 		nodes := nodes || [list as node];
 		pos := pos + 1;
-		return last_index(nodes);
+		return (nodes, pos);
 	end if;
 	var end_pos := pos;
 	while char_code(t, end_pos) >= char_code('0', 0) and
@@ -498,15 +501,16 @@ function parse_node(ctx nodes [node], t text, ctx pos integer) integer begin
 	end loop;
 	nodes := nodes || [integer(subtext(t, pos, end_pos - pos)) as node];
 	pos := end_pos;
-	return last_index(nodes);
+	return (nodes, pos);
 end parse_node;
 
-function parse_node(t text, ctx nodes [node]) integer begin
+function parse_node(nodes [node], t text) [node] begin
 	var pos := 0;
-	return parse_node(ctx nodes, t, ctx pos);
+	(nodes, pos) := parse_node(nodes, t, 0);
+	return nodes;
 end parse_node;
 
-function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
+function compare_node(n1 integer, n2 integer, nodes [node]) integer begin
 	kindof nodes[n1]
 	when integer v1 then
 		kindof nodes[n2]
@@ -514,18 +518,18 @@ function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
 			return v1 - v2;
 		when [integer] l2 then
 			nodes := nodes || [[n1] as node];
-			return compare_node(last_index(nodes), n2, ctx nodes);
+			return compare_node(last_index(nodes), n2, nodes);
 		end;
 	when [integer] l1 then
 		kindof nodes[n2]
 		when integer v2 then
-			return -compare_node(n2, n1, ctx nodes);
+			return -compare_node(n2, n1, nodes);
 		when [integer] l2 then
 			var last1 := last_index(l1);
 			var last2 := last_index(l2);
 			var min_last := case when last1 < last2 then last1 else last2 end;
 			for i in 0 .. min_last loop
-				 var c := compare_node(l1[i], l2[i], ctx nodes);
+				 var c := compare_node(l1[i], l2[i], nodes);
 				 if c <> 0 then
 				 	return c;
 				 end if;
@@ -535,12 +539,12 @@ function compare_node(n1 integer, n2 integer, ctx nodes [node]) integer begin
 	end;
 end compare_node;
 
-function lookup(node_id integer, sorted_ids [integer], ctx nodes [node]) integer begin
+function lookup(node_id integer, sorted_ids [integer], nodes [node]) integer begin
 	var begin_pos := 0;
 	var end_pos := last_index(sorted_ids);
 	while end_pos >= begin_pos loop
 		var piv := (begin_pos + end_pos) / 2;
-		var c := compare_node(node_id, sorted_ids[piv], ctx nodes);
+		var c := compare_node(node_id, sorted_ids[piv], nodes);
 		if c = 0 then
 			end_pos := piv;
 			exit;
@@ -554,8 +558,8 @@ function lookup(node_id integer, sorted_ids [integer], ctx nodes [node]) integer
 end lookup;
 
 
-function insert_node(node_id integer, ctx sorted_ids [integer], ctx nodes [node]) integer begin
-	var pos := lookup(node_id, sorted_ids, ctx nodes);
+function insert_node(node_id integer, sorted_ids [integer], nodes [node]) (sorted_ids [integer], pos integer) begin
+	var pos := lookup(node_id, sorted_ids, nodes);
 	if pos = -1 then
 		sorted_ids := [node_id] || sorted_ids;
 	elsif pos = last_index(sorted_ids) then
@@ -563,7 +567,7 @@ function insert_node(node_id integer, ctx sorted_ids [integer], ctx nodes [node]
 	else
 		sorted_ids := sorted_ids[0 .. pos] || [node_id] || sorted_ids[pos + 1 .. last_index(sorted_ids)];
 	end if;
-	return pos + 1;
+	return (sorted_ids, pos + 1);
 end insert_node;
 
 
@@ -573,12 +577,21 @@ var nodes := [] as [node];
 var sorted_ids := [] as [integer];
 for line in split(input, nl) loop
 	if length(line) > 0 then
-		var inserted_pos := insert_node(parse_node(line, ctx nodes), ctx sorted_ids, ctx nodes);
+		var item := 0;
+		nodes := parse_node(nodes, line);
+		var inserted_pos := 0;
+		(sorted_ids, inserted_pos) := insert_node(last_index(nodes), sorted_ids, nodes);
 	end if;
 end loop;
 
-var div1 := insert_node(parse_node('[[2]]', ctx nodes), ctx sorted_ids, ctx nodes) + 1;
-var div2 := insert_node(parse_node('[[6]]', ctx nodes), ctx sorted_ids, ctx nodes) + 1;
+nodes := parse_node(nodes, '[[2]]'); 
+var div1 := 0;
+(sorted_ids, div1) := insert_node(last_index(nodes), sorted_ids, nodes);
+div1 := div1 + 1;
+nodes := parse_node(nodes, '[[6]]');
+var div2 := 0;
+(sorted_ids, div2) := insert_node(last_index(nodes), sorted_ids, nodes);
+div2 := div2 + 1;
 
 print(text(div1 * div2));
 

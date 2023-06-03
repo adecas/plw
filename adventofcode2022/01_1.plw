@@ -1751,7 +1751,7 @@ var input := [[4514,
 1331,
 3420]];
 
-function find_max_total(aa [[integer]]) {index integer, total integer} begin
+function find_max_total(aa [[integer]]) (index integer, total integer) begin
     var index := -1;
     var max_total := 0;
     for i in 0 .. length(aa) - 1 loop
@@ -1765,14 +1765,14 @@ function find_max_total(aa [[integer]]) {index integer, total integer} begin
             max_total := total;
         end if;
     end loop;
-    return {index: index, total: max_total};
+    return (index, max_total);
 end find_max_total;
 
-var m := find_max_total (input);
+var (index, total) := find_max_total (input);
 
-print('index ' || text(m.index) || ', total ' || text(m.total));
+print('index ' || text(index) || ', total ' || text(total));
 
-if m.index = 126 and m.total = 66487 then
+if index = 126 and total = 66487 then
 	print('Correct');
 else
 	print('Wrong');

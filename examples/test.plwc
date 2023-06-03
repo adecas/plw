@@ -1,48 +1,172 @@
-6 1
-6 toto()
+17 5
+20 text_id_to_int(text)
+1
+1 A
+0
+39
+50 -5 46 0 46 2 65 23 60 0 46 0 46 2 65 23 6 46 26 11 50 -5 46 1 46 2 65 23 4 60 0 46 0 46 2 65 23 6 35 
+17 parse_input(text)
 2
-5 hello
-5 world
+1 
+
+1  
+0
+524
+63 0 62 0 50 -5 60 0 46 2 65 27 2 46 1 65 11 46 0 46 0 50 5 50 3 21 43 176 50 2 50 5 31 57 4 50 4 46 1 65 12 46 0 15 43 171 50 4 60 1 
+46 2 65 27 51 1 50 6 46 1 31 46 1 64 0 62 1 46 2 65 32 57 1 50 6 46 4 31 46 5 50 6 46 4 31 46 1 65 12 46 6 6 46 3 65 20 46 1 65 40 
+62 0 50 6 46 1 65 11 46 9 50 10 50 9 21 43 149 51 8 50 6 50 10 31 46 0 46 2 46 3 65 20 46 1 64 0 62 1 46 2 65 32 57 8 46 1 4 45 110 59 
+2 51 0 50 7 51 8 62 0 61 3 63 1 46 2 65 33 57 0 59 3 46 1 4 45 21 59 4 46 0 50 1 46 2 65 14 50 0 46 1 65 11 46 0 50 4 50 3 21 43 
+309 52 0 50 4 32 46 1 46 -1 50 0 46 1 65 10 41 33 52 0 50 4 32 46 1 32 50 4 46 0 33 50 0 50 4 31 46 0 31 46 1 65 9 46 0 50 6 50 5 21 
+43 302 50 0 50 4 31 46 0 31 50 6 31 50 1 46 2 65 14 52 0 50 4 32 46 0 32 50 6 50 7 33 52 0 50 4 32 46 1 32 50 7 46 1 33 59 1 46 1 4 
+45 245 59 2 46 1 4 45 194 59 2 46 1 43 518 46 0 50 0 46 1 65 11 46 0 50 5 50 4 21 43 503 50 0 50 5 31 46 1 31 46 1 65 9 46 0 50 7 50 6 
+21 43 496 50 0 50 5 31 46 1 31 50 7 31 46 -1 29 43 491 50 0 50 7 31 46 1 31 46 1 65 9 46 0 50 9 50 8 21 43 489 50 0 50 7 31 46 1 31 50 9 
+31 46 -1 29 43 484 50 0 50 7 31 46 1 31 50 9 31 50 0 50 5 31 46 1 31 50 7 31 4 50 0 50 5 31 46 1 31 50 9 31 46 -1 26 44 461 50 0 50 5 31 
+46 1 31 50 9 31 50 10 15 45 463 46 1 43 482 52 0 50 5 32 46 1 32 50 9 50 10 33 46 1 57 3 59 1 46 1 4 45 383 59 2 46 1 4 45 346 59 2 46 1 
+4 45 325 59 2 50 3 25 43 514 59 1 45 518 59 1 45 311 51 0 50 2 70 2 
+19 print_nodes([node])
+3
+2 : 
+4  -> 
+7  costs 
+0
+99
+50 -5 46 1 65 11 46 0 50 1 50 0 21 43 96 50 1 46 1 65 4 60 0 46 2 65 19 50 -5 50 1 31 46 2 31 46 1 65 4 46 2 65 19 60 1 46 2 65 19 50 
+-5 50 1 31 46 0 31 46 1 65 16 46 2 65 19 60 2 46 2 65 19 50 -5 50 1 31 46 1 31 46 1 65 16 46 2 65 19 46 1 65 2 46 1 4 45 8 59 2 36 
+16 max_rate([node])
+0
+0
+54
+46 0 50 -5 2 46 1 65 11 46 0 46 0 50 4 50 2 21 43 49 50 1 50 4 31 57 3 50 3 46 2 31 50 0 15 43 44 50 3 46 2 31 57 0 46 1 4 45 13 59 
+4 50 0 35 
+64 eval(integer,integer,integer,integer,[node],[integer],[integer])
+0
+0
+670
+50 -9 46 2 17 43 14 50 -8 46 2 17 45 16 46 0 43 30 46 0 50 -11 62 1 50 -10 62 1 70 3 46 0 50 -7 50 -11 31 46 2 31 46 0 15 43 78 50 -9 46 1 6 
+57 -9 50 0 50 -7 50 -11 31 46 2 31 50 -9 11 4 57 0 52 -7 50 -11 32 46 2 46 0 33 50 -7 50 -10 31 46 2 31 46 0 15 43 124 50 -8 46 1 6 57 -8 50 0 
+50 -7 50 -10 31 46 2 31 50 -8 11 4 57 0 52 -7 50 -10 32 46 2 46 0 33 62 0 62 0 50 -7 46 1 65 11 46 0 50 4 50 3 21 43 251 50 -7 50 4 31 46 2 
+31 46 0 15 43 246 50 -7 50 -11 31 46 1 31 50 4 31 50 5 46 -1 29 43 184 50 5 50 -9 46 1 6 17 45 186 46 0 43 200 51 1 50 4 62 1 46 2 65 32 57 1 
+50 -7 50 -10 31 46 1 31 50 4 31 50 6 46 -1 29 43 228 50 6 50 -8 46 1 6 17 45 230 46 0 43 244 51 2 50 4 62 1 46 2 65 32 57 2 59 2 46 1 4 45 
+136 59 2 50 1 46 1 65 8 46 0 26 43 275 50 2 46 1 65 8 46 0 26 45 277 46 0 43 303 50 0 50 -11 62 1 50 -6 46 2 65 32 50 -10 62 1 50 -5 46 2 65 
+32 70 3 46 0 62 0 62 0 50 1 46 1 65 8 46 0 26 43 407 50 2 2 46 1 65 9 46 0 46 0 50 9 50 7 21 43 403 50 6 50 9 31 57 8 50 -7 50 -10 31 
+46 1 31 50 8 31 50 -11 50 8 46 0 50 -8 50 10 6 50 -7 51 4 62 0 46 7 64 4 50 12 57 4 50 11 50 3 15 43 396 50 11 57 3 50 13 57 5 59 4 46 1 
+4 45 331 59 4 45 643 50 2 46 1 65 8 46 0 26 43 505 50 1 2 46 1 65 9 46 0 46 0 50 9 50 7 21 43 501 50 6 50 9 31 57 8 50 -7 50 -11 31 46 1 
+31 50 8 31 50 8 50 -10 50 -9 50 10 6 46 0 50 -7 62 0 51 5 46 7 64 4 50 13 57 5 50 11 50 3 15 43 494 50 11 57 3 50 12 57 4 59 4 46 1 4 45 
+429 59 4 45 643 50 1 2 46 1 65 9 46 0 46 0 50 9 50 7 21 43 641 50 6 50 9 31 57 8 50 2 2 46 1 65 9 46 0 46 0 50 13 50 11 21 43 634 50 10 
+50 13 31 57 12 50 8 50 12 29 43 629 50 -7 50 -11 31 46 1 31 50 8 31 50 -7 50 -10 31 46 1 31 50 12 31 50 8 50 12 50 -9 50 14 6 50 -8 50 15 6 50 -7 
+62 0 62 0 46 7 64 4 50 16 50 3 15 43 627 50 16 57 3 50 17 57 4 50 18 57 5 59 5 46 1 4 45 541 59 4 46 1 4 45 516 59 4 50 0 50 3 4 50 -11 
+62 1 51 4 46 2 65 32 50 -10 62 1 51 5 46 2 65 32 70 3 
+6 global
+1
+2639 
+Valve OJ has flow rate=0; tunnels lead to valves EW, IG
+Valve BN has flow rate=0; tunnels lead to valves SA, AA
+Valve SA has flow rate=5; tunnels lead to valves QK, LP, ZP, BN, VH
+Valve RL has flow rate=21; tunnel leads to valve AM
+Valve LR has flow rate=19; tunnel leads to valve XZ
+Valve VQ has flow rate=0; tunnels lead to valves OW, IG
+Valve ZK has flow rate=0; tunnels lead to valves EW, WC
+Valve IG has flow rate=16; tunnels lead to valves OJ, VQ
+Valve WC has flow rate=22; tunnels lead to valves VD, ZK
+Valve EW has flow rate=18; tunnels lead to valves OJ, ZK
+Valve FP has flow rate=8; tunnel leads to valve GB
+Valve JF has flow rate=23; tunnel leads to valve VD
+Valve BL has flow rate=0; tunnels lead to valves AA, ZD
+Valve BZ has flow rate=0; tunnels lead to valves QK, JA
+Valve KH has flow rate=0; tunnels lead to valves SJ, FC
+Valve FU has flow rate=0; tunnels lead to valves FC, MH
+Valve ZP has flow rate=0; tunnels lead to valves SA, FC
+Valve DZ has flow rate=0; tunnels lead to valves AA, MH
+Valve RI has flow rate=0; tunnels lead to valves LP, MH
+Valve AE has flow rate=0; tunnels lead to valves FC, AA
+Valve JA has flow rate=4; tunnels lead to valves MM, BZ, JR, ZI, QO
+Valve XP has flow rate=0; tunnels lead to valves ZD, ZI
+Valve GB has flow rate=0; tunnels lead to valves FP, SJ
+Valve AM has flow rate=0; tunnels lead to valves ZD, RL
+Valve MH has flow rate=3; tunnels lead to valves VJ, DZ, JR, FU, RI
+Valve QK has flow rate=0; tunnels lead to valves BZ, SA
+Valve AA has flow rate=0; tunnels lead to valves DZ, CZ, BL, AE, BN
+Valve MJ has flow rate=0; tunnels lead to valves VN, VH
+Valve QO has flow rate=0; tunnels lead to valves CZ, JA
+Valve MM has flow rate=0; tunnels lead to valves FC, JA
+Valve VN has flow rate=17; tunnels lead to valves FV, MJ
+Valve OW has flow rate=0; tunnels lead to valves SJ, VQ
+Valve ZI has flow rate=0; tunnels lead to valves XP, JA
+Valve VJ has flow rate=0; tunnels lead to valves KJ, MH
+Valve KQ has flow rate=0; tunnels lead to valves XZ, KJ
+Valve FC has flow rate=12; tunnels lead to valves ZP, MM, KH, AE, FU
+Valve LP has flow rate=0; tunnels lead to valves SA, RI
+Valve VD has flow rate=0; tunnels lead to valves WC, JF
+Valve JR has flow rate=0; tunnels lead to valves MH, JA
+Valve VH has flow rate=0; tunnels lead to valves SA, MJ
+Valve CZ has flow rate=0; tunnels lead to valves AA, QO
+Valve SJ has flow rate=15; tunnels lead to valves KH, FV, GB, OW
+Valve FV has flow rate=0; tunnels lead to valves VN, SJ
+Valve XZ has flow rate=0; tunnels lead to valves LR, KQ
+Valve KJ has flow rate=9; tunnels lead to valves KQ, VJ
+Valve ZD has flow rate=13; tunnels lead to valves XP, BL, AM
+
+0
+2
+60 0 
+6 global
+0
+0
+2
+47 0 
+6 global
+0
+0
+4
+46 0 65 38 
+6 global
+0
+0
+6
+47 1 46 1 64 1 
+6 global
+0
+0
+6
+47 3 46 1 64 2 
+6 global
+1
+15 Starting node: 
+0
+16
+60 0 47 4 46 1 65 4 46 2 65 19 46 1 65 2 
+6 global
+0
+0
+18
+47 4 47 4 46 26 46 26 47 3 62 0 62 0 46 7 64 4 
+6 global
+2
+8 elapse: 
+3  ms
+0
+27
+60 0 46 0 65 38 47 2 6 46 1 65 4 46 2 65 19 60 1 46 2 65 19 46 1 65 2 
+6 global
+0
+0
+10
+47 5 46 1 65 4 46 1 65 2 
+6 global
+0
+0
+10
+47 6 46 1 65 16 46 1 65 2 
+6 global
+0
+0
+10
+47 7 46 1 65 16 46 1 65 2 
+6 global
+2
+7 Correct
+5 Error
 0
 21
-60 0 51 0 46 1 65 2 60 1 57 0 51 0 46 1 65 2 59 1 36 
-6 global
-2
-5 hello
-5 world
-0
-20
-60 0 48 0 46 1 65 2 60 1 56 0 48 0 46 1 65 2 59 1 
-6 global
-2
-5 Hello
-5 World
-0
-28
-60 0 60 1 46 1 43 20 48 0 46 1 65 2 60 1 56 0 45 26 47 1 46 1 65 2 59 2 
-6 global
-2
-8 Elapsed 
-3  ms
-0
-67
-46 0 65 38 46 0 62 1 46 10000 46 1 50 3 50 2 21 43 36 48 1 47 3 62 1 46 2 65 32 56 1 46 1 4 45 12 59 2 60 0 46 0 65 38 47 0 6 46 1 65 
-4 46 2 65 19 60 1 46 2 65 19 46 1 65 2 59 2 
-6 global
-2
-8 Elapsed 
-3  ms
-0
-71
-46 0 65 38 46 0 62 1 63 1 46 10000 46 1 50 3 50 2 21 43 40 48 1 47 3 62 1 63 1 46 2 65 33 56 1 46 1 4 45 14 59 2 60 0 46 0 65 38 47 0 
-6 46 1 65 4 46 2 65 19 60 1 46 2 65 19 46 1 65 2 59 2 
-6 global
-3
-3 lol
-8 Elapsed 
-3  ms
-0
-63
-46 0 65 38 60 0 46 10000 46 1 50 3 50 2 21 43 32 48 1 60 0 46 2 65 19 56 1 46 1 4 45 10 59 2 60 1 46 0 65 38 47 0 6 46 1 65 4 46 2 65 
-19 60 2 46 2 65 19 46 1 65 2 59 2 
+47 5 46 2416 26 43 15 60 0 46 1 65 2 45 21 60 1 46 1 65 2 
 

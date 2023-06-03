@@ -213,7 +213,9 @@ const CHAR_NONE := char_at(' ', 0);
 const CHAR_FLOOR := char_at('.', 0);
 const CHAR_WALL := char_at('#', 0);
 
-procedure wrap_rotate(face_size integer, ctx x integer, ctx y integer, ctx dx integer, ctx dy integer) begin
+function wrap_rotate(face_size integer, x integer, y integer, dx integer, dy integer)
+	(x integer, y integer, dx integer, dy integer)
+ begin
 	if dy = -1 then
 		y := y + x % face_size;
 		x := x / face_size * face_size + face_size - 1;
@@ -235,9 +237,12 @@ procedure wrap_rotate(face_size integer, ctx x integer, ctx y integer, ctx dx in
 		dy := -1;
 		dx := 0;
 	end if;
+	return (x, y, dx, dy);
 end wrap_rotate;
 
-function wrap(strat text, map [[integer]], face_size integer, ctx x integer, ctx y integer, ctx dx integer, ctx dy integer) boolean begin
+function wrap(strat text, map [[integer]], face_size integer, x integer, y integer, dx integer, dy integer)
+	(ok boolean, x integer, y integer, dx integer, dy integer)
+begin
 	for i in 0 .. length(strat) - 1 loop
 		var s := subtext(strat, i, 1);
 		if s = 'R' then
@@ -262,30 +267,32 @@ function wrap(strat text, map [[integer]], face_size integer, ctx x integer, ctx
 			dy := -dy;
 		else
 			for j in 1 .. integer(s) loop
-				wrap_rotate(face_size, ctx x, ctx y, ctx dx, ctx dy);
+				(x, y, dx, dy) := wrap_rotate(face_size, x, y, dx, dy);
 			end loop;
 		end if;
 		if y < 0 or y >= length(map) or x < 0 or x >= length(map[y]) then
-			return false;
+			return (false, x, y, dx, dy);
 		end if;
 		if map[y][x] = CELL_NONE then
-			return false;
+			return (false, x, y, dx, dy);
 		end if;
 	end loop;
-	return true;		
+	return (true, x, y, dx, dy);
 end wrap;
 
-function step(map [[integer]], face_size integer, ctx x integer, ctx y integer, ctx dx integer, ctx dy integer) boolean begin
+function step(map [[integer]], face_size integer, x integer, y integer, dx integer, dy integer)
+	(ok boolean, x integer, y integer, dx integer, dy integer)
+begin
 	var nx := x + dx;
 	var ny := y + dy;
 	
 	if ny >= 0 and ny < length(map) and nx >= 0 and nx < length(map[ny]) then
 		if map[ny][nx] = CELL_WALL then
-			return false;
+			return (false, x, y, dx, dy);
 		elsif map[ny][nx] = CELL_FLOOR then
 			x := nx;
 			y := ny;
-			return true;
+			return (true, x, y, dx, dy);
 		end if;
 	end if;
 	
@@ -301,27 +308,20 @@ function step(map [[integer]], face_size integer, ctx x integer, ctx y integer, 
 	];
 	
 	for strat in strats loop
-		var nx := x;
-		var ny := y;
-		var ndx := dx;
-		var ndy := dy;
-		if wrap(strat, map, face_size, ctx nx, ctx ny, ctx ndx, ctx ndy) then
+		var (ok, nx, ny, ndx, ndy) := wrap(strat, map, face_size, x, y, dx, dy);
+		if ok then
 			if map[ny][nx] = CELL_WALL then
-				return false;
+				return (false, x, y, dx, dy);
 			elsif map[ny][nx] = CELL_FLOOR then
-				x := nx;
-				y := ny;
-				dx := ndx;
-				dy := ndy;
-				return true;
+				return (true, nx, ny, ndx, ndy);
 			end if;
 		end if;
-	end loop;		
+	end loop;
 	
 	print('x = ' || text(x) || ' y = ' || text(y) || ' dx = ' || text(dx) || ' dy = ' || text(dy));
 	print('error no wrap found');
 	var c := get_char();
-	return false;
+	return (false, x, y, dx, dy);
 end step;
 
 procedure print_map(map [[integer]], x integer, y integer, dx integer, dy integer) begin
@@ -428,7 +428,9 @@ for move in moves loop
 		end if;
 	else
 		for i in 1 .. move loop
-			if not step(map, face_size, ctx pos_x, ctx pos_y, ctx dx, ctx dy) then
+			var ok := false;
+			(ok, pos_x, pos_y, dx, dy) := step(map, face_size, pos_x, pos_y, dx, dy);
+			if not ok then
 				exit;
 			end if;
 		end loop;

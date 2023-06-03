@@ -1039,7 +1039,7 @@ end loop;
 print(text(nbcontain));
 
 if nbcontain = 528 then
-	print('Coorect');
+	print('Correct');
 else
 	print('Error');
 end if;

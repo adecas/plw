@@ -1245,6 +1245,71 @@ class StackMachine {
 		this.sp++;
 		return null;
 	}
+	
+	opcodeEqTuple(count) {
+		if (this.sp < count * 2) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let idx1 = this.sp - 2 * count;
+		let idx2 = this.sp - count;
+		let result = true;
+		for (let i = 0; i < count; i++) {
+			if (this.stackMap[idx1]) {
+				result = this.refMan.compareRefs(this.stack[idx1], this.stack[idx2], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+				this.refMan.decRefCount(this.stack[idx1], this.refManError);
+				if (!this.refManError.hasError()) {
+					this.refMan.decRefCount(this.stack[idx2], this.refManError);
+				}
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+			} else {
+				result = this.stack[idx1] === this.stack[idx2];
+			}
+			if (result === false) {
+				break;
+			}
+			idx1++;
+			idx2++;
+		}
+		this.stack[this.sp - 2 * count] = result ? 1 : 0;
+		this.stackMap[this.sp - 2 * count] = false;
+		this.sp -= 2 * count - 1;
+		return null;
+	}
+	
+	opcodeRetTuple(count) {
+		if (this.bp < 4 || this.bp > this.sp) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let previousBp = this.stack[this.bp - 1];
+		let previousIp = this.stack[this.bp - 2];
+		let previousCodeBlockId = this.stack[this.bp - 3];
+		let argCount = this.stack[this.bp - 4];
+		if (this.bp < 4 + argCount) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		for (let i = this.sp - count - 1; i >= this.bp - 4 - argCount; i--) {
+			if (this.stackMap[i] === true) {
+				this.refMan.decRefCount(this.stack[i], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+			}
+		}
+		for (let i = 0; i < count; i++) {
+			this.stack[this.bp - 4 - argCount + i] = this.stack[this.sp - count + i];
+			this.stackMap[this.bp - 4 - argCount + i] = this.stackMap[this.sp - count + i];
+		}
+		this.sp = this.bp - 4 - argCount + count;
+		this.bp = previousBp;
+		this.codeBlockId = previousCodeBlockId;
+		this.ip = previousIp;
+		return null;
+	}	
 
 	opcode2(code, arg1) {
 		switch(code) {
@@ -1300,6 +1365,10 @@ class StackMachine {
 			return this.opcodeCreateExceptionHandler(arg1);
 		case OPCODE_PUSHF:
 			return this.opcodePushf(arg1);
+		case OPCODE_EQ_TUPLE:
+			return this.opcodeEqTuple(arg1);
+		case OPCODE_RET_TUPLE:
+			return this.opcodeRetTuple(arg1);
 		default:
 			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
 		}

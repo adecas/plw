@@ -539,15 +539,33 @@ class Parser {
 		if (openToken.tag !== TOK_BEGIN_GROUP) {
 			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);			
 		}
-		let groupExpr = this.readExpression();
-		if (Parser.isError(groupExpr)) {
-			return groupExpr;
+		let expr = this.readExpression();
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		if (this.peekToken() !== TOK_SEP) {
+			let closeToken = this.readToken();
+			if (closeToken.tag !== TOK_END_GROUP) {
+				return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);			
+			}
+			return expr;
+		}
+		let exprCount = 1;
+		let exprs = [expr];
+		while (this.peekToken() === TOK_SEP) {
+			this.readToken();
+			expr = this.readExpression();
+			if (Parser.isError(expr)) {
+				return expr;
+			}
+			exprs[exprCount] = expr;
+			exprCount++;			
 		}
 		let closeToken = this.readToken();
 		if (closeToken.tag !== TOK_END_GROUP) {
-			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);			
+			return ParserError.unexpectedToken(closeToken, [TOK_SEP, TOK_END_GROUP]);			
 		}
-		return groupExpr;
+		return new AstValueTuple(exprCount, exprs).fromToken(openToken);
 	}
 	
 	readArrayValue() {
@@ -653,6 +671,9 @@ class Parser {
 		if (this.peekToken() === TOK_BEGIN_ARRAY) {
 			return this.readTypeArray();
 		}
+		if (this.peekToken() === TOK_BEGIN_GROUP) {
+			return this.readTypeTuple();
+		}
 		let typeName = this.readToken();
 		if (typeName.tag === TOK_NULL) {
 			return new AstNull();
@@ -739,6 +760,38 @@ class Parser {
 		return new AstTypeRecord(fieldIndex, fields).fromToken(openToken);		
 	}
 	
+	readTypeTuple() {
+		let openToken = this.readToken();
+		if (openToken.tag !== TOK_BEGIN_GROUP) {
+			return ParserError.unexpectedToken(openToken, [TOK_BEGIN_GROUP]);
+		}
+		let types = [];
+		let typeCount = 0;
+		while (typeCount < 2 || this.peekToken() !== TOK_END_GROUP) {
+			if (typeCount > 0) {
+				let sepToken = this.readToken();
+				if (sepToken.tag !== TOK_SEP) {
+					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
+				}
+			}
+			let fieldName = this.readToken();
+			if (fieldName.tag !== TOK_IDENTIFIER) {
+				return ParserError.unexpectedToken(fieldName, [TOK_IDENTIFIER]);
+			}
+			let typeExpr = this.readType();
+			if (Parser.isError(typeExpr)) {
+				return typeExpr;
+			}
+			types[typeCount] = typeExpr;
+			typeCount++;
+		}
+		let closeToken = this.readToken();
+		if (closeToken.tag !== TOK_END_GROUP) {
+			return ParserError.unexpectedToken(closeToken, [TOK_END_GROUP]);
+		}
+		return new AstTypeTuple(typeCount, types).fromToken(openToken);		
+	}
+		
 	readTypeVariantField() {
 		let fieldName = this.readToken();
 		if (fieldName.tag !== TOK_IDENTIFIER) {
@@ -775,9 +828,33 @@ class Parser {
 		if (varToken.tag !== TOK_VAR && varToken.tag !== TOK_CONST) {
 			return ParserError.unexpectedToken(varToken, [TOK_VAR, TOK_CONST]);
 		}
+		let varNameCount = 0;
+		let varNames = [];
+		let inGroup = false;
+		if (this.peekToken() == TOK_BEGIN_GROUP) {
+			this.readToken();
+			inGroup = true;
+		}
 		let varName = this.readToken();
 		if (varName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER])
+		}
+		varNameCount = 1;
+		varNames = [varName.text];
+		if (inGroup) {
+			while (this.peekToken() === TOK_SEP) {
+				this.readToken();
+				let varName = this.readToken();
+				if (varName.tag !== TOK_IDENTIFIER) {
+					return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER])
+				}
+				varNames[varNameCount] = varName.text;
+				varNameCount++;				
+			}
+			let closeToken = this.readToken();
+			if (closeToken.tag !== TOK_END_GROUP) {
+				return ParserError.unexpectedToken(closeToken, [TOK_SEP, TOK_END_GROUP])
+			}
 		}
 		let assign = this.readToken();
 		if (assign.tag !== TOK_ASSIGN) {
@@ -787,7 +864,7 @@ class Parser {
 		if (Parser.isError(expr)) {
 			return expr;
 		}
-		return new AstVariableDeclaration(varName.text, expr, varToken.tag === TOK_CONST).fromToken(varToken);
+		return new AstVariableDeclaration(varNameCount, varNames, expr, varToken.tag === TOK_CONST).fromToken(varToken);
 	}
 	
 	readIf() {

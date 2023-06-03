@@ -152,7 +152,7 @@ var x := 1;
 var cycle := 0;
 var screen := char_at(' ', 0) ** 40 ** 6;
 
-procedure write_screen(ctx screen [[char]], cycle integer, sx integer) begin
+function write_screen(screen [[char]], cycle integer, sx integer) [[char]] begin
 	var x := cycle % 40;
 	var y := cycle / 40;
 	if x >= sx - 1 and x <= sx + 1 then
@@ -160,6 +160,7 @@ procedure write_screen(ctx screen [[char]], cycle integer, sx integer) begin
 	else
 		screen[y][x] := char_at('.', 0);
 	end if;
+	return screen;
 end write_screen;
 
 var lines := split(input, nl);
@@ -169,13 +170,13 @@ for i in 0 .. last_index(lines) loop
 		var op := subtext(line, 0, 4);
 		if op = 'addx' then
 			var arg := integer(subtext(line, 5));
-			write_screen(ctx screen, cycle, x);
-			write_screen(ctx screen, cycle + 1, x);
+			screen := write_screen(screen, cycle, x);
+			screen := write_screen(screen, cycle + 1, x);
 			cycle := cycle + 2;
 			x := x + arg;
 			# print(text(cycle) || ' ' || text(x));
 		elsif op = 'noop' then
-			write_screen(ctx screen, cycle, x);
+			screen := write_screen(screen, cycle, x);
 			cycle := cycle + 1;
 		end if;
 	end if;

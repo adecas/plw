@@ -60,7 +60,9 @@ function text_id_to_int(t text) integer begin
 	return (char_code(t, 0) - char_code('A', 0)) * 26 + char_code(t, 1) - char_code('A', 0);
 end text_id_to_int;
 
-function parse_input(input text, ctx starting_node_id integer) [node] begin
+function parse_input(input text)
+	(nodes [node], starting_node_id integer)
+begin
 	var nodes := [] as [node];
 	var node_ids := [] as [integer];
 	for line in split(input, '
@@ -77,7 +79,7 @@ function parse_input(input text, ctx starting_node_id integer) [node] begin
 			nodes := nodes || [{value: value, list: list, cost: [] as [integer]} as node];
 		end if;
 	end loop;
-	starting_node_id := index_of(0, node_ids);
+	var starting_node_id := index_of(0, node_ids);
 	for i in 0 .. last_index(nodes) loop
 		nodes[i].cost := -1 ** length(nodes);
 		nodes[i].cost[i] := 0;
@@ -106,7 +108,7 @@ function parse_input(input text, ctx starting_node_id integer) [node] begin
 		end loop;
 		exit when not updated;
 	end loop;
-	return nodes;
+	return (nodes, starting_node_id);
 end parse_input;
 
 procedure print_nodes(nodes [node]) begin
@@ -125,15 +127,15 @@ function max_rate(nodes [node]) integer begin
 	return max_rate;
 end max_rate;
 
-function eval(node_id integer, nbsteps integer, nodes [node], ctx path [integer]) integer begin
+function eval(node_id integer, nbsteps integer, nodes [node])
+	(gain integer, path [integer])
+begin
 	if nbsteps = 2 then
 		# best we can do is open the valve
-		path := [node_id];
-		return nodes[node_id].value;
+		return (nodes[node_id].value, [node_id]);
 	elsif nbsteps < 2 then
-		path := [node_id];
 		# no gain whatever we do
-		return 0;
+		return (0, [node_id]);
 	end if;
 	# eval the gain of opening the valve
 	var gain := 0;
@@ -149,8 +151,7 @@ function eval(node_id integer, nbsteps integer, nodes [node], ctx path [integer]
 		if nodes[i].value > 0 then
 			var cost := nodes[node_id].cost[i];
 			if cost <> -1 and cost < nbsteps - 1 then
-				var next_path := [] as [integer];
-				var next_gain := eval(i, nbsteps - cost, nodes, ctx next_path);
+				var (next_gain, next_path) := eval(i, nbsteps - cost, nodes);
 				if next_gain > max_next_gain then
 					max_next_gain := next_gain;
 					max_path := next_path;
@@ -158,17 +159,16 @@ function eval(node_id integer, nbsteps integer, nodes [node], ctx path [integer]
 			end if;
 		end if;
 	end loop;
-	path := [node_id] || max_path;
-	return gain + max_next_gain;
+	return (gain + max_next_gain, [node_id] || max_path);
 end eval;
 
-var starting_node_id := 0;	 
-var nodes := parse_input(input, ctx starting_node_id);
+var begin_time := now();
+var (nodes, starting_node_id) := parse_input(input);
 print_nodes(nodes);
 print('Starting node: ' || text(starting_node_id));
 
-var path := [] as [integer];
-var total := eval(starting_node_id, 30, nodes, ctx path);
+var (total, path) := eval(starting_node_id, 30, nodes);
+print('elapse: ' || text(now() - begin_time) || ' ms');
 print(text(total));
 print(text(path));
 
