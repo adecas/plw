@@ -1039,11 +1039,6 @@ class Parser {
 	}
 	
 	readParameter(isGenerator) {
-		let isCtx = false;
-		if (isGenerator === false && this.peekToken() == TOK_CTX) {
-			this.readToken();
-			isCtx = true;
-		}
 		let parameterName = this.readToken();
 		if (parameterName.tag !== TOK_IDENTIFIER) {
 			return ParserError.unexpectedToken(parameterName, [TOK_IDENTIFIER])
@@ -1052,7 +1047,7 @@ class Parser {
 		if (Parser.isError(parameterType)) {
 			return parameterType;
 		}
-		return new AstParameter(parameterName.text, parameterType, isCtx).fromToken(parameterName);	
+		return new AstParameter(parameterName.text, parameterType).fromToken(parameterName);	
 	}
 
 	readParameterList(isGenerator) {
@@ -1194,19 +1189,9 @@ class Parser {
 					return ParserError.unexpectedToken(sepToken, [TOK_SEP, TOK_END_GROUP]);
 				}
 			}
-			let arg = null;
-			if (this.peekToken() == TOK_CTX) {
-				this.readToken();
-				let varName = this.readToken();
-				if (varName.tag !== TOK_IDENTIFIER) {
-					return ParserError.unexpectedToken(varName, [TOK_IDENTIFIER]);
-				}
-				arg = new AstCtxArg(varName.text).fromToken(varName);
-			} else {
-				arg = this.readExpression();
-				if (Parser.isError(arg)) {
-					return arg;
-				}
+			let arg = this.readExpression();
+			if (Parser.isError(arg)) {
+				return arg;
 			}
 			args[argIndex] = arg;
 			argIndex++;

@@ -259,11 +259,10 @@ class EvalTypeName extends EvalResultType {
 const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
 
 class EvalResultParameter extends EvalResult {
-	constructor(parameterName, parameterType, isCtx) {
+	constructor(parameterName, parameterType) {
 		super("res-parameter");
 		this.parameterName = parameterName;
 		this.parameterType = parameterType;
-		this.isCtx = isCtx;
 	}
 }
 
@@ -293,14 +292,11 @@ class EvalResultParameterList extends EvalResult {
 		return count;
 	}
 	
-	isMatch(argTypes, isCtxArgs) {
-		if (argTypes.length !== this.parameterCount || isCtxArgs.length !== this.parameterCount) {
+	isMatch(argTypes) {
+		if (argTypes.length !== this.parameterCount) {
 			return false;
 		}
 		for (let i = 0; i < this.parameterCount; i++) {
-			if (this.parameters[i].isCtx !== isCtxArgs[i]) {
-				return false;
-			}
 			if (this.parameters[i].parameterType !== EVAL_TYPE_ANY && this.parameters[i].parameterType !== argTypes[i]) {
 				return false;
 			}
@@ -327,7 +323,6 @@ class EvalResultMacroFunction extends EvalResult {
 		let funcKey = this.functionName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
 			funcKey += (i > 0 ? "," : "") +
-				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
 				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return funcKey + ")";
@@ -356,7 +351,6 @@ class EvalResultFunction extends EvalResult {
 		let funcKey = this.functionName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
 			funcKey += (i > 0 ? "," : "") +
-				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
 				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return funcKey + ")";
@@ -383,7 +377,6 @@ class EvalResultProcedure extends EvalResult {
 		let procKey = this.procedureName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
 			procKey += (i > 0 ? "," : "") +
-				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
 				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return procKey + ")";
@@ -406,7 +399,6 @@ class EvalResultMacroProcedure extends EvalResult {
 		let procKey = this.procedureName + "(";
 		for (let i = 0; i < this.parameterList.parameterCount; i++) {
 			procKey += (i > 0 ? "," : "") +
-				(this.parameterList.parameters[i].isCtx ? "ctx " : "") +
 				this.parameterList.parameters[i].parameterType.typeKey();
 		}
 		return procKey + ")";
@@ -972,7 +964,7 @@ class CompilerContext {
 			if (evalType.structuralType().tag === "res-type-array") {
 				var lengthFunc = new EvalResultFunction(
 					"length",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
 					EVAL_TYPE_INTEGER, 
 					false
 				);
@@ -984,7 +976,7 @@ class CompilerContext {
 				this.addFunction(lengthFunc);
 				var lastIndexFunc =  new EvalResultFunction(
 					"last_index",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType, false)]),
+					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
 					EVAL_TYPE_INTEGER, 
 					false
 				);
@@ -997,8 +989,8 @@ class CompilerContext {
 				var indexOfFunc =  new EvalResultFunction(
 					"index_of",
 					new EvalResultParameterList(2, [
-						new EvalResultParameter("item", evalType.underlyingType, false),
-						new EvalResultParameter("array", evalType, false)]),
+						new EvalResultParameter("item", evalType.underlyingType),
+						new EvalResultParameter("array", evalType)]),
 					EVAL_TYPE_INTEGER, 
 					false
 				);
@@ -1038,7 +1030,7 @@ class CompilerContext {
 		bucket[macroFunction.functionKey()] = macroFunction;
 	}
 	
-	findMacroFunction(functionName, argTypes, isCtxArgs) {
+	findMacroFunction(functionName, argTypes) {
 		let bucket = this.macroFunctions[functionName + "(" + argTypes.length + ")"];
 		if (bucket === undefined) {
 			return null;
@@ -1048,7 +1040,7 @@ class CompilerContext {
 		let bestMacro = null;
 		for (const macroKey in bucket) {
 			let macroFunc = bucket[macroKey];
-			if (macroFunc.parameterList.isMatch(argTypes, isCtxArgs)) {
+			if (macroFunc.parameterList.isMatch(argTypes)) {
 				let anyCount = macroFunc.parameterList.countOfAny();
 				let firstAnyIndex = macroFunc.parameterList.indexOfAny();
 				if (minAnyCount === -1 || anyCount < minAnyCount) {
@@ -1081,7 +1073,7 @@ class CompilerContext {
 		bucket[macroProcedure.procedureKey()] = macroProcedure;
 	}
 	
-	findMacroProcedure(procedureName, argTypes, isCtxArgs) {
+	findMacroProcedure(procedureName, argTypes) {
 		let bucket = this.macroProcedures[procedureName + "(" + argTypes.length + ")"];
 		if (bucket === undefined) {
 			return null;
@@ -1091,7 +1083,7 @@ class CompilerContext {
 		let bestMacro = null;
 		for (const macroKey in bucket) {
 			let macroProc = bucket[macroKey];
-			if (macroProc.parameterList.isMatch(argTypes, isCtxArgs)) {
+			if (macroProc.parameterList.isMatch(argTypes)) {
 				let anyCount = macroProc.parameterList.countOfAny();
 				let firstAnyIndex = macroProc.parameterList.indexOfAny();
 				if (minAnyCount === -1 || anyCount < minAnyCount) {
@@ -1140,10 +1132,9 @@ class VariableStat {
 }
 
 class CompilerVariable {
-	constructor(varName, varType, isCtx, isConst, isGlobal, isParameter, offset, isWithStat) {
+	constructor(varName, varType, isConst, isGlobal, isParameter, offset, isWithStat) {
 		this.varName = varName;
 		this.varType = varType;
-		this.isCtx = isCtx;
 		this.isConst = isConst;
 		this.isGlobal = isGlobal;
 		this.isParameter = isParameter;
@@ -1253,8 +1244,8 @@ class CompilerScope {
 		return null;
 	}
 	
-	addParameter(varName, varType, isCtx) {
-		let newVar = new CompilerVariable(varName, varType, isCtx, false, false, true, 0, varType.isRef);
+	addParameter(varName, varType) {
+		let newVar = new CompilerVariable(varName, varType, false, false, true, 0, varType.isRef);
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;
@@ -1270,7 +1261,7 @@ class CompilerScope {
 
 	addVariable(varName, varType, isConst) {
 		let isWithStat = varType.isRef && this.parent !== null;
-		let newVar = new CompilerVariable(varName, varType, false, isConst, this.isGlobal, false, this.offset + this.variableOffset, isWithStat);
+		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableOffset, isWithStat);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		this.variableOffset += varType.slotCount();
@@ -1335,9 +1326,9 @@ class Compiler {
 				}
 			}
 		}
-		if (msg !== "") {
-			console.log("Moves: " + msg); 
-		}
+		//if (msg !== "") {
+		//	console.log("Moves: " + msg); 
+		//}
 		this.scope = this.scope.parent;
 	}
 	
@@ -1346,8 +1337,7 @@ class Compiler {
 		for (let i = 0; i < macroFunc.parameterList.parameterCount; i++) {
 			params[i] = new AstParameter(
 				macroFunc.parameterList.parameters[i].parameterName,
-				argTypes[i].toAst(),
-				macroFunc.parameterList.parameters[i].isCtx);
+				argTypes[i].toAst());
 		}
 		let funcDecl = new AstFunctionDeclaration(
 			macroFunc.functionName,
@@ -1358,36 +1348,20 @@ class Compiler {
 		return this.evalStatement(funcDecl);
 	}
 	
-	generateVariantDispatchFunction(astFuncCall, argTypes, variantIndex) {
+	generateVariantDispatchFunction(astFuncCall, argTypes, variantIndex, expectedType) {
 		let params = [];
 		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
-			params[i] = new AstParameter("arg" + i, argTypes[i].toAst(), astFuncCall.argList.args[i].tag === "ast-ctx-arg");
+			params[i] = new AstParameter("arg" + i, argTypes[i].toAst());
 		}
 		let args = [];
 		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
-			if (astFuncCall.argList.args[i].tag === "ast-ctx-arg") {
-				args[i] = new AstCtxArg(i == variantIndex ? "v" : "arg" + i);
-			} else {
-				args[i] = new AstVariable(i == variantIndex ? "v" : "arg" + i);
-			}
+			args[i] = new AstVariable(i == variantIndex ? "v" : "arg" + i);
 		}
-		let thenStmts = null;
-		if (astFuncCall.argList.args[variantIndex].tag === "ast-ctx-arg") {
-			thenStmts = [
-				new AstVariableDeclaration("r",
-					new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)),
-					true),
-				new AstAssign(
-					new AstVariable("arg" + variantIndex),
-					new AstAs(
-						new AstVariable("v"),
-						argTypes[variantIndex].toAst())),
-				new AstReturn(new AstVariable("r"))];
-		} else {
-			thenStmts = [
-				new AstReturn(
-					new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args)))];
+		let retVal = new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args));
+		if (expectedType !== null) {
+			retVal = new AstAs(retVal, expectedType.toAst());
 		}
+		let thenStmts = [new AstReturn(retVal)];
  		let thenExpr = new AstBlock(thenStmts.length, thenStmts, null);		
 		let whens = [];
 		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
@@ -1415,8 +1389,7 @@ class Compiler {
 		for (let i = 0; i < macroProc.parameterList.parameterCount; i++) {
 			params[i] = new AstParameter(
 				macroProc.parameterList.parameters[i].parameterName,
-				argTypes[i].toAst(),
-				macroProc.parameterList.parameters[i].isCtx);
+				argTypes[i].toAst());
 		}
 		let procDecl = new AstProcedureDeclaration(
 			macroProc.procedureName,
@@ -1428,24 +1401,13 @@ class Compiler {
 	generateVariantDispatchProcedure(astProcCall, argTypes, variantIndex) {
 		let params = [];
 		for (let i = 0; i < astProcCall.argList.argCount; i++) {
-			params[i] = new AstParameter("arg" + i, argTypes[i].toAst(), astProcCall.argList.args[i].tag === "ast-ctx-arg");
+			params[i] = new AstParameter("arg" + i, argTypes[i].toAst());
 		}
 		let args = [];
 		for (let i = 0; i < astProcCall.argList.argCount; i++) {
-			if (astProcCall.argList.args[i].tag === "ast-ctx-arg") {
-				args[i] = new AstCtxArg(i === variantIndex ? "v" : "arg" + i);
-			} else {
-				args[i] = new AstVariable(i === variantIndex ? "v" : "arg" + i);
-			}
+			args[i] = new AstVariable(i === variantIndex ? "v" : "arg" + i);
 		}
 		let thenStmts = [new AstProcedure(astProcCall.procedureName, new AstArgList(astProcCall.argList.argCount, args))];
-		if (astProcCall.argList.args[variantIndex].tag === "ast-ctx-arg") {
-			thenStmts[thenStmts.length] = new AstAssign(
-				new AstVariable("arg" + variantIndex),
-				new AstAs(
-					new AstVariable("v"),
-					argTypes[variantIndex].toAst()));
-		}
 		let thenExpr = new AstBlock(thenStmts.length, thenStmts, null); 
 		let whens = [];
 		for (let i = 0; i < argTypes[variantIndex].typeCount; i++) {
@@ -1623,7 +1585,7 @@ class Compiler {
 					return EvalError.cantMutateConst(expr.left.varName).fromExpr(expr.left);
 				}
 				// evaluate the value
-				let valueType = this.eval(expr.right);
+				let valueType = this.eval(expr.right, variable.varType);
 				if (valueType.isError()) {
 					return valueType;
 				}
@@ -1631,9 +1593,7 @@ class Compiler {
 					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
-				if (variable.isCtx) {
-					this.codeBlock.codePopIndirect(variable.offset);
-				} else if (variable.isGlobal) {
+				if (variable.isGlobal) {
 					this.codeBlock.codePopGlobal(variable.offset);
 				} else {
 					this.codeBlock.codePopLocal(variable.offset);
@@ -1646,6 +1606,7 @@ class Compiler {
 			if (expr.left.tag === "ast-value-tuple") {
 				let tupleExpr = expr.left;
 				let variables = [];
+				let variableTypes = [];
 				for (let i = 0; i < tupleExpr.itemCount; i++) {
 					if (tupleExpr.items[i].tag !== "ast-variable") {
 						return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
@@ -1658,29 +1619,21 @@ class Compiler {
 					if (variable.isConst) {
 						return EvalError.cantMutateConst(varName).fromExpr(expr.left);
 					}
-					variables[i] = variable;					
+					variables[i] = variable;
+					variableTypes[i] = variable.varType;					
 				}
+				let tupleType = this.context.addType(new EvalTypeTuple(tupleExpr.itemCount, variableTypes));
 				// evaluate the value
-				let valueType = this.eval(expr.right);
+				let valueType = this.eval(expr.right, tupleType);
 				if (valueType.isError()) {
 					return valueType;
 				}
-				if (valueType.tag !== "res-type-tuple") {
-					return EvalError.wrongType(valueType, "tuple").fromExpr(expr.right);
-				}					
-				if (tupleExpr.itemCount !== valueType.typeCount) {
-					return EvalError.tupleSizeMismatch(tupleExpr.itemCount, valueType.typeCount).fromExpr(expr.right);
-				}
-				for (let i = 0; i < tupleExpr.itemCount; i++) {
-					if (valueType.types[i] !== variables[i].varType) {
-						return EvalError.wrongType(valueType.types[i], variables[i].varType.typeKey()).fromExpr(expr.right);					
-					}
+				if (valueType !== tupleType) {
+					return EvalError.wrongType(valueType.types[i], variables[i].varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
 				for (let i = tupleExpr.itemCount - 1; i >= 0; i--) {
-					if (variables[i].isCtx) {
-						this.codeBlock.codePopIndirect(variables[i].offset);
-					} else if (variables[i].isGlobal) {
+					if (variables[i].isGlobal) {
 						this.codeBlock.codePopGlobal(variables[i].offset);
 					} else {
 						this.codeBlock.codePopLocal(variables[i].offset);
@@ -1716,7 +1669,7 @@ class Compiler {
 					return EvalError.unassignable(indexExpr.tag).fromExpr(indexExpr);
 				}
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right);
+				let valueType = this.eval(expr.right, indexedType.underlyingType);
 				if (valueType.isError()) {
 					return valueType;
 				}
@@ -1753,7 +1706,7 @@ class Compiler {
 				}
 				this.codeBlock.codePush(recordType.fields[fieldIndex].offset);
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right);
+				let valueType = this.eval(expr.right, recordType.fields[fieldIndex].fieldType);
 				if (valueType.isError()) {
 					return valueType;
 				}
@@ -2300,9 +2253,7 @@ class Compiler {
 					for (let i = 0; i < parameterList.parameterCount; i++) {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
-							parameterList.parameters[i].parameterType,
-							parameterList.parameters[i].isCtx
-						);
+							parameterList.parameters[i].parameterType);
 					}
 					this.scope.endAddParameter();
 				}
@@ -2352,9 +2303,7 @@ class Compiler {
 				for (let i = 0; i < parameterList.parameterCount; i++) {
 					this.scope.addParameter(
 						parameterList.parameters[i].parameterName,
-						parameterList.parameters[i].parameterType,
-						parameterList.parameters[i].isCtx
-					);
+						parameterList.parameters[i].parameterType);
 					this.scope.endAddParameter();
 				}
 				let ret = this.evalStatement(expr.statement);
@@ -2381,7 +2330,7 @@ class Compiler {
 			}
 			let procKey = expr.procedureName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				procKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
+				procKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
 			}
 			procKey += ")";
 			let proc = this.context.getProcedure(procKey);
@@ -2400,11 +2349,7 @@ class Compiler {
 					}
 					proc = this.context.getProcedure(procKey);
 				} else {
-					let isCtxArgs = [];
-					for (let i = 0; i < expr.argList.argCount; i++) {
-						isCtxArgs[i] = expr.argList.args[i].tag === "ast-ctx-arg";
-					}
-					let macroProc = this.context.findMacroProcedure(expr.procedureName, argTypes, isCtxArgs);
+					let macroProc = this.context.findMacroProcedure(expr.procedureName, argTypes);
 					if (macroProc !== null) {
 						let genRes = this.generateProcedureFromMacro(expr.procedureName, argTypes, macroProc);
 						if (genRes.isError()) {
@@ -2443,9 +2388,7 @@ class Compiler {
 			if (v.isConst) {
 				return EvalError.cantMutateConst(expr.varName).fromExpr(expr);
 			}
-			if (v.isCtx) {
-				this.codeBlock.codePushIndirectForMutate(v.offset);
-			} else if (v.isGlobal) {
+			if (v.isGlobal) {
 				this.codeBlock.codePushGlobalForMutate(v.offset);
 			} else {
 				this.codeBlock.codePushLocalForMutate(v.offset);
@@ -2505,7 +2448,7 @@ class Compiler {
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
 	}
 	
-	eval(expr) {
+	eval(expr, expectedType = null) {
 		if (expr.tag === "ast-as") {
 			let asType = this.evalType(expr.exprType);
 			if (asType.isError()) {
@@ -2514,21 +2457,7 @@ class Compiler {
 			if (asType === EVAL_TYPE_ANY) {
 				return EvalError.wrongType(asType, "not any").fromExpr(expr.exprType);				
 			}
-			if (expr.expr.tag === "ast-value-array" && expr.expr.itemCount === 0) {
-				// special case when the left expression is an empty array
-				// we don't want to eval it, but directly create a basic array or array
-				// depending on the as type
-				if (asType.structuralType().tag !== "res-type-array") {
-					return EvalError.wrongType(asType, "array").fromExpr(expr.exprType);				
-				}
-				if (asType.structuralType().underlyingType.isRef === true) {
-					this.codeBlock.codeCreateArray(0);
-				} else {
-					this.codeBlock.codeCreateBasicArray(0);
-				}
-				return asType;
-			}
-			let valueType = this.eval(expr.expr);
+			let valueType = this.eval(expr.expr, asType);
 			if (valueType.isError()) {
 				return valueType;
 			}
@@ -2579,7 +2508,19 @@ class Compiler {
 		}
 		if (expr.tag === "ast-value-array") {
 			if (expr.itemCount === 0) {
-				return EvalError.emptyArrayMustBeTyped().fromExpr(expr);
+				if (expectedType === null) {
+					return EvalError.emptyArrayMustBeTyped().fromExpr(expr);
+				} else {
+					if (expectedType.structuralType().tag !== "res-type-array") {
+						return EvalError.wrongType(expectedType, "array").fromExpr(expr);				
+					}
+					if (expectedType.structuralType().underlyingType.isRef === true) {
+						this.codeBlock.codeCreateArray(0);
+					} else {
+						this.codeBlock.codeCreateBasicArray(0);
+					}
+					return expectedType;
+				}
 			}
 			let itemType = null;
 			// Evalute the next items
@@ -2864,9 +2805,7 @@ class Compiler {
 				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
 			}
 			for (let i = 0; i < v.varType.slotCount(); i++) {
-				if (v.isCtx) {
-					this.codeBlock.codePushIndirect(v.offset + i);
-				} else if (v.isGlobal) {
+				if (v.isGlobal) {
 					this.codeBlock.codePushGlobal(v.offset + i);
 				} else {
 					this.codeBlock.codePushLocal(v.offset + i);
@@ -2938,18 +2877,6 @@ class Compiler {
 			}
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 		}
-		if (expr.tag === "ast-ctx-arg") {
-			let v = this.scope.getVariable(expr.varName);
-			if (v === null) {
-				return EvalError.unknownVariable(expr.varName).fromExpr(expr);
-			}
-			if (v.isCtx) {
-				this.codeBlock.codePushLocal(v.offset);
-			} else {
-				this.codeBlock.codePushIndirection(v.offset);
-			}
-			return v.varType;
-		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
 			let argSlotCount = 0;
@@ -2963,7 +2890,7 @@ class Compiler {
 			}
 			let funcKey = expr.functionName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				funcKey += (i > 0 ? "," : "") + (expr.argList.args[i].tag === "ast-ctx-arg" ? "ctx " : "") + argTypes[i].typeKey();
+				funcKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
 			}
 			funcKey += ")";
 			let func = this.context.getFunction(funcKey);
@@ -2976,17 +2903,13 @@ class Compiler {
 					}
 				}
 				if (variantIndex !== -1) {
-					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex);
+					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex, expectedType);
 					if (genRes.isError()) {
 						return genRes.fromExpr(expr);
 					}
 					func = this.context.getFunction(funcKey);
 				} else {
-					let isCtxArgs = [];
-					for (let i = 0; i < expr.argList.argCount; i++) {
-						isCtxArgs[i] = expr.argList.args[i].tag === "ast-ctx-arg";
-					}				
-					let macroFunc = this.context.findMacroFunction(expr.functionName, argTypes, isCtxArgs);
+					let macroFunc = this.context.findMacroFunction(expr.functionName, argTypes);
 					if (macroFunc !== null) {
 						let genRes = this.generateFunctionFromMacro(expr.functionName, argTypes, macroFunc);
 						if (genRes.isError()) {
@@ -3179,7 +3102,7 @@ class Compiler {
 		if (paramType.isError()) {
 			return paramType;
 		}
-		return new EvalResultParameter(expr.parameterName, paramType, expr.isCtx);
+		return new EvalResultParameter(expr.parameterName, paramType);
 	}
 	
 	evalParameterList(expr) {

@@ -278,11 +278,10 @@ class AstRange extends AstNode {
 }
 
 class AstParameter extends AstNode {
-	constructor(parameterName, parameterType, isCtx) {
+	constructor(parameterName, parameterType) {
 		super("ast-parameter");
 		this.parameterName = parameterName;
 		this.parameterType = parameterType;
-		this.isCtx = isCtx;
 	}
 }
 
@@ -332,13 +331,6 @@ class AstYield extends AstNode {
 	constructor(expr) {
 		super("ast-yield");
 		this.expr = expr;
-	}
-}
-
-class AstCtxArg extends AstNode {
-	constructor(varName) {
-		super("ast-ctx-arg");
-		this.varName = varName;
 	}
 }
 
