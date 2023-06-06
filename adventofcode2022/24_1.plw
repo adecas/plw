@@ -1,0 +1,158 @@
+var input := '
+#.########################################################################################################################
+#<><v<^<vv<><^vv><><v^.^>.^.>.<v^>v><v^.v^<v<vvvv.^^><>^vv<<<>>v>>^>v>>>v<.vv>v<.<v>><>^<<v^<<v^vv>^^<v<^<>v>^v<^v^..^^<<#
+#<>^<<<^<<vv.<^.^>>>vv.v<<vv^...vvv><><>^<^vv.<v>>v><<^^vvv>v>>^>^<v>^<vv><vv<v^v^.vv<<>vv.^^<>v<<v^>..>v^><v^v<<^^<^.^v<#
+#>^>>^<v<v^<v.>vv^>vv^<vv.<>>^vv.<^^>v^vv>v<<vv<>><<^>.v^^v>v<<v^.^v>v>.<^^vvv><^v.v.<v>^>v<<^v.<vv>^v^v^^<>.<<<v^^^>^^^<#
+#>>v>^><^v<.<>>>>^<v>>v^^^><<^v^<>^><>.v<.>^vv<^^<v>.<vv>v^>.v<v<vv.^><^v>><<<v<vvv.v^^>^.^>v^>^><>^<<^>v<<v^v>^v^>><>v.<#
+#>>vv<^.^<>v<v<^<.>^v^.<>>.v^^^.vv^v.<v<>v.>>>v>>.<<<<v<.^>^v<v^<v^<..^v<v^>^<v<>v<vv>.><<<>^>>>v>>>v^<^v>v^<..v>>>v>^>^>#
+#>^^v>.^>^<v>^^v>>v<^<<>^>^^>v<.v^<<><v^>>>><>.><>>>vv<^v^v.<v<v>v^>><v><<><>>^v<^^<^v<v^>v^<>.<.^v>vv.v><<v.>.^>.^^^.<.>#
+#<<v>><.>v<<vv>v.vv<><vv<>^>>>^v<<v>^<<<<v^<>>vv^^v^>.<.^><>v>>v<^v<.v^<^<>v^v^v^>^v^<>v<.>v<^^^.<><v.^^..^v>^>^><.>v>v.>#
+#<^v>v>^.>>>^vv^<>><>^.<>^^<<<^<><.v>^>.>.vvv><v<<>v^<^^<>^vv<vvv<v<<v<^<<>><v<>vv^v<.^.>^>v<<^<><><<<^<.>.v^^.<>><v^<^<<#
+#>.<^<v^^><<.v^v<>v<^vv>>vv>^>^<.>>^v<vv.>.v<>>v<^^<><^^^v.<.v>>^.v^^^>>v^<>.<v^v^.^^v^vv.>>>^^v^..<^v..<.v<>v^<vv.^>^>v>#
+#>v^^v>^<v>>vv^v^>.<><>v^^v.^^>.<<.>^<^<v^.^<><v.v<<^^^^<v^v>.^v^<.v^<<^^.><>.<v.v<^^>^^>>>^v^^..vv<v><>^>.><v^^..^^<.<..#
+#<^<.v>>vv>v<<v<^<>>v^<v>.v^<>vvv..<^>>v>v^v^<^><^<^^v>v>.>vv>^^^>><.<<>^^>.>.>v><^<^v^^<vv<>>^^v<<v>.^.v.<v.^.^v<<^>^<>>#
+#<.^v>^>.>^^>^>^<>>>.>^^^vv^v<>v.<^vv.vv^>>>^^v>^>v>>vvv^><v.<^><<>^^.v.vv>>vv>^vv<<<^..v<^><<<>>^<<v^<^<<.>^^<><<^^<vv^>#
+#<^><>>>>^.^^v>v>^^.^<>><.<><v<<^>v><^^>><^^v>^>^^><^^>^v^<<><<.v^v>>>vvv^v>v^.^>.>v^vv>>>v^>^^.>>.>>vvv<^<<vvvv<^>><v^v<#
+#<v^<<>^^v<^^<v^<^v><>..^<^>v^^<^<v>v.>>v>><><>v^>^v<vv^v^vv<.^^>>.<<^v>^^<>><<^>v^<^>v>^<>>>v>^.^<.^.^<v>vv.^v>v<vvv^^^<#
+#<>v<v^^v^v<<<v^^><v<>v<^<>v^v<^^>^<v<v^.>^<vv^>^^<>v<>>>.v^v.<<<<.v^v>^<>><.v<>^.<>^.^vv<>.^<v.^v<^>>>^<^v^<.<>>v>^.>>^>#
+#>>^>>vv.>v^v>>.vv>^<^v^>>^^<<<>v<>>><^.<^>^<>^.>>.<^^.^<.v<^vv>><<..<<.<v^>^^<>.>.<>><>>v^>.v.^^>^vv<<^^v>v^>vv>^<^v.v>>#
+#<v.<v^^^<^><<^>v^><<v.^v^^>vv><vvv>^^^<v>^>vv<^^^>.>><<^<^v<>.v><^><>v<<.<^vv>.^^^<v>v>>>v<^.v^>>>^>^<<..v.>vv.>>v>^<^^>#
+#<vvv>^^<<vv.v><^..>v.<v<v<<<v^>v<<>.><v<>.<vv^><^<<^v^..>v<v^v>>>^>><v.>>^<>v<^^.vv>>v>.v^^^><^<>>>^<<<<<...v><v>v><^<v<#
+#>v^>v^<v>>><<^v>>>v^<^v.^.v^v.<^<^>.<<.<<.^^vv<v>v>><^^.><>v.>>..^.<vv><>.v>.^^>^vvv>.v>.<.^<v<>^><^v<>>>.<^^v<<>>>>^v>.#
+#<>^>.v^<<><.v^<^<.>^>..<<vv^v<>>v>vv.<><<>^>><^^<v.<v<^<v^>vv^^<>vv>^<^^<v^.>^<^>v<v><^v>v^<^.v^<<>v>.>vv^^v^>vv>^.v><^<#
+#<>>^.v><^v>^><>v><>.v>vv>^v^^v>.^..>^<^<vv^vv>v<<<v<<v<>.<.>>^^v<^<>v>^<^<v.>^<v.^<^^vvv>.<>^><^v.^>>v<v>^^.^^v>v>vv<<<>#
+#.>>^^>v.v^>v^^>vv<vv<v.vv>.vv<<<<^^<v.<v><vv.v<^<^v<.>..^>v^<^^.<>v^<v..^^<^v^^>^<^.v>v<^^>vvvvv.>>>^vv^^^<>.v>v^..>v^.>#
+#>^>v^.^vv^v.vv>v.>v^<><^<>v^<^v><.v<^v>^v>.v<v>^vvvvv>.<vv>>^^<^^^<.<>v>.<>>.v<^<v<^.v.<><>v^v^^^v^>^^.^^<><><<<v^^<<^v<#
+#<>>v.<<v<^<^<^.vv>>>>>v^..<><<v^>^^.>>^<.<>^v^<^>v<.vv<v<<^vv^.<v<<v^vv<<.v<>^v^<^v<^vv>>><v>vvv><><><.><v>^><<.>><<>^^.#
+#.<^v><>v>^v^v^><^^.v<<>^<^<>v..^>vv>vvvv<<vv>>>><v<^<^v^>v>^<>^^v.>>v>^.v^vvv<><v^.><<vv.>^.^v<>>v.<vv>^<^>>>v^>><v.>>><#
+########################################################################################################################.#
+';
+
+const NL := '
+';
+
+type whirl {x integer, y integer, dir integer};
+
+function parse_input(input text) (whirls [whirl], width integer, height integer) begin
+	var whirls := [] as [whirl];
+	var y := 0;
+	var width := 0;
+	for line in split(input, NL) loop
+		if length(line) > 0 then
+			line := subtext(line, 1, length(line) - 2);
+			if subtext(line, 0, 1) <> '#' and subtext(line, length(line) - 1, 1) <> '#' then
+				for x in 0 .. length(line) - 1 loop
+					var c := char_at(line, x);
+					if c = '^' as char then
+						whirls := whirls || [{x: x, y: y, dir: -1} as whirl];
+					elsif c = '>' as char then
+						whirls := whirls || [{x: x, y: y, dir: 2} as whirl];
+					elsif c = 'v' as char then
+						whirls := whirls || [{x: x, y: y, dir: 1} as whirl];
+					elsif c = '<' as char then
+						whirls := whirls || [{x: x, y: y, dir: -2} as whirl];
+					end if;
+				end loop;
+				y := y + 1;
+				if length(line) > width then
+					width := length(line);
+				end if;
+			end if;
+		end if;
+	end loop;
+	return (whirls, width, y);
+end parse_input;
+
+function dir_char(dir integer) char begin
+	return case dir
+		when -1 then '^' as char
+		when  1 then 'v' as char
+		when -2 then '<' as char
+		when  2 then '>' as char
+		else '?' as char end;
+end dir_char;
+
+procedure print_map(positions [{x integer, y integer}], whirls [whirl], width integer, height integer) begin
+	var map := '.' as char ** width ** height;
+	for p in positions loop
+		map[p.y][p.x] := '@' as char; 
+	end loop;
+	for w in whirls loop
+		map[w.y][w.x] := case map[w.y][w.x]
+			when '@' as char then '!' as char
+			when '!' as char then '!' as char
+			when '.' as char then dir_char(w.dir)
+			when '^' as char then '2' as char 
+			when '>' as char then '2' as char 
+			when 'v' as char then '2' as char 
+			when '<' as char then '2' as char 
+			else (map[w.y][w.x] as integer + 1) as char end;
+	end loop;
+	for line in map loop
+		print(text(line));
+	end loop;	
+end print_map;
+
+function next_round(whirls [whirl], width integer, height integer) (whirls [whirl], free_pos [[boolean]]) begin
+	var free_pos := true ** width ** height;
+	for i in 0 .. last_index(whirls) loop
+		var w := whirls[i];
+		whirls[i].x := (w.x + w.dir / 2 + width) % width;
+		whirls[i].y := (w.y + w.dir % 2 + height) % height;
+		free_pos[whirls[i].y][whirls[i].x] := false;
+	end loop;
+	return (whirls, free_pos);
+end next_round;
+
+begin
+	var round := 0;
+	var (whirls, width, height) := parse_input(input);
+	var positions := [] as [{x integer, y integer}];
+	while true loop
+		var (next_whirls, free_pos) := next_round(whirls, width, height);
+		var next_pos_map := true ** width ** height;
+		var next_positions := [] as [{x integer, y integer}];
+		if free_pos[0][0] then
+			next_positions := [{x: 0, y: 0}];
+			next_pos_map[0][0] := false;
+		end if;
+		for p in positions loop
+			if free_pos[p.y][p.x] and next_pos_map[p.y][p.x] then
+				next_positions := next_positions || [p];
+				next_pos_map[p.y][p.x] := false;
+			end if;
+			if p.y + 1 < height and free_pos[p.y + 1][p.x] and next_pos_map[p.y + 1][p.x] then
+				next_positions := next_positions || [{x: p.x, y: p.y + 1}];
+				next_pos_map[p.y + 1][p.x] := false;
+			end if;
+			if p.y - 1 >= 0 and free_pos[p.y - 1][p.x] and next_pos_map[p.y - 1][p.x] then
+				next_positions := next_positions || [{x: p.x, y: p.y - 1}];
+				next_pos_map[p.y - 1][p.x] := false;
+			end if;
+			if p.x + 1 < width and free_pos[p.y][p.x + 1] and next_pos_map[p.y][p.x + 1] then
+				next_positions := next_positions || [{x: p.x + 1, y: p.y}];
+				next_pos_map[p.y][p.x + 1] := false;
+			end if;
+			if p.x - 1 >= 0 and free_pos[p.y][p.x - 1] and next_pos_map[p.y][p.x - 1] then
+				next_positions := next_positions || [{x: p.x - 1, y: p.y}];
+				next_pos_map[p.y][p.x - 1] := false;
+			end if;
+		end loop; 
+		whirls := next_whirls;
+		positions := next_positions;
+		round := round + 1;
+		# print('Round: ' || text(round));
+		# print_map(positions, whirls, width, height);
+		if not next_pos_map[height - 1][width - 1] then
+			exit;
+		end if;
+		# var c := get_char();
+	end loop;
+	print('Nb minutes: ' || text(round + 1));
+	if round + 1 = 301 then
+		print('Correct');
+	else
+		print('Error');
+	end if;
+end;
+
