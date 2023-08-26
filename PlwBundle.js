@@ -4833,6 +4833,10 @@ class Compiler {
 			return EVAL_TYPE_REAL;
 		}
 		if (expr.tag === "ast-value-text") {
+			if (expectedType === EVAL_TYPE_CHAR && expr.textValue.length === 1) {
+				this.codeBlock.codePush(expr.textValue.charCodeAt(0));
+				return EVAL_TYPE_CHAR;
+			}
 			let strId = this.codeBlock.addStrConst(expr.textValue);
 			this.codeBlock.codeCreateString(strId);
 			return EVAL_TYPE_TEXT;

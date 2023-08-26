@@ -545,6 +545,28 @@ nums := quicksort(nums, 0, length(nums) - 1);
 print(text(nums));
 </pre>
 
+<p id="snippet-gcd-title" class="snippet">GCD</p>
+<pre id="snippet-gcd">
+function gcd(a integer, b integer) integer begin
+  while a > 0 loop
+	(a, b) := (b % a, a);	
+  end loop;
+  return b;
+end gcd;
+function gcd(a [integer]) integer begin
+  var result := a[0];
+  for i in 1 .. last_index(a) loop
+    result := gcd(a[i], result);
+    if result = 1 then
+      return result;
+    end if;
+  end loop;
+  return result;
+end gcd;
+var g := gcd([21, 9, 123]);
+print(text(g));
+</pre>
+
 <p id="snippet-standard-deviation-title" class="snippet">Standard Deviation</p>
 <pre id="snippet-standard-deviation">
 function avg(nums [real]) real begin

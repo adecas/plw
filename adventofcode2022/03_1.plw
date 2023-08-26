@@ -310,10 +310,10 @@ function prio(rs text) integer begin
     for i in 0 .. l - 1 loop
         var c := char_code(rs1, i);
         if index_of(c as char, rs2) <> -1 then
-			if c >= char_code('A', 0) and c <= char_code('Z', 0) then
-				return c - char_code('A', 0) + 27;	
-			elsif c >= char_code('a', 0) and c <= char_code('z', 0) then
-				return c - char_code('a', 0) + 1;
+			if c >= 'A' as char as integer and c <= 'Z' as char as integer then
+				return c - 'A' as char as integer + 27;	
+			elsif c >= 'a' as char as integer and c <= 'z' as char as integer then
+				return c - 'a' as char as integer + 1;
 			else
 				print('Error unexpected char');
 				return 0;

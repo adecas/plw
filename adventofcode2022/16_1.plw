@@ -57,7 +57,7 @@ type node {
 
 
 function text_id_to_int(t text) integer begin
-	return (char_code(t, 0) - char_code('A', 0)) * 26 + char_code(t, 1) - char_code('A', 0);
+	return (char_code(t, 0) - 'A' as char as integer) * 26 + char_code(t, 1) - 'A' as char as integer;
 end text_id_to_int;
 
 function parse_input(input text)

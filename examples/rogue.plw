@@ -788,8 +788,6 @@ end populate_map;
 ### DISPLAY
 ###
 
-const CHAR_SPACE := char_at(' ', 0);
-
 function render(screen [[screen_cell]], entities [entity], map map) [[screen_cell]] begin
 	for y in 0 .. SCREEN_HEIGHT - 1 loop
 		var visible_tiles := map.visible_tiles[y];
@@ -859,7 +857,7 @@ procedure display(screen [[screen_cell]], depth integer, player entity, messages
 	end loop;
 	kindof player.combat_stat when combatstat cs then
 		var status_line := 'Depth: ' || text(depth) || '    Health: ' || text(cs.hp) || '/' || text(cs.max_hp);
-		status_line := status_line || text(CHAR_SPACE ** (SCREEN_WIDTH - length(status_line)));
+		status_line := status_line || text((' ' as char) ** (SCREEN_WIDTH - length(status_line)));
 		s := s || ansi_color(ANSI_FG_YELLOW, ANSI_BG_BLUE) || status_line || ansi_color(ANSI_FG_WHITE, ANSI_BG_BLACK);
 	end;
 	for i in max(0, length(messages) - 4) .. last_index(messages) loop
@@ -1166,19 +1164,19 @@ end go_next_level;
 ### GAME INPUT LOOPS
 ###
 
-const IN_CHAR_UP := char_at('i', 0);
-const IN_CHAR_DOWN := char_at('k', 0);
-const IN_CHAR_LEFT := char_at('j', 0);
-const IN_CHAR_RIGHT := char_at('l', 0);
-const IN_CHAR_QUIT := char_at('x', 0);
-const IN_CHAR_UPRIGHT := char_at('o', 0);
-const IN_CHAR_UPLEFT := char_at('u', 0);
-const IN_CHAR_DOWNRIGHT := char_at(';', 0);
-const IN_CHAR_DOWNLEFT := char_at(',', 0);
-const IN_CHAR_PICKUP := char_at(' ', 0);
-const IN_CHAR_INVENTORY := char_at('y', 0);
-const IN_CHAR_DOWNSTAIRS := char_at('n', 0);
-const IN_CHAR_SKIPTURN := char_at('p', 0);
+const IN_CHAR_UP := 'i' as char;
+const IN_CHAR_DOWN := 'k' as char;
+const IN_CHAR_LEFT := 'j' as char;
+const IN_CHAR_RIGHT := 'l' as char;
+const IN_CHAR_QUIT := 'x' as char;
+const IN_CHAR_UPRIGHT := 'o' as char;
+const IN_CHAR_UPLEFT := 'u' as char;
+const IN_CHAR_DOWNRIGHT := ';' as char;
+const IN_CHAR_DOWNLEFT := ',' as char;
+const IN_CHAR_PICKUP := ' ' as char;
+const IN_CHAR_INVENTORY := 'y' as char;
+const IN_CHAR_DOWNSTAIRS := 'n' as char;
+const IN_CHAR_SKIPTURN := 'p' as char;
 
 function choose_target_position(screen [[screen_cell]], entities [entity], map map, messages [text], player_id integer, range integer)
 	null|point
@@ -1250,7 +1248,7 @@ begin
 		print('x: Exit inventory' || ANSI_CR);
 		var input := get_char();
 		exit when input = IN_CHAR_QUIT;
-		var item_num := input as integer - char_code('1', 0);
+		var item_num := input as integer - '1' as char as integer;
 		if item_num >= 0 and item_num < 9 and item_num < length(equipment.backpack_items) then
 			var item_id := equipment.backpack_items[item_num];
 			kindof entities[item_id].item when item item then

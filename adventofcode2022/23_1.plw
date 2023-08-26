@@ -75,9 +75,9 @@ var input := '
 .##.##.#####...##.....##.#..#####..##.....#....##......#.#..###..###..##..
 ';
 
-const CHAR_FLOOR := char_at('.', 0);
-const CHAR_WALL := char_at('#', 0);
-const CHAR_BLOCKED := char_at('X', 0);
+const CHAR_FLOOR := '.' as char;
+const CHAR_WALL := '#' as char;
+const CHAR_BLOCKED := 'X' as char;
 const NL := '
 ';
 

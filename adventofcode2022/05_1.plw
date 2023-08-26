@@ -543,7 +543,7 @@ function parse_input(input text) parsed begin
 		var line := lines[i];
 		var j := 0;
 		while j < length(line) loop
-			if char_at(line, j) = char_at('[', 0) then
+			if char_at(line, j) = '[' as char then
 				var c := char_at(line, j + 1);
 				var stack_index := j / 4;
 				if stack_index >= length(stacks) then

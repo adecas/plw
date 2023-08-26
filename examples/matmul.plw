@@ -1,0 +1,48 @@
+function matgen(n integer, seed real) [[real]] begin
+	var a := 0.0 ** n ** n;
+	var tmp := seed / real(n) / real(n);
+	for i in 0 .. n - 1 loop
+		for j in 0 .. n - 1 loop
+			a[i][j] := tmp * real(i - j) * real(i + j);
+		end loop;
+	end loop;
+	return a;
+end matgen;
+
+function matmul(a [[real]], b [[real]]) [[real]] begin
+	var m := length(a);
+	var n := length(a[0]);
+	var p := length(b[0]);
+	var x := 0.0 ** m ** p;
+	for i in 0 .. m - 1 loop
+		for j in 0 .. p - 1 loop
+			var s := 0.0;
+			for k in 0 .. n - 1 loop
+				s := s + a[i][k] * b[k][j];
+			end loop;
+			x[i][j] := s;
+		end loop;
+	end loop;
+	return x;
+end matmul;
+
+function calc(n integer) real begin
+	var size := n / 2 * 2;
+	var a := matgen(size, 1.0);
+	var b := matgen(size, 2.0);
+	var x := matmul(a, b);
+	return x[size / 2][size / 2];
+end calc;
+
+var diff := calc(101) + 18.67;
+if diff > 0.1 or diff < -0.1 then
+	print('Error');
+end if;
+
+var start_time := now();
+var r := calc(100);
+var end_time := now();
+print('Elapsed ms: ' || text(end_time - start_time));
+
+
+

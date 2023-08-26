@@ -2998,8 +2998,6 @@ type node {
     operation integer
 };
 
-const CHARCODE_A := char_code('a', 0);
-
 const OP_ADD := 0;
 const OP_SUB := 1;
 const OP_MUL := 2;
@@ -3020,7 +3018,7 @@ end text;
 function code_to_index(code text) integer begin
 	var index := 0;
 	for i in 0 .. length(code) - 1 loop
-		index := index * 26 + char_code(code, i) - CHARCODE_A;
+		index := index * 26 + char_code(code, i) - 'a' as char as integer;
 	end loop;
 	return index;
 end code_to_index;
@@ -3148,7 +3146,13 @@ while to_compute_id <> HUMN_INDEX loop
 	end if;
 end loop;
 
-print(text(nodes[HUMN_INDEX])); 
+var sum := nodes[HUMN_INDEX].value;
+print(text(sum)); 
+if sum = 3373767893067 then
+	print('Correct');
+else
+	print('Error');
+end if;
 
 
 

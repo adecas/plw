@@ -55,14 +55,14 @@ for line in split(input, nl) loop
 		var a := 0 ** length(line);
 		for i in 0 .. length(line) - 1 loop
 			var c := char_at(line, i);
-			if c = char_at('S', 0) then
+			if c = 'S' as char then
 				start_pos := {x: i, y: length(heights)};
 				a[i] := 0;
-			elsif c = char_at('E', 0) then
+			elsif c = 'E' as char then
 				end_pos := {x: i, y: length(heights)};
 				a[i] := 25;
 			else
-				a[i] := c as integer - char_code('a', 0);
+				a[i] := c as integer - 'a' as char as integer;
 			end if;
 		end loop;
 		heights := heights || [a];

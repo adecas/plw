@@ -466,7 +466,7 @@ function text(node_id integer, nodes [node]) text begin
 end text; 
 
 function skip_blank(t text, pos integer) integer begin
-	while char_at(t, pos) = char_at(' ', 0) loop
+	while char_at(t, pos) = ' ' as char loop
 		pos := pos + 1;
 	end loop;
 	return pos;
@@ -475,16 +475,16 @@ end skip_blank;
 
 function parse_node(nodes [node], t text, pos integer) (nodes [node], pos integer, item integer) begin
 	pos := skip_blank(t, pos);
-	if char_at(t, pos) = char_at('[', 0) then
+	if char_at(t, pos) = '[' as char then
 		pos := pos + 1;
 		pos := skip_blank(t, pos);
 		var list := [] as [integer];
-		while char_at(t, pos) <> char_at(']', 0) loop
+		while char_at(t, pos) <> ']' as char loop
 			var item := 0;
 			(nodes, pos, item) := parse_node(nodes, t, pos);
 			list := list || [item];
 			pos := skip_blank(t, pos);
-			if char_at(t, pos) = char_at(',', 0) then
+			if char_at(t, pos) = ',' as char then
 				pos := pos + 1;
 				pos := skip_blank(t, pos);
 			end if;
@@ -494,8 +494,8 @@ function parse_node(nodes [node], t text, pos integer) (nodes [node], pos intege
 		return (nodes, pos, last_index(nodes));
 	end if;
 	var end_pos := pos;
-	while char_code(t, end_pos) >= char_code('0', 0) and
-		  char_code(t, end_pos) <= char_code('9', 0)
+	while char_code(t, end_pos) >= '0' as char as integer and
+		  char_code(t, end_pos) <= '9' as char as integer
 	loop
 		end_pos := end_pos + 1;
 	end loop;

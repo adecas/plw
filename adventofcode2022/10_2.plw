@@ -150,15 +150,15 @@ var nl := '
 
 var x := 1;
 var cycle := 0;
-var screen := char_at(' ', 0) ** 40 ** 6;
+var screen := ' ' as char ** 40 ** 6;
 
 function write_screen(screen [[char]], cycle integer, sx integer) [[char]] begin
 	var x := cycle % 40;
 	var y := cycle / 40;
 	if x >= sx - 1 and x <= sx + 1 then
-		screen[y][x] := char_at('#', 0);
+		screen[y][x] := '#' as char;
 	else
-		screen[y][x] := char_at('.', 0);
+		screen[y][x] := '.' as char;
 	end if;
 	return screen;
 end write_screen;

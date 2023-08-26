@@ -111,7 +111,7 @@ for i in 0 .. last_index(lines) loop
 	if length(line) > 0 then
 		var a := [] as [integer];
 		for j in 0 .. length(line) - 1 loop
-			a := a || [char_code(line, j) - char_code('0', 0)];
+			a := a || [char_code(line, j) - '0' as char as integer];
 		end loop;
 		parsed := parsed || [a];
 	end if;

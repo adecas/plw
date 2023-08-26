@@ -209,9 +209,9 @@ const CELL_NONE := 0;
 const CELL_FLOOR := 1;
 const CELL_WALL := 2;
 
-const CHAR_NONE := char_at(' ', 0);
-const CHAR_FLOOR := char_at('.', 0);
-const CHAR_WALL := char_at('#', 0);
+const CHAR_NONE := ' ' as char;
+const CHAR_FLOOR := '.' as char;
+const CHAR_WALL := '#' as char;
 
 function wrap_rotate(face_size integer, x integer, y integer, dx integer, dy integer)
 	(x integer, y integer, dx integer, dy integer)
@@ -336,13 +336,13 @@ procedure print_map(map [[integer]], x integer, y integer, dx integer, dy intege
 		end loop;
 		if y = my then
 			if dy = -1 then
-				line[x] := char_at('^', 0);
+				line[x] := '^' as char;
 			elsif dx = 1 then
-				line[x] := char_at('>', 0);
+				line[x] := '>' as char;
 			elsif dy = 1 then
-				line[x] := char_at('V', 0);
+				line[x] := 'V' as char;
 			elsif dx = -1 then
-				line[x] := char_at('<', 0);
+				line[x] := '<' as char;
 			end if;
 		end if;
 		print(text(line));
@@ -353,9 +353,9 @@ end print_map;
 
 var map := [] as [[integer]];
 
-const CHAR_0 := char_at('0', 0);
-const CHAR_R := char_at('R', 0);
-const CHAR_L := char_at('L', 0);
+const CHAR_0 := '0' as char;
+const CHAR_R := 'R' as char;
+const CHAR_L := 'L' as char;
 
 var moves := [] as [integer];
 var nb_steps := 0;

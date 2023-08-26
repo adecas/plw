@@ -198,10 +198,10 @@ while true loop
 	var dx := 0;
 	while true loop
 		var c := char_at(input, push_id);
-		if c = char_at('<', 0) then
+		if c = '<' as char then
 			dx := -1;
 			exit;
-		elsif c = char_at('>', 0) then
+		elsif c = '>' as char then
 			dx := 1;
 			exit;
 		else
