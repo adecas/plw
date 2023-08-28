@@ -1462,24 +1462,27 @@ static void PlwStackMachine_OpcodeEqTuple(PlwStackMachine *sm, PlwInt count, Plw
 	idx2 = sm->sp - count;
 	result = PlwTrue;
 	for (i = 0; i < count; i++) {
-		if (sm->stackMap[idx1]) {
-			result = PlwRefManager_CompareRefs(sm->refMan, sm->stack[idx1], sm->stack[idx2], error);
-			if (PlwIsError(error)) {
-				return;
+		if (result) {
+			if (sm->stackMap[idx1]) {
+				result = PlwRefManager_CompareRefs(sm->refMan, sm->stack[idx1], sm->stack[idx2], error);
+				if (PlwIsError(error)) {
+					return;
+				}
+			} else {
+				result = sm->stack[idx1] == sm->stack[idx2];
 			}
+		}
+		if (sm->stackMap[idx1]) {
 			PlwRefManager_DecRefCount(sm->refMan, sm->stack[idx1], error);
 			if (PlwIsError(error)) {
 				return;
 			}
+		}
+		if (sm->stackMap[idx2]) {
 			PlwRefManager_DecRefCount(sm->refMan, sm->stack[idx2], error);
 			if (PlwIsError(error)) {
 				return;
 			}
-		} else {
-			result = sm->stack[idx1] == sm->stack[idx2];
-		}
-		if (!result) {
-			break;
 		}
 		idx1++;
 		idx2++;

@@ -44,9 +44,10 @@ class EvalResultType extends EvalResult {
 		return 1;
 	}
 	
-	slotType(slot) {
-		return this;
+	isSlotRef(slotIndex) {
+		return this.isRef;
 	}
+
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
@@ -74,7 +75,7 @@ class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
 		this.fieldName = fieldName;
 		this.fieldType = fieldType;
-		this.offset = 0;
+		this.slotOffsets = [];
 	}
 	
 	toAst() {
@@ -87,18 +88,24 @@ class EvalTypeRecord extends EvalResultType {
 		super("res-type-record", true);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
+		this.fieldSlotCount = 0;
 		this.refFieldCount = 0;
 		for (let i = 0; i < fields.length; i++) {
-			if (fields[i].fieldType.isRef) {
-				fields[i].offset = this.refFieldCount;
-				this.refFieldCount++;
+			for (let k = 0; k < fields[i].fieldType.slotCount(); k++) {
+				if (fields[i].fieldType.isSlotRef(k)) {
+					fields[i].slotOffsets[k] = this.refFieldCount;
+					this.refFieldCount++;
+				}
 			}
+			this.fieldSlotCount += fields[i].fieldType.slotCount();
 		}
 		let noRefIndex = this.refFieldCount;
 		for (let i = 0; i < fields.length; i++) {
-			if (!fields[i].fieldType.isRef) {
-				fields[i].offset = noRefIndex;
-				noRefIndex++;
+			for (let k = 0; k < fields[i].fieldType.slotCount(); k++) {
+				if (!fields[i].fieldType.isSlotRef(k)) {
+					fields[i].slotOffsets[k] = noRefIndex;
+					noRefIndex++;
+				}
 			}
 		}
 		this.key = EvalTypeRecord.makeTypeKey(fieldCount, fields);
@@ -127,12 +134,12 @@ class EvalTypeTuple extends EvalResultType {
 		this.typeCount = typeCount;
 		this.types = types;
 		this.key = EvalTypeTuple.makeTypeKey(typeCount, types);
-		this.slotTypeCount = 0;
-		this.slotTypes = [];
+		this.totalSlotCount = 0;
+		this.isSlotRefs = [];
 		for (let i = 0; i < this.typeCount; i++) {
 			for (let k = 0; k < this.types[i].slotCount(); k++) {
-				this.slotTypes[this.slotTypeCount] = this.types[i].slotType(k);
-				this.slotTypeCount++;
+				this.isSlotRefs[this.totalSlotCount] = this.types[i].isSlotRef(k);
+				this.totalSlotCount++;
 			}
 		}
 	}
@@ -146,11 +153,11 @@ class EvalTypeTuple extends EvalResultType {
 	}
 	
 	slotCount() {
-		return this.slotTypeCount;
+		return this.totalSlotCount;
 	}
 	
-	slotType(slot) {
-		return this.slotTypes[slot];
+	isSlotRef(slot) {
+		return this.isSlotRefs[slot];
 	}
 	
 	toAst() {
@@ -250,8 +257,8 @@ class EvalTypeName extends EvalResultType {
 		return this.structType.slotCount();
 	}
 	
-	slotType(slot) {
-		return this.structType.slotType(slot);
+	isSlotRef(slot) {
+		return this.structType.isSlotRef(slot);
 	}	
 		
 }
@@ -896,7 +903,19 @@ class CodeBlock {
 	codeRetTuple(count) {
 		this.code2(OPCODE_RET_TUPLE, count);
 	}
-			
+	
+	codeDupTuple(count) {
+		this.code2(OPCODE_DUP_TUPLE, count);
+	}
+	
+	codeYieldTuple(count) {
+		this.code2(OPCODE_YIELD_TUPLE, count);
+	}
+	
+	codeYieldDoneTuple(count) {
+		this.code2(OPCODE_YIELD_DONE_TUPLE, count);
+	}
+				
 }
 
 
@@ -1182,7 +1201,7 @@ class CompilerScope {
 		this.variableCount = 0;
 		this.parameterCount = 0;
 		this.variableOffset = 0;
-		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableCount);
+		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableOffset);
 		this.exitLocs = [];
 		this.exitLocCount = 0;
 	}
@@ -1268,6 +1287,10 @@ class CompilerScope {
 		return newVar;	
 	}
 	
+	localOffset() {
+		return this.offset + this.variableOffset;
+	}
+	
 }
 
 
@@ -1330,6 +1353,32 @@ class Compiler {
 		//	console.log("Moves: " + msg); 
 		//}
 		this.scope = this.scope.parent;
+	}
+	
+	generateEqForType(valType) {
+		if (valType.slotCount() > 1) {
+			this.codeBlock.codeEqTuple(valType.slotCount());
+		} else if (valType.isSlotRef(0)) {
+			this.codeBlock.codeEqRef();
+		} else if (valType.structuralType() === EVAL_TYPE_REAL) {
+			this.codeBlock.codeEqf();
+		} else {
+			this.codeBlock.codeEq();
+		}
+	}
+	
+	generateNeForType(valType) {
+		if (valType.slotCount() > 1) {
+			this.codeBlock.codeEqTuple(valType.slotCount());
+			this.codeBlock.codeNot();
+		} else if (valType.isSlotRef(0)) {
+			this.codeBlock.codeEqRef();
+			this.codeBlock.codeNot();
+		} else if (valType.structuralType() === EVAL_TYPE_REAL) {
+			this.codeBlock.codeNef();
+		} else {
+			this.codeBlock.codeNe();
+		}
 	}
 	
 	generateFunctionFromMacro(functionName, argTypes, macroFunc) {
@@ -1682,6 +1731,7 @@ class Compiler {
 			}
 			if (expr.left.tag === "ast-field") {
 				let fieldExpr = expr.left;
+				let localRecordOffset = this.scope.localOffset();
 				// evaluate the record
 				let recordType = this.evalForMutate(fieldExpr.expr);
 				if (recordType.isError()) {
@@ -1693,7 +1743,7 @@ class Compiler {
 				if (recordType.tag != "res-type-record") {
 					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
 				}
-				// search and push the offset of the field
+				// search and push the offset of the first slot of the field
 				let fieldIndex = -1;
 				for (let i = 0; i < recordType.fieldCount; i++) {
 					if (recordType.fields[i].fieldName === fieldExpr.fieldName) {
@@ -1704,7 +1754,7 @@ class Compiler {
 				if (fieldIndex === -1) {
 					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
 				}
-				this.codeBlock.codePush(recordType.fields[fieldIndex].offset);
+				this.codeBlock.codePush(recordType.fields[fieldIndex].slotOffsets[0]);
 				// Evaluate the value to assign
 				let valueType = this.eval(expr.right, recordType.fields[fieldIndex].fieldType);
 				if (valueType.isError()) {
@@ -1714,6 +1764,13 @@ class Compiler {
 					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
 				}
 				// Assigne the value
+				for (let i = valueType.slotCount() - 1; i > 0; i--) {
+					this.codeBlock.codePushLocal(localRecordOffset);
+					this.codeBlock.codePush(recordType.fields[fieldIndex].slotOffsets[i]);
+					this.codeBlock.codePushLocal(localRecordOffset + i + 2);
+					this.codeBlock.codePopPtrOffset();
+					this.codeBlock.codePopVoid(1);
+				}
 				this.codeBlock.codePopPtrOffset();
 				return EVAL_RESULT_OK;
 			}
@@ -2053,7 +2110,9 @@ class Compiler {
 					this.scope.clearVarStatTmp();
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeNext();
-					this.codeBlock.codePopLocal(indexVar.offset);
+					for (let i = 0; i < sequence.underlyingType.slotCount(); i++) {
+						this.codeBlock.codePopLocal(indexVar.offset + sequence.underlyingType.slotCount() - 1 - i);
+					}
 					this.codeBlock.codeJmp(testLoc);
 					this.codeBlock.setLoc(endLoc);
 				} else if (sequence.tag === "res-type-array") {
@@ -2210,7 +2269,11 @@ class Compiler {
 			if (retType !== frameScope.returnType) {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			this.codeBlock.codeYield();
+			if (retType.slotCount() > 1) {
+				this.codeBlock.codeYieldTuple(retType.slotCount());
+			} else {
+				this.codeBlock.codeYield();
+			}
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-function-declaration") {
@@ -2263,7 +2326,11 @@ class Compiler {
 					return ret;
 				}
 				if (evalFunc.isGenerator === true) {
-					this.codeBlock.codeYieldDone();
+					if (returnType.slotCount() > 1) {
+						this.codeBlock.codeYieldDoneTuple(returnType.slotCount());
+					} else {
+						this.codeBlock.codeYieldDone();
+					}
 				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
@@ -2438,9 +2505,13 @@ class Compiler {
 			}
 			for (let i = 0; i < recordType.fieldCount; i++) {
 				if (recordType.fields[i].fieldName === expr.fieldName) {
-					this.codeBlock.codePush(recordType.fields[i].offset);
-					this.codeBlock.codePushPtrOffsetForMutate();
-					return recordType.fields[i].fieldType;
+					if (recordType.fields[i].fieldType.slotCount() > 1) {
+						return EvalError.unassignable(expr.tag).fromExpr(expr);
+					} else {
+						this.codeBlock.codePush(recordType.fields[i].slotOffsets[0]);
+						this.codeBlock.codePushPtrOffsetForMutate();
+						return recordType.fields[i].fieldType;
+					}
 				}
 			}
 			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
@@ -2556,8 +2627,9 @@ class Compiler {
 				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
 			}
-			this.codeBlock.codeCreateRecord(expr.fieldCount);
-			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
+			let recordType = this.context.addType(new EvalTypeRecord(expr.fieldCount, fields)); 
+			this.codeBlock.codeCreateRecord(recordType.fieldSlotCount);
+			return recordType;
 		}
 		if (expr.tag === "ast-operator-binary") {
 			if (expr.operator === TOK_AND || expr.operator === TOK_OR) {
@@ -2749,30 +2821,10 @@ class Compiler {
 				if (rightType !== leftType) {
 					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
-				if (rightType.slotCount() > 1) {
-					this.codeBlock.codeEqTuple(rightType.slotCount());
-					if (expr.operator === TOK_NE) {
-						this.codeBlock.codeNot();
-					}
-				} else if (rightType.isRef) {
-					this.codeBlock.codeEqRef();
-					if (expr.operator === TOK_NE) {
-						this.codeBlock.codeNot();
-					}
+				if (expr.operator === TOK_EQ) {
+					this.generateEqForType(leftType);
 				} else {
-					if (leftType === EVAL_TYPE_REAL) {
-						if (expr.operator === TOK_EQ) {
-							this.codeBlock.codeEqf();
-						} else {
-							this.codeBlock.codeNef();
-						}
-					} else {
-						if (expr.operator === TOK_EQ) {
-							this.codeBlock.codeEq();
-						} else {
-							this.codeBlock.codeNe();
-						}
-					}
+					this.generateNeForType(leftType);
 				}
 				return EVAL_TYPE_BOOLEAN;
 			}
@@ -2874,8 +2926,17 @@ class Compiler {
 			}
 			for (let i = 0; i < recordType.fieldCount; i++) {
 				if (recordType.fields[i].fieldName === expr.fieldName) {
-					this.codeBlock.codePush(recordType.fields[i].offset);
-					this.codeBlock.codePushPtrOffset();
+					let fieldSlotCount = recordType.fields[i].fieldType.slotCount();
+					for (let k = 0; k < fieldSlotCount; k++) {
+						if (k < fieldSlotCount - 1) {
+							this.codeBlock.codeDup();
+						}
+						this.codeBlock.codePush(recordType.fields[i].slotOffsets[k]);
+						this.codeBlock.codePushPtrOffset();
+						if (k < fieldSlotCount - 1) {
+							this.codeBlock.codeSwap();
+						} 
+					}
 					return recordType.fields[i].fieldType;
 				}
 			}
@@ -2949,7 +3010,11 @@ class Compiler {
 			let resultType = null;
 			for (let i = 0; i < expr.whenCount; i++) {
 				if (caseType !== null) {
-					this.codeBlock.codeDup();
+					if (caseType.slotCount() > 1) {
+						this.codeBlock.codeDupTuple(caseType.slotCount());
+					} else {
+						this.codeBlock.codeDup();
+					}
 					let whenType = this.eval(expr.whens[i].whenExpr);
 					if (whenType.isError()) {
 						return whenType;
@@ -2957,13 +3022,9 @@ class Compiler {
 					if (whenType !== caseType) {
 						return EvalError.wrongType(whenType, caseType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 					}
-					if (caseType.isRef) {
-						this.codeBlock.codeEqRef();
-					} else {
-						this.codeBlock.codeEq();
-					}
+					this.generateEqForType(caseType);
 					let nextLoc = this.codeBlock.codeJz(0);
-					this.codeBlock.codePopVoid(1);
+					this.codeBlock.codePopVoid(caseType.slotCount());
 					let thenType = this.eval(expr.whens[i].thenExpr);
 					if (thenType.isError()) {
 						return thenType;
@@ -3000,7 +3061,7 @@ class Compiler {
 				}		
 			}
 			if (caseType !== null) {
-				this.codeBlock.codePopVoid(1);
+				this.codeBlock.codePopVoid(caseType.slotCount());
 			}
 			let elseType = this.eval(expr.elseExpr);
 			if (elseType.isError()) {

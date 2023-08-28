@@ -356,8 +356,39 @@ var (d, e) := swap2((text(b), text(c)));
 if d = '42' and e = '51' then
   print('Good');
 else
-  print('Alternalte reality');
+  print('Alternate reality');
 end if;
+generator gen_bounds(a real) (i integer, t text) begin
+  yield (floor(a), 'floor');
+  yield (ceil(a), 'ceil');
+end gen_bounds;
+for b in gen_bounds(12.34) loop
+  print(case b
+    when (12, 'floor') then 'got floor'
+    when (13, 'ceil') then 'got ceil'
+    else 'error'
+  end);
+end loop;
+</pre>
+
+<p id="snippet-tuple-in-record-title" class="snippet">Tuple in record</p>
+<pre id="snippet-tuple-in-record">
+begin
+var r := {a: 12, b: '42', c: (34, '51')};
+var (i, t) := r.c;
+print(text(i) || ' ' || t);
+if r.a = 12 and r.b = '42' and i = 34 and t = '51' then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+r.c := (51, '34');
+if r = {a: 12, b: '42', c: (51, '34')} then
+  print('Good');
+else
+  print('Alternate reality');
+end if;
+end;
 </pre>
 
 <p id="snippet-nested-functions-title" class="snippet">Nested functions</p>

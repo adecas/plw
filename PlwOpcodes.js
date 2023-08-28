@@ -77,6 +77,9 @@ const OPCODE_CREATE_EXCEPTION_HANDLER					= 67;
 const OPCODE_PUSHF										= 68;
 const OPCODE_EQ_TUPLE									= 69;
 const OPCODE_RET_TUPLE									= 70;
+const OPCODE_DUP_TUPLE                                  = 71;
+const OPCODE_YIELD_TUPLE                                = 72;
+const OPCODE_YIELD_DONE_TUPLE                           = 73;
 
 const PLW_OPCODES = [
 	"",
@@ -149,6 +152,9 @@ const PLW_OPCODES = [
 	"CREATE_EXCEPTION_HANDLER",
 	"PUSHF",
 	"EQ_TUPLE",
-	"RET_TUPLE"
+	"RET_TUPLE",
+	"DUP_TUPLE",
+	"YIELD_TUPLE",
+	"YIELD_DONE_TUPLE"
 ];
 

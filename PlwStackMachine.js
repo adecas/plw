@@ -1247,30 +1247,37 @@ class StackMachine {
 	}
 	
 	opcodeEqTuple(count) {
-		if (this.sp < count * 2) {
+		if (this.count < 1 || this.sp < count * 2) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let idx1 = this.sp - 2 * count;
 		let idx2 = this.sp - count;
 		let result = true;
 		for (let i = 0; i < count; i++) {
-			if (this.stackMap[idx1]) {
-				result = this.refMan.compareRefs(this.stack[idx1], this.stack[idx2], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+			if (result === true) {
+				if (this.stackMap[idx1]) {
+					result = this.refMan.compareRefs(this.stack[idx1], this.stack[idx2], this.refManError);
+					if (this.refManError.hasError()) {
+						return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+					}
+					if (this.refManError.hasError()) {
+						return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+					}
+				} else {
+					result = this.stack[idx1] === this.stack[idx2];
 				}
-				this.refMan.decRefCount(this.stack[idx1], this.refManError);
-				if (!this.refManError.hasError()) {
-					this.refMan.decRefCount(this.stack[idx2], this.refManError);
-				}
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			} else {
-				result = this.stack[idx1] === this.stack[idx2];
 			}
-			if (result === false) {
-				break;
+			if (this.stackMap[idx1]) {
+				this.refMan.decRefCount(this.stack[idx1], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+			}
+			if (this.stackMap[idx2]) {
+				this.refMan.decRefCount(this.stack[idx2], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
 			}
 			idx1++;
 			idx2++;
@@ -1282,7 +1289,7 @@ class StackMachine {
 	}
 	
 	opcodeRetTuple(count) {
-		if (this.bp < 4 || this.bp > this.sp) {
+		if (this.count < 1 || this.bp < 4 || this.bp > this.sp) {
 			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
 		}
 		let previousBp = this.stack[this.bp - 1];
@@ -1309,7 +1316,91 @@ class StackMachine {
 		this.codeBlockId = previousCodeBlockId;
 		this.ip = previousIp;
 		return null;
-	}	
+	}
+	
+	opcodeDupTuple(count) {
+		if (this.count < 1 || this.sp < count) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		for (let i = 0; i < count; i++) {
+			this.stack[this.sp] = this.stack[this.sp - count];
+			this.stackMap[this.sp] = this.stackMap[this.sp - count];
+			if (this.stackMap[this.sp] === true) {
+				this.refMan.incRefCount(this.stack[this.sp], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+			}
+			this.sp++; 
+		}
+		return null;
+	}
+	
+	opcodeYieldTuple(count) {
+		if (this.bp < 4 || this.bp >= this.sp || this.sp < count || this.count < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let refId = this.stack[this.bp - 4];
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
+		if (this.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		ref.resizeFrame(2 + (this.sp - this.bp) - count);
+		ref.ptr[1] = this.ip;
+		for (let i = 0; i < this.sp - this.bp - count; i++) {
+			ref.ptr[i + 2] = this.stack[this.bp + i];
+			ref.mapPtr[i + 2] = this.stackMap[this.bp + i];
+		}
+		let previousBp = this.stack[this.bp - 1];
+		let previousIp = this.stack[this.bp - 2];
+		let previousCodeBlockId = this.stack[this.bp - 3];
+		for (let i = 0; i < count; i++) {
+			this.stack[this.bp - 4 + i] = this.stack[this.sp - count + i];
+			this.stackMap[this.bp - 4 + i] = this.stackMap[this.sp - count + i];
+		}
+		this.sp = this.bp - 4 + count;
+		this.bp = previousBp;
+		this.codeBlockId = previousCodeBlockId;
+		this.ip = previousIp;
+		this.refMan.decRefCount(refId, this.refManError);		
+		if (this.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		return null;
+	}
+	
+	opcodeYieldDoneTuple(count) {
+		if (this.bp < 4 || this.bp > this.sp || this.count < 1) {
+			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
+		}
+		let refId = this.stack[this.bp - 4];
+		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
+		if (this.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+		}
+		ref.resizeFrame(2);
+		ref.ptr[1] = this.ip;
+		let previousBp = this.stack[this.bp - 1];
+		let previousIp = this.stack[this.bp - 2];
+		let previousCodeBlockId = this.stack[this.bp - 3];
+		for (let i = this.sp - 1; i >= this.bp - 4; i--) {
+			if (this.stackMap[i] === true) {
+				this.refMan.decRefCount(this.stack[i], this.refManError);
+				if (this.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
+				}
+			}
+		}
+		this.sp = this.bp - 4 + count;
+		for (let i = 0; i < count; i++) {
+			this.stack[this.sp - 1 - i] = 0;
+			this.stackMap[this.sp - 1 - i] = false;
+		}
+		this.bp = previousBp;
+		this.codeBlockId = previousCodeBlockId;
+		this.ip = previousIp;
+		return null;
+	}
 
 	opcode2(code, arg1) {
 		switch(code) {
@@ -1369,6 +1460,12 @@ class StackMachine {
 			return this.opcodeEqTuple(arg1);
 		case OPCODE_RET_TUPLE:
 			return this.opcodeRetTuple(arg1);
+		case OPCODE_DUP_TUPLE:
+			return this.opcodeDupTuple(arg1);
+		case OPCODE_YIELD_TUPLE:
+			return this.opcodeYieldTuple(arg1);
+		case OPCODE_YIELD_DONE_TUPLE:
+			return this.opcodeYieldDoneTuple(arg1);
 		default:
 			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
 		}
