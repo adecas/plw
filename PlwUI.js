@@ -1,7 +1,7 @@
 "use strict";
 
 let compilerContext = new CompilerContext();
-let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
+let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(new Compiler(compilerContext));
 let stackMachine = new StackMachine();
 let tokenReader = null;
 let parser = null;
@@ -80,7 +80,8 @@ function execLoop() {
 			printTextOutObject(result);
 			return;
 		}
-		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
+			PLW_INTERNALS, nativeFunctionManager.functions);
 		if (smRet !== null && smRet.errorMsg === "@get_char") {
 			setConsoleInStatus("@get_char");
 			if (!inputLoop()) {
@@ -177,7 +178,7 @@ function onDisplayStackMachineClick() {
 
 function onResetContextClick() {
 	compilerContext = new CompilerContext();
-	nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
+	nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(new Compiler(compilerContext));
 	stackMachine = new StackMachine();
 	setConsoleInStatus("");
 }

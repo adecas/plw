@@ -10,7 +10,7 @@ function printTextOut(txt) {
 }
 
 let compilerContext = new CompilerContext();
-let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
+let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(new Compiler(compilerContext));
 let stackMachine = new StackMachine();
 
 if (process.argv.length < 3) {
@@ -36,7 +36,8 @@ while (parser.peekToken() !== TOK_EOF) {
 		console.log(result);
 		break;
 	} else {
-		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
+			PLW_INTERNALS, nativeFunctionManager.functions);
 		while (smRet !== null && smRet.errorMsg === "@get_char") {
 			let buffer = new Int8Array(1);
 	  		fs.readSync(0, buffer, 0, 1);
@@ -46,7 +47,7 @@ while (parser.peekToken() !== TOK_EOF) {
 		}
 		if (smRet !== null) {
 			console.log(JSON.stringify(smRet));
-			console.log(JSON.stringify(stackMachine.codeBlocks[smRet.currentBlockId], undefined, 4));
+			stackMachine.dump(printTextOut);
 			break;
 		}
 	}

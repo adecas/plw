@@ -59,9 +59,11 @@ input[type="file"] {
 <script src="PlwAst.js"></script>
 <script src="PlwParser.js"></script>
 <script src="PlwOpcodes.js"></script>
+<script src="PlwInternals.js"></script>
 <script src="PlwCompiler.js"></script>
 <script src="PlwRefManager.js"></script>
 <script src="PlwStackMachine.js"></script>
+<script src="PlwInternalsImpl.js"></script>
 <script src="PlwNativeFunctionManager.js"></script>
 <script src="PlwUI.js"></script>
 </head>
@@ -297,6 +299,22 @@ if bt = '22' and ct = ['33', '44'] and dt = ['33', '44', '66', '77'] then
 else
   print('Error: alternate reality');
 end if;
+if [] as [char] || ['Y' as char] = ['Y' as char] || [] as [char] then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
+if [] as [text] || ['Y'] = ['Y'] || [] as [text] then
+  print('Good');
+else
+  print('Error: alternate reality');
+end if;
+if index_of(44, [11, 22, 33, 44, 55]) <> 3 then
+  @suspend@;
+end if;
+if index_of('44', ['11', '22', '33', '44', '55']) <> 3 then
+  @suspend@;
+end if;
 </pre>
 
 <p id="snippet-basic-procedure-title" class="snippet">Basic Procedure</p>
@@ -389,6 +407,87 @@ else
   print('Alternate reality');
 end if;
 end;
+</pre>
+
+<p id="snippet-tuple-in-arrays-title" class="snippet">Tuple in arrays</p>
+<pre id="snippet-tuple-in-arrays">
+begin
+  var r := [(1, 2), (3, 4)];
+  if r[0] = (1, 2) and r[1] = (3, 4) then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+  r[1] := (5, 6);
+  if r[0] = (1, 2) and r[1] = (5, 6) then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+  var c := r || r;
+  if length(c) = 4 and last_index(c) = 3 then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+  for i in c loop
+    if i = (1, 2) or i = (5, 6) then
+      print('Good');
+    else
+      print('Alternate reality');
+    end if;
+  end loop;
+  if index_of((1,2), c[1..2]) = 1 then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;    
+end;
+begin
+  var r := [(1, '2'), (3, '4')];
+  if r[0] = (1, '2') and r[1] = (3, '4') then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+  r[1] := (5, '6');
+  if r[0] = (1, '2') and r[1] = (5, '6') then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+end;
+begin
+  var r := [('1', '2'), ('3', '4')];
+  if r[0] = ('1', '2') and r[1] = ('3', '4') then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+  r[1] := ('5', '6');
+  if r[0] = ('1', '2') and r[1] = ('5', '6') then
+    print('Good');
+  else
+    print('Alternate reality');
+  end if;
+end;</pre>
+
+<p id="snippet-tuple-in-variants-title" class="snippet">Tuple in variants</p>
+<pre id="snippet-tuple-in-variants">
+var v := 1 as integer|(a integer, b integer);
+v := (2, 3) as integer|(a integer, b integer);
+kindof v
+  when integer i then print(text(i));
+  when (a integer, b integer) p then
+    var (a, b) := p;
+    print(text(a) || ' ' || text(b));
+end;
+print (
+  kindof v
+    when integer i then 'integer'
+    when (a integer, b integer) p then 'tuple'
+  end
+);
 </pre>
 
 <p id="snippet-nested-functions-title" class="snippet">Nested functions</p>

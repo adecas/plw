@@ -641,6 +641,14 @@ class AstOperatorUnary extends AstNode {
 	}
 }
 
+class AstConcat extends AstNode {
+	constructor(itemCount, items) {
+		super("ast-concat");
+		this.itemCount = itemCount;
+		this.items = items;
+	}
+}
+
 class AstVariableDeclaration extends AstNode {
 	constructor(varNameCount, varNames, valueExpr, isConst) {
 		super("ast-variable-declaration");
@@ -1105,7 +1113,7 @@ class Parser {
 	}
 		
 	readExpr4() {
-		let left = this.readExpr3();
+		let left = this.readExpr3bis();
 		if (Parser.isError(left)) {
 			return left;
 		}
@@ -1120,7 +1128,7 @@ class Parser {
 			this.peekToken() === TOK_IN
 		) {
 			let operator = this.readToken();
-			let right = this.readExpr3();
+			let right = this.readExpr3bis();
 			if (Parser.isError(right)) {
 				return right;
 			}
@@ -1128,6 +1136,32 @@ class Parser {
 		}
 		
 		return left;
+	}
+	
+	readExpr3bis() {
+		let expr = this.readExpr3();		
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		if (this.peekToken() !== TOK_CONCAT) {
+			return expr;
+		}
+		let itemCount = 1;
+		let items = [expr];
+		let token = this.readToken();
+		for (;;) {
+			let item = this.readExpr3();
+			if (Parser.isError(item)) {
+				return item;
+			}
+			items[itemCount] = item;
+			itemCount++;
+			if (this.peekToken() !== TOK_CONCAT) {
+				break;
+			}
+			this.readToken();
+		}
+		return new AstConcat(itemCount, items).fromToken(token);
 	}
 
 	readExpr3() {
@@ -1137,10 +1171,7 @@ class Parser {
 		}
 			
 		while (
-			this.peekToken() === TOK_ADD ||
-			this.peekToken() === TOK_SUB ||
-			this.peekToken() === TOK_CONCAT
-		) {
+			this.peekToken() === TOK_ADD || this.peekToken() === TOK_SUB) {
 			let operator = this.readToken();
 			
 			let right = this.readExpr2();
@@ -2188,92 +2219,85 @@ class Parser {
 }
 "use strict";
 
+const OPCODE_NOARG										= 1;
+const OPCODE_JZ											= 2;
+const OPCODE_JNZ										= 3;
+const OPCODE_JMP										= 4;
+const OPCODE_PUSH										= 5;
+const OPCODE_PUSH_GLOBAL								= 6;
+const OPCODE_PUSH_GLOBAL_MOVE							= 7;
+const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 8;
+const OPCODE_PUSH_LOCAL									= 9;
+const OPCODE_PUSH_LOCAL_MOVE                            = 10;
+const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 11;
+const OPCODE_POP_GLOBAL									= 12;
+const OPCODE_POP_LOCAL									= 13;
+const OPCODE_POP_VOID									= 14;
+const OPCODE_CALL										= 15;
+const OPCODE_CALL_NATIVE								= 16;
+const OPCODE_PUSHF										= 17;
+const OPCODE_EQ											= 18;
+const OPCODE_RET										= 19;
+const OPCODE_DUP                                  		= 20;
+const OPCODE_SWAP										= 21;
+const OPCODE_CALL_INTERNAL								= 22;
+
+
 // no arg
 
 const OPCODE_SUSPEND									= 1;
-const OPCODE_DUP										= 2;
-const OPCODE_SWAP										= 3;
-const OPCODE_ADD										= 4;
-const OPCODE_ADDF										= 5;
-const OPCODE_SUB										= 6;
-const OPCODE_SUBF										= 7;
-const OPCODE_DIV										= 8;
-const OPCODE_DIVF										= 9;
-const OPCODE_REM										= 10;
-const OPCODE_MUL										= 11;
-const OPCODE_MULF										= 12;
-const OPCODE_NEG										= 13;
-const OPCODE_NEGF										= 14;
-const OPCODE_GT											= 15;
-const OPCODE_GTF										= 16;
-const OPCODE_LT											= 17;
-const OPCODE_LTF										= 18;
-const OPCODE_GTE										= 19;
-const OPCODE_GTEF										= 20;
-const OPCODE_LTE										= 21;
-const OPCODE_LTEF										= 22;
-const OPCODE_AND										= 23;
-const OPCODE_OR											= 24;
-const OPCODE_NOT										= 25;
-const OPCODE_EQ											= 26;
-const OPCODE_EQF										= 27;
-const OPCODE_EQ_REF										= 28;
-const OPCODE_NE											= 29;
-const OPCODE_NEF										= 30;
-const OPCODE_PUSH_PTR_OFFSET							= 31;
-const OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE					= 32;
-const OPCODE_POP_PTR_OFFSET								= 33;
-const OPCODE_RAISE										= 34;
-const OPCODE_RET_VAL									= 35;
-const OPCODE_RET										= 36;
-const OPCODE_YIELD										= 37;
-const OPCODE_YIELD_DONE									= 38;
-const OPCODE_NEXT										= 39;
-const OPCODE_ENDED										= 40;
-const OPCODE_BASIC_ARRAY_TIMES							= 41;
-const OPCODE_ARRAY_TIMES								= 42;
-
-const OPCODE1_MAX										= 42;
-			
-// One arg			
-			
-const OPCODE_JZ											= 43;
-const OPCODE_JNZ										= 44;
-const OPCODE_JMP										= 45;
-const OPCODE_PUSH										= 46;
-const OPCODE_PUSH_GLOBAL								= 47;
-const OPCODE_PUSH_GLOBAL_MOVE							= 48;
-const OPCODE_PUSH_GLOBAL_FOR_MUTATE						= 49;
-const OPCODE_PUSH_LOCAL									= 50;
-const OPCODE_PUSH_LOCAL_MOVE                            = 51;
-const OPCODE_PUSH_LOCAL_FOR_MUTATE						= 52;
-const OPCODE_PUSH_INDIRECTION							= 53;
-const OPCODE_PUSH_INDIRECT								= 54;
-const OPCODE_PUSH_INDIRECT_FOR_MUTATE					= 55;
-const OPCODE_POP_GLOBAL									= 56;
-const OPCODE_POP_LOCAL									= 57;
-const OPCODE_POP_INDIRECT								= 58;
-const OPCODE_POP_VOID									= 59;
-const OPCODE_CREATE_STRING								= 60;
-const OPCODE_CREATE_RECORD								= 61;
-const OPCODE_CREATE_BASIC_ARRAY							= 62;
-const OPCODE_CREATE_ARRAY							 	= 63;
-const OPCODE_CALL										= 64;
-const OPCODE_CALL_NATIVE								= 65;
-const OPCODE_INIT_GENERATOR								= 66;
-const OPCODE_CREATE_EXCEPTION_HANDLER					= 67;
-const OPCODE_PUSHF										= 68;
-const OPCODE_EQ_TUPLE									= 69;
-const OPCODE_RET_TUPLE									= 70;
-const OPCODE_DUP_TUPLE                                  = 71;
-const OPCODE_YIELD_TUPLE                                = 72;
-const OPCODE_YIELD_DONE_TUPLE                           = 73;
+const OPCODE_ADD										= 2;
+const OPCODE_ADDF										= 3;
+const OPCODE_SUB										= 4;
+const OPCODE_SUBF										= 5;
+const OPCODE_DIV										= 6;
+const OPCODE_DIVF										= 7;
+const OPCODE_REM										= 8;
+const OPCODE_MUL										= 9;
+const OPCODE_MULF										= 10;
+const OPCODE_NEG										= 11;
+const OPCODE_NEGF										= 12;
+const OPCODE_GT											= 13;
+const OPCODE_GTF										= 14;
+const OPCODE_LT											= 15;
+const OPCODE_LTF										= 16;
+const OPCODE_GTE										= 17;
+const OPCODE_GTEF										= 18;
+const OPCODE_LTE										= 19;
+const OPCODE_LTEF										= 20;
+const OPCODE_AND										= 21;
+const OPCODE_OR											= 22;
+const OPCODE_NOT										= 23;
 
 const PLW_OPCODES = [
 	"",
-	"SUSPEND",
+	"NOARG",
+	"JZ",
+	"JNZ",
+	"JMP",
+	"PUSH",
+	"PUSH_GLOBAL",
+	"PUSH_GLOBAL_MOVE",
+	"PUSH_GLOBAL_FOR_MUTATE",
+	"PUSH_LOCAL",
+	"PUSH_LOCAL_MOVE",
+	"PUSH_LOCAL_FOR_MUTATE",
+	"POP_GLOBAL",
+	"POP_LOCAL",
+	"POP_VOID",
+	"CALL",
+	"CALL_NATIVE",
+	"PUSHF",
+	"EQ",
+	"RET",
 	"DUP",
 	"SWAP",
+	"INTERNAL"			
+];	
+
+const PLW_NOARG_OPCODES = [
+	"",
+	"SUSPEND",
 	"ADD",
 	"ADDF",
 	"SUB",
@@ -2295,55 +2319,56 @@ const PLW_OPCODES = [
 	"LTEF",
 	"AND",
 	"OR",
-	"NOT",
-	"EQ",
-	"EQF",
-	"EQ_REF",
-	"NE",
-	"NEF",
-	"PUSH_PTR_OFFSET",
-	"PUSH_PTR_OFFSET_FOR_MUTATE",
-	"POP_PTR_OFFSET",
-	"RAISE",
-	"RET_VAL",
-	"RET",
-	"YIELD",
-	"YIELD_DONE",
-	"NEXT",
-	"ENDED",
-	"BASIC_ARRAY_TIMES",
-	"ARRAY_TIMES",
-	"JZ",
-	"JNZ",
-	"JMP",
-	"PUSH",
-	"PUSH_GLOBAL",
-	"PUSH_GLOBAL_MOVE",
-	"PUSH_GLOBAL_FOR_MUTATE",
-	"PUSH_LOCAL",
-	"PUSH_LOCAL_MOVE",
-	"PUSH_LOCAL_FOR_MUTATE",
-	"PUSH_INDIRECTION",
-	"PUSH_INDIRECT",
-	"PUSH_INDIRECT_FOR_MUTATE",
-	"POP_GLOBAL",
-	"POP_LOCAL",
-	"POP_INDIRECT",
-	"POP_VOID",
+	"NOT"
+];
+
+"use strict";
+/******************************************************************************************************************************************
+
+	Internals
+	
+	Code of internal functions
+
+******************************************************************************************************************************************/
+
+const PLW_IFUN_CREATE_STRING						= 0;
+const PLW_IFUN_CONCAT_STRING                        = 1;
+const PLW_IFUN_CREATE_BLOB                          = 2;
+const PLW_IFUN_READ_BLOB                            = 3;
+const PLW_IFUN_WRITE_BLOB                           = 4;
+const PLW_IFUN_CONCAT_BLOB                          = 5;
+const PLW_IFUN_GET_BLOB_MUTABLE_OFFSET				= 6;
+const PLW_IFUN_GET_BLOB_SIZE                        = 7;
+const PLW_IFUN_GET_BLOB_INDEX_OF_ITEM          		= 8;
+const PLW_IFUN_SLICE_BLOB							= 9;
+const PLW_IFUN_CREATE_BLOB_REPEAT_ITEM				= 10;
+const PLW_IFUN_CREATE_EXCEPTION_HANDLER				= 11;
+const PLW_IFUN_RAISE_EXCEPTION						= 12;
+const PLW_IFUN_CREATE_GENERATOR						= 13;
+const PLW_IFUN_GET_GENERATOR_NEXT_ITEM				= 14;
+const PLW_IFUN_HAS_GENERATOR_ENDED					= 15;
+const PLW_IFUN_YIELD_GENERATOR_ITEM					= 16;
+
+const PLW_MAX_IFUN									= 16;
+
+const PLW_IFUNS = [
 	"CREATE_STRING",
-	"CREATE_RECORD",
-	"CREATE_BASIC_ARRAY",
-	"CREATE_ARRAY",
-	"CALL",
-	"CALL_NATIVE",
-	"INIT_GENERATOR",
+	"CONCAT_STRING",
+	"CREATE_BLOB",
+	"READ_BLOB",
+	"WRITE_BLOB",
+	"CONCAT_BLOB",
+	"GET_BLOB_MUTABLE_OFFSET",
+	"GET_BLOB_SIZE",
+	"GET_BLOB_INDEX_OF_ITEM",
+	"SLICE_BLOB",
+	"CREATE_BLOB_REPEAT_ITEM",
 	"CREATE_EXCEPTION_HANDLER",
-	"PUSHF",
-	"EQ_TUPLE",
-	"RET_TUPLE",
-	"DUP_TUPLE",
-	"YIELD_TUPLE",
-	"YIELD_DONE_TUPLE"
+	"RAISE_EXCEPTION",
+	"CREATE_GENERATOR",
+	"GET_GENERATOR_NEXT_ITEM",
+	"HAS_GENERATOR_ENDED",
+	"YIELD_GENERATOR_ITEM"
 ];
 
 "use strict";
@@ -2391,10 +2416,6 @@ class EvalResultType extends EvalResult {
 	slotCount() {
 		return 1;
 	}
-	
-	isSlotRef(slotIndex) {
-		return this.isRef;
-	}
 
 }
 
@@ -2410,7 +2431,7 @@ class EvalTypeBuiltIn extends EvalResultType {
 	}
 }
 
-const EVAL_TYPE_REF = new EvalTypeBuiltIn("ref", true);
+const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", true);
 const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", false);
 const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
 const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
@@ -2423,7 +2444,7 @@ class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
 		this.fieldName = fieldName;
 		this.fieldType = fieldType;
-		this.slotOffsets = [];
+		this.offset = 0;
 	}
 	
 	toAst() {
@@ -2437,24 +2458,9 @@ class EvalTypeRecord extends EvalResultType {
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 		this.fieldSlotCount = 0;
-		this.refFieldCount = 0;
 		for (let i = 0; i < fields.length; i++) {
-			for (let k = 0; k < fields[i].fieldType.slotCount(); k++) {
-				if (fields[i].fieldType.isSlotRef(k)) {
-					fields[i].slotOffsets[k] = this.refFieldCount;
-					this.refFieldCount++;
-				}
-			}
+			fields[i].offset = this.fieldSlotCount;
 			this.fieldSlotCount += fields[i].fieldType.slotCount();
-		}
-		let noRefIndex = this.refFieldCount;
-		for (let i = 0; i < fields.length; i++) {
-			for (let k = 0; k < fields[i].fieldType.slotCount(); k++) {
-				if (!fields[i].fieldType.isSlotRef(k)) {
-					fields[i].slotOffsets[k] = noRefIndex;
-					noRefIndex++;
-				}
-			}
 		}
 		this.key = EvalTypeRecord.makeTypeKey(fieldCount, fields);
 	}
@@ -2465,6 +2471,15 @@ class EvalTypeRecord extends EvalResultType {
 			name += (i == 0 ? "" : ", ") + fields[i].fieldName + " " + fields[i].fieldType.typeKey();
 		}
 		return name + "}";
+	}
+	
+	getField(fieldName) {
+		for (let i = 0; i < this.fieldCount; i++) {
+			if (this.fields[i].fieldName === fieldName) {
+				return this.fields[i];
+			}
+		}
+		return null;
 	}
 	
 	toAst() {
@@ -2483,12 +2498,8 @@ class EvalTypeTuple extends EvalResultType {
 		this.types = types;
 		this.key = EvalTypeTuple.makeTypeKey(typeCount, types);
 		this.totalSlotCount = 0;
-		this.isSlotRefs = [];
 		for (let i = 0; i < this.typeCount; i++) {
-			for (let k = 0; k < this.types[i].slotCount(); k++) {
-				this.isSlotRefs[this.totalSlotCount] = this.types[i].isSlotRef(k);
-				this.totalSlotCount++;
-			}
+			this.totalSlotCount += this.types[i].slotCount();
 		}
 	}
 
@@ -2502,10 +2513,6 @@ class EvalTypeTuple extends EvalResultType {
 	
 	slotCount() {
 		return this.totalSlotCount;
-	}
-	
-	isSlotRef(slot) {
-		return this.isSlotRefs[slot];
 	}
 	
 	toAst() {
@@ -2523,6 +2530,13 @@ class EvalTypeVariant extends EvalResultType {
 		this.typeCount = typeCount;
 		this.types = types;
 		this.key = EvalTypeVariant.makeTypeKey(typeCount, types);
+		this.innerSlotCount = 0;
+		for (let i = 0; i < this.typeCount; i++) {
+			if (this.types[i].slotCount() > this.innerSlotCount) {
+				this.innerSlotCount = this.types[i].slotCount();
+			}
+		}
+		this.innerSlotCount++;
 	}
 
 	static makeTypeKey(typeCount, types) {
@@ -2605,10 +2619,6 @@ class EvalTypeName extends EvalResultType {
 		return this.structType.slotCount();
 	}
 	
-	isSlotRef(slot) {
-		return this.structType.isSlotRef(slot);
-	}	
-		
 }
 
 const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
@@ -2693,6 +2703,7 @@ class EvalResultFunction extends EvalResult {
 		this.isGenerator = isGenerator;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
+		this.internalIndex = -1;
 	}
 	
 	static fromNative(functionName, parameterList, returnType, nativeIndex) {
@@ -2710,6 +2721,16 @@ class EvalResultFunction extends EvalResult {
 		}
 		return funcKey + ")";
 	}
+	
+	static makeKey(functionName, paramCount, paramTypes) {
+		let funcKey = functionName + "(";
+		for (let i = 0; i < paramCount; i++) {
+			funcKey += (i > 0 ? "," : "") +
+				paramTypes[i].typeKey();
+		}
+		return funcKey + ")";
+	}
+	
 }
 
 class EvalResultProcedure extends EvalResult {
@@ -2841,6 +2862,10 @@ class EvalError extends EvalResult {
 		return new EvalError("Unknown function " + funcName);
 	}
 	
+	static unknownNativeFunction(funcName) {
+		return new EvalError("Unknown native function " + funcName);
+	}
+	
 	static unknownProcedure(procName) {
 		return new EvalError("Unknown procedure " + procName);
 	}
@@ -2956,6 +2981,8 @@ class CodeBlock {
 	}
 	
 	code1(inst) {
+		this.codes[this.codeSize] = OPCODE_NOARG;
+		this.codeSize++;
 		this.codes[this.codeSize] = inst;
 		this.codeSize++;
 	}
@@ -2971,16 +2998,9 @@ class CodeBlock {
 		this.code1(OPCODE_SUSPEND);
 	}
 	
-	codeDup() {
-		this.code1(OPCODE_DUP);
-	}
-	
-	codeSwap() {
-		this.code1(OPCODE_SWAP);
-	}
-	
 	codePush(val) {
 		this.code2(OPCODE_PUSH, val);
+		return this.codeSize - 1;
 	}
 	
 	codePushf(val) {
@@ -3006,51 +3026,7 @@ class CodeBlock {
 	codePushLocalForMutate(offset) {
 		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
 	}	
-	
-	codePushIndirection(offset) {
-		this.code2(OPCODE_PUSH_INDIRECTION, offset);
-	}
-	
-	codePushIndirect(offset) {
-		this.code2(OPCODE_PUSH_INDIRECT, offset);
-	}
-	
-	codePushIndirectForMutate(offset) {
-		this.code2(OPCODE_PUSH_INDIRECT_FOR_MUTATE, offset);
-	}
-
-	codePushPtrOffset() {
-		this.code1(OPCODE_PUSH_PTR_OFFSET);
-	}
-	
-	codePushPtrOffsetForMutate() {
-		this.code1(OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE);
-	}
-	
-	codeCreateRecord(itemCount) {
-		this.code2(OPCODE_CREATE_RECORD, itemCount);
-	}
-	
-	codeCreateBasicArray(itemCount) {
-		this.code2(OPCODE_CREATE_BASIC_ARRAY, itemCount);
-	}
-	
-	codeCreateArray(itemCount) {
-		this.code2(OPCODE_CREATE_ARRAY, itemCount);
-	}
-	
-	codeArrayTimes() {
-		this.code1(OPCODE_ARRAY_TIMES);
-	}
-	
-	codeBasicArrayTimes() {
-		this.code1(OPCODE_BASIC_ARRAY_TIMES);
-	}
-	
-	codeCreateString(strId) {
-		this.code2(OPCODE_CREATE_STRING, strId);
-	}
-	
+		
 	codePopGlobal(offset) {
 		this.code2(OPCODE_POP_GLOBAL, offset);
 	}
@@ -3059,14 +3035,6 @@ class CodeBlock {
 		this.code2(OPCODE_POP_LOCAL, offset);
 	}
 	
-	codePopIndirect(offset) {
-		this.code2(OPCODE_POP_INDIRECT, offset);
-	}
-	
-	codePopPtrOffset() {
-		this.code1(OPCODE_POP_PTR_OFFSET);
-	}
-		
 	codePopVoid(count) {
 		this.code2(OPCODE_POP_VOID, count);
 	}
@@ -3111,14 +3079,6 @@ class CodeBlock {
 		this.code1(OPCODE_LTE);
 	}
 	
-	codeEq() {
-		this.code1(OPCODE_EQ);
-	}
-	
-	codeNe() {
-		this.code1(OPCODE_NE);
-	}
-
 	// real
 
 	codeAddf() {
@@ -3156,17 +3116,8 @@ class CodeBlock {
 	codeLtef() {
 		this.code1(OPCODE_LTEF);
 	}
-	
-	codeEqf() {
-		this.code1(OPCODE_EQF);
-	}
-	
-	codeNef() {
-		this.code1(OPCODE_NEF);
-	}
-	
+		
 	// real
-
 
 	codeAnd() {
 		this.code1(OPCODE_AND);
@@ -3180,18 +3131,6 @@ class CodeBlock {
 		this.code1(OPCODE_NOT);
 	}
 		
-	codeNext() {
-		this.code1(OPCODE_NEXT);
-	}
-	
-	codeEnded() {
-		this.code1(OPCODE_ENDED);
-	}
-	
-	codeEqRef() {
-		this.code1(OPCODE_EQ_REF);
-	}
-	
 	codeJz(offset) {
 		this.code2(OPCODE_JZ, offset);
 		return this.codeSize - 1;
@@ -3206,27 +3145,7 @@ class CodeBlock {
 		this.code2(OPCODE_JMP, offset);
 		return this.codeSize - 1;
 	}
-	
-	codeRaise() {
-		this.code1(OPCODE_RAISE);
-	}
-			
-	codeRet() {
-		this.code1(OPCODE_RET);
-	}
-
-	codeRetVal() {
-		this.code1(OPCODE_RET_VAL);
-	}
-	
-	codeYield() {
-		this.code1(OPCODE_YIELD);
-	}
-	
-	codeYieldDone() {
-		this.code1(OPCODE_YIELD_DONE);
-	}
-	
+				
 	codeCall(ptr) {
 		this.code2(OPCODE_CALL, ptr);
 	}
@@ -3235,37 +3154,27 @@ class CodeBlock {
 		this.code2(OPCODE_CALL_NATIVE, ptr);
 	}
 	
-	codeInitGenerator(ptr) {
-		this.code2(OPCODE_INIT_GENERATOR, ptr);
+	codeEq(count) {
+		this.code2(OPCODE_EQ, count);
 	}
 	
-	codeCreateExceptionHandler(offset) {
-		this.code2(OPCODE_CREATE_EXCEPTION_HANDLER, offset);
-		return this.codeSize - 1;
+	codeRet(count) {
+		this.code2(OPCODE_RET, count);
 	}
 	
-	codeEqTuple(count) {
-		this.code2(OPCODE_EQ_TUPLE, count);
+	codeDup(count) {
+		this.code2(OPCODE_DUP, count);
 	}
 	
-	codeRetTuple(count) {
-		this.code2(OPCODE_RET_TUPLE, count);
+	codeSwap(count) {
+		this.code2(OPCODE_SWAP, count);
+	}
+		
+	codeCallInternal(ifun) {
+		this.code2(OPCODE_CALL_INTERNAL, ifun);
 	}
 	
-	codeDupTuple(count) {
-		this.code2(OPCODE_DUP_TUPLE, count);
-	}
-	
-	codeYieldTuple(count) {
-		this.code2(OPCODE_YIELD_TUPLE, count);
-	}
-	
-	codeYieldDoneTuple(count) {
-		this.code2(OPCODE_YIELD_DONE_TUPLE, count);
-	}
-				
 }
-
 
 class CompilerContext {
 	
@@ -3328,46 +3237,6 @@ class CompilerContext {
 		if (uniqueType === null) {
 			evalType.globalId = this.nextGlobalTypeId();
 			this.types[evalType.typeKey()] = evalType;
-			if (evalType.structuralType().tag === "res-type-array") {
-				var lengthFunc = new EvalResultFunction(
-					"length",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
-					EVAL_TYPE_INTEGER, 
-					false
-				);
-				if (evalType.underlyingType.isRef) {
-					lengthFunc.nativeIndex = this.getFunction("length_array(ref)").nativeIndex;
-				} else {
-					lengthFunc.nativeIndex = this.getFunction("length_basic_array(ref)").nativeIndex;
-				}
-				this.addFunction(lengthFunc);
-				var lastIndexFunc =  new EvalResultFunction(
-					"last_index",
-					new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
-					EVAL_TYPE_INTEGER, 
-					false
-				);
-				if (evalType.underlyingType.isRef) {
-					lastIndexFunc.nativeIndex = this.getFunction("last_index_array(ref)").nativeIndex;
-				} else {
-					lastIndexFunc.nativeIndex = this.getFunction("last_index_basic_array(ref)").nativeIndex;
-				}
-				this.addFunction(lastIndexFunc);
-				var indexOfFunc =  new EvalResultFunction(
-					"index_of",
-					new EvalResultParameterList(2, [
-						new EvalResultParameter("item", evalType.underlyingType),
-						new EvalResultParameter("array", evalType)]),
-					EVAL_TYPE_INTEGER, 
-					false
-				);
-				if (evalType.underlyingType.isRef) {
-					indexOfFunc.nativeIndex = this.getFunction("index_of_array(ref,ref)").nativeIndex;
-				} else {
-					indexOfFunc.nativeIndex = this.getFunction("index_of_basic_array(integer,ref)").nativeIndex;
-				}
-				this.addFunction(indexOfFunc);
-			}
 			return evalType;
 		}
 		return uniqueType;
@@ -3514,7 +3383,6 @@ class CompilerVariable {
 	}		
 }
 
-
 class CompilerScope {
 
 	static makeGlobal() {
@@ -3635,10 +3503,6 @@ class CompilerScope {
 		return newVar;	
 	}
 	
-	localOffset() {
-		return this.offset + this.variableOffset;
-	}
-	
 }
 
 
@@ -3688,8 +3552,6 @@ class Compiler {
 							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_GLOBAL_MOVE;
 						} else if (opcode === OPCODE_PUSH_LOCAL) {
 							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_LOCAL_MOVE;
-						} else if (opcode === OPCODE_PUSH_INDIRECT) {
-							// Do nothing
 						} else {
 							console.log("Inconsistent opcode " + this.codeBlock.codes[loc.loc]);
 						}
@@ -3703,32 +3565,142 @@ class Compiler {
 		this.scope = this.scope.parent;
 	}
 	
-	generateEqForType(valType) {
-		if (valType.slotCount() > 1) {
-			this.codeBlock.codeEqTuple(valType.slotCount());
-		} else if (valType.isSlotRef(0)) {
-			this.codeBlock.codeEqRef();
-		} else if (valType.structuralType() === EVAL_TYPE_REAL) {
-			this.codeBlock.codeEqf();
-		} else {
-			this.codeBlock.codeEq();
+	addType(evalType) {
+		let uniqueType = this.context.getType(evalType.typeKey());
+		if (uniqueType === null) {
+			uniqueType = this.context.addType(evalType);
+			if (uniqueType.structuralType().tag === "res-type-array") {
+				this.generateArrayFunctions(uniqueType);
+			}
 		}
+		return uniqueType;
 	}
 	
-	generateNeForType(valType) {
-		if (valType.slotCount() > 1) {
-			this.codeBlock.codeEqTuple(valType.slotCount());
-			this.codeBlock.codeNot();
-		} else if (valType.isSlotRef(0)) {
-			this.codeBlock.codeEqRef();
-			this.codeBlock.codeNot();
-		} else if (valType.structuralType() === EVAL_TYPE_REAL) {
-			this.codeBlock.codeNef();
-		} else {
-			this.codeBlock.codeNe();
-		}
+	generateArrayFunctions(evalType) {
+		let lengthFunc = this.generateArrayLengthFunction(evalType);
+		this.generateArrayLastIndexFunction(evalType, lengthFunc);
+		this.generateArrayIndexOfFunction(evalType);
 	}
 	
+	generateArrayLengthFunction(evalType) {	
+		var func = new EvalResultFunction(
+			"length",
+			new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
+			EVAL_TYPE_INTEGER, 
+			false
+		);
+		let itemType = evalType.underlyingType;	
+		if (itemType.slotCount() == 1) {
+			func.internalIndex = PLW_IFUN_GET_BLOB_SIZE;
+		} else {
+			func.codeBlockIndex = this.context.addCodeBlock(func.functionKey());
+			let cb = this.context.codeBlocks[func.codeBlockIndex];
+			cb.codePushLocal(-5);
+			cb.codeCallInternal(PLW_IFUN_GET_BLOB_SIZE);
+			cb.codePush(evalType.underlyingType.slotCount());
+			cb.codeDiv();
+			cb.codeRet(1);
+		}
+		this.context.addFunction(func);
+		return func;
+	}
+	
+	generateArrayLastIndexFunction(evalType, lengthFunc) {
+		var func = new EvalResultFunction(
+			"last_index",
+			new EvalResultParameterList(1, [new EvalResultParameter("array", evalType)]),
+			EVAL_TYPE_INTEGER, 
+			false
+		);
+		func.codeBlockIndex = this.context.addCodeBlock(func.functionKey());
+		let cb = this.context.codeBlocks[func.codeBlockIndex];
+		cb.codePushLocal(-5);
+		if (lengthFunc.codeBlockIndex !== -1) {
+			cb.codePush(1);
+			cb.codeCall(lengthFunc.codeBlockIndex);
+		} else {
+			cb.codeCallInternal(lengthFunc.internalIndex);
+		}
+		cb.codePush(1);
+		cb.codeSub();
+		cb.codeRet(1);
+		this.context.addFunction(func);
+		return func;
+	}
+	
+	generateArrayIndexOfFunction(evalType) {
+		let itemType = evalType.underlyingType;
+		var func =  new EvalResultFunction(
+			"index_of",
+			new EvalResultParameterList(2, [
+				new EvalResultParameter("item", itemType),
+				new EvalResultParameter("array", evalType)]),
+			EVAL_TYPE_INTEGER, 
+			false
+		);
+		func.codeBlockIndex = this.context.addCodeBlock(func.functionKey());
+		let cb = this.context.codeBlocks[func.codeBlockIndex];
+		for (let i = 0; i < itemType.slotCount() + 1; i++) {
+			cb.codePushLocal(-5 - itemType.slotCount() + i);
+		}
+		cb.codePush(itemType.slotCount());
+		cb.codeCallInternal(PLW_IFUN_GET_BLOB_INDEX_OF_ITEM);
+		cb.codeRet(1);
+		this.context.addFunction(func);
+		return func;
+	}
+	
+	generateFunctionCall(functionName, argCount, argTypes, expectedType = null) {
+		let funcKey = EvalResultFunction.makeKey(functionName, argCount, argTypes);
+		let func = this.context.getFunction(funcKey);
+		if (func === null) {
+			let variantIndex = -1;
+			for (let i = 0; i < argCount; i++) {
+				if (argTypes[i].tag === "res-type-variant") {
+					variantIndex = i;
+					break;
+				}
+			}
+			if (variantIndex !== -1) {
+				let genRes = this.generateVariantDispatchFunction(functionName, argCount, argTypes, variantIndex, expectedType);
+				if (genRes.isError()) {
+					return genRes;
+				}
+				func = this.context.getFunction(funcKey);
+			} else {
+				let macroFunc = this.context.findMacroFunction(functionName, argTypes);
+				if (macroFunc !== null) {
+					let genRes = this.generateFunctionFromMacro(functionName, argTypes, macroFunc);
+					if (genRes.isError()) {
+						return genRes;
+					}
+				}
+				func = this.context.getFunction(funcKey);
+			}
+			if (func === null) {
+				return EvalError.unknownFunction(funcKey);
+			}
+		}
+		let argSlotCount = 0;
+		for (let i = 0; i < argCount; i++) {
+			argSlotCount += argTypes[i].slotCount();
+		}
+		if (func.nativeIndex !== -1) {
+			this.codeBlock.codePush(argSlotCount);
+			this.codeBlock.codeCallNative(func.nativeIndex);
+		} else if (func.internalIndex !== -1) {
+			this.codeBlock.codeCallInternal(func.internalIndex);
+		} else if (func.isGenerator === true) {
+			this.codeBlock.codePush(argSlotCount);
+			this.codeBlock.codePush(func.codeBlockIndex);
+			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_GENERATOR);
+		} else {
+			this.codeBlock.codePush(argSlotCount);
+			this.codeBlock.codeCall(func.codeBlockIndex);
+		}
+		return func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
+	}
+			
 	generateFunctionFromMacro(functionName, argTypes, macroFunc) {
 		let params = [];
 		for (let i = 0; i < macroFunc.parameterList.parameterCount; i++) {
@@ -3745,16 +3717,16 @@ class Compiler {
 		return this.evalStatement(funcDecl);
 	}
 	
-	generateVariantDispatchFunction(astFuncCall, argTypes, variantIndex, expectedType) {
+	generateVariantDispatchFunction(functionName, argCount, argTypes, variantIndex, expectedType) {
 		let params = [];
-		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
+		for (let i = 0; i < argCount; i++) {
 			params[i] = new AstParameter("arg" + i, argTypes[i].toAst());
 		}
 		let args = [];
-		for (let i = 0; i < astFuncCall.argList.argCount; i++) {
+		for (let i = 0; i < argCount; i++) {
 			args[i] = new AstVariable(i == variantIndex ? "v" : "arg" + i);
 		}
-		let retVal = new AstFunction(astFuncCall.functionName, new AstArgList(astFuncCall.argList.argCount, args));
+		let retVal = new AstFunction(functionName, new AstArgList(argCount, args));
 		if (expectedType !== null) {
 			retVal = new AstAs(retVal, expectedType.toAst());
 		}
@@ -3767,8 +3739,8 @@ class Compiler {
 				"v", thenExpr);
 		}
 		let funcDecl = new AstFunctionDeclaration(
-			astFuncCall.functionName,
-			new AstParameterList(astFuncCall.argList.argCount, params),
+			functionName,
+			new AstParameterList(argCount, params),
 			EVAL_TYPE_INFER.toAst(),
 			new AstBlock(1, [ 
 				new AstKindofStmt (
@@ -3844,7 +3816,7 @@ class Compiler {
 			if (underType === EVAL_TYPE_ANY) {
 				return EvalError.wrongType(underType, "not any").fromExpr(expr.underlyingType);					
 			}
-			return this.context.addType(new EvalTypeArray(underType));
+			return this.addType(new EvalTypeArray(underType));
 		}
 		if (expr.tag === "ast-type-sequence") {
 			let underType = this.evalType(expr.underlyingType);
@@ -3854,7 +3826,7 @@ class Compiler {
 			if (underType === EVAL_TYPE_ANY) {
 				return EvalError.wrongType(underType, "not any").fromExpr(expr.underlyingType);					
 			}
-			return this.context.addType(new EvalTypeSequence(underType));
+			return this.addType(new EvalTypeSequence(underType));
 		}
 		if (expr.tag === "ast-type-record") {
 			for (let i = 1; i < expr.fieldCount; i++) {
@@ -3873,12 +3845,9 @@ class Compiler {
 				if (fieldType === EVAL_TYPE_ANY) {
 					return EvalError.wrongType(fieldType, "not any").fromExpr(expr.fields[i].fieldType);					
 				}
-				if (fieldType.slotCount() > 1) {
-					return EvalError.todo("Manage multi slot types in record").fromExpr(expr.fields[i].fieldType);
-				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldType);
 			}
-			return this.context.addType(new EvalTypeRecord(expr.fieldCount, fields));
+			return this.addType(new EvalTypeRecord(expr.fieldCount, fields));
 		}
 		if (expr.tag === "ast-type-variant") {
 			let types = [];
@@ -3889,9 +3858,6 @@ class Compiler {
 				}
 				if (type === EVAL_TYPE_ANY) {
 					return EvalError.wrongType(type, "not any").fromExpr(expr.types[i]);					
-				}
-				if (type.slotCount() > 1) {
-					return EvalError.todo("Manage multi slot types in variant").fromExpr(expr.types[i]);
 				}
 				if (type.tag === "res-type-variant") {
 					return EvalError.cantNestVariant(type.typeKey()).fromExpr(expr.types[i]);
@@ -3906,7 +3872,7 @@ class Compiler {
 					if (a.typeKey() > b.typeKey()) return 1;
 					return -1;
 			});			
-			return this.context.addType(new EvalTypeVariant(expr.typeCount, types));
+			return this.addType(new EvalTypeVariant(expr.typeCount, types));
 		}
 		if (expr.tag === "ast-type-tuple") {
 			let types = [];
@@ -3920,7 +3886,7 @@ class Compiler {
 				}
 				types[i] = type;
 			}
-			return this.context.addType(new EvalTypeTuple(expr.typeCount, types));
+			return this.addType(new EvalTypeTuple(expr.typeCount, types));
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
@@ -3943,7 +3909,7 @@ class Compiler {
 				return EvalError.wrongType(underlyingType, "not any").fromExpr(expr.typeExpr);					
 			}
 			let namedType = new EvalTypeName(expr.typeName, underlyingType);
-			this.context.addType(namedType);
+			this.addType(namedType);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-variable-declaration") {
@@ -3991,9 +3957,13 @@ class Compiler {
 				}
 				// assign the value
 				if (variable.isGlobal) {
-					this.codeBlock.codePopGlobal(variable.offset);
+					for (let i = valueType.slotCount() - 1; i >= 0; i--) { 
+						this.codeBlock.codePopGlobal(variable.offset + i);
+					}
 				} else {
-					this.codeBlock.codePopLocal(variable.offset);
+					for (let i = valueType.slotCount() - 1; i >= 0; i--) { 
+						this.codeBlock.codePopLocal(variable.offset + i);
+					}
 				}
 				if (variable.stat !== null) {
 					variable.stat.addReset();
@@ -4019,7 +3989,7 @@ class Compiler {
 					variables[i] = variable;
 					variableTypes[i] = variable.varType;					
 				}
-				let tupleType = this.context.addType(new EvalTypeTuple(tupleExpr.itemCount, variableTypes));
+				let tupleType = this.addType(new EvalTypeTuple(tupleExpr.itemCount, variableTypes));
 				// evaluate the value
 				let valueType = this.eval(expr.right, tupleType);
 				if (valueType.isError()) {
@@ -4048,12 +4018,11 @@ class Compiler {
 				if (indexedType.isError()) {
 					return indexedType;
 				}
-				while (indexedType.tag === "res-type-name") {
-					indexedType = indexedType.underlyingType;
-				}
-				if (indexedType.tag !== "res-type-array") {
+				let structType = indexedType.structuralType();
+				if (structType.tag !== "res-type-array") {
 					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
 				}
+				let itemType = structType.underlyingType;
 				// Evaluate the index
 				let indexType = this.eval(indexExpr.index);
 				if (indexType.isError()) {
@@ -4065,61 +4034,51 @@ class Compiler {
 				if (indexExpr.indexTo !== null) {
 					return EvalError.unassignable(indexExpr.tag).fromExpr(indexExpr);
 				}
+				if (itemType.slotCount() > 1) {
+					this.codeBlock.codePush(itemType.slotCount());
+					this.codeBlock.codeMul();
+				}
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right, indexedType.underlyingType);
+				let valueType = this.eval(expr.right, itemType);
 				if (valueType.isError()) {
 					return valueType;
 				}
-				if (valueType !== indexedType.underlyingType) {
-					return EvalError.wrongType(valueType, indexedType.underlyingType.typeKey()).fromExpr(expr.right);
+				if (valueType !== itemType) {
+					return EvalError.wrongType(valueType, itemType.typeKey()).fromExpr(expr.right);
 				}
-				// Assigne the value
-				this.codeBlock.codePopPtrOffset();
+				// Assign the value
+				this.codeBlock.codePush(itemType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_WRITE_BLOB);
 				return EVAL_RESULT_OK;
 			}
 			if (expr.left.tag === "ast-field") {
 				let fieldExpr = expr.left;
-				let localRecordOffset = this.scope.localOffset();
 				// evaluate the record
 				let recordType = this.evalForMutate(fieldExpr.expr);
 				if (recordType.isError()) {
 					return recordType;
 				}
-				while (recordType.tag === "res-type-name") {
-					recordType = recordType.underlyingType;
-				}
-				if (recordType.tag != "res-type-record") {
+				let structType = recordType.structuralType();
+				if (structType.tag != "res-type-record") {
 					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
 				}
-				// search and push the offset of the first slot of the field
-				let fieldIndex = -1;
-				for (let i = 0; i < recordType.fieldCount; i++) {
-					if (recordType.fields[i].fieldName === fieldExpr.fieldName) {
-						fieldIndex = i;
-						break;
-					}
-				}
-				if (fieldIndex === -1) {
+				// push the offset of the field
+				let field = structType.getField(fieldExpr.fieldName);
+				if (field === null) {
 					return EvalError.unknownField(fieldExpr.fieldName, recordType.typeKey()).fromExpr(fieldExpr);
 				}
-				this.codeBlock.codePush(recordType.fields[fieldIndex].slotOffsets[0]);
+				this.codeBlock.codePush(field.offset);
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right, recordType.fields[fieldIndex].fieldType);
+				let valueType = this.eval(expr.right, field.fieldType);
 				if (valueType.isError()) {
 					return valueType;
 				}
-				if (valueType !== recordType.fields[fieldIndex].fieldType) {
-					return EvalError.wrongType(valueType, recordType.fields[fieldIndex].fieldType.typeKey()).fromExpr(expr.right);
+				if (valueType !== field.fieldType) {
+					return EvalError.wrongType(valueType, field.fieldType.typeKey()).fromExpr(expr.right);
 				}
 				// Assigne the value
-				for (let i = valueType.slotCount() - 1; i > 0; i--) {
-					this.codeBlock.codePushLocal(localRecordOffset);
-					this.codeBlock.codePush(recordType.fields[fieldIndex].slotOffsets[i]);
-					this.codeBlock.codePushLocal(localRecordOffset + i + 2);
-					this.codeBlock.codePopPtrOffset();
-					this.codeBlock.codePopVoid(1);
-				}
-				this.codeBlock.codePopPtrOffset();
+				this.codeBlock.codePush(field.fieldType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_WRITE_BLOB);
 				return EVAL_RESULT_OK;
 			}
 			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
@@ -4130,8 +4089,9 @@ class Compiler {
 			this.pushScopeBlock();
 			if (expr.exception !== null) {
 				this.scope.clearVarStatTmp();
-				exceptionLoc = this.codeBlock.codeCreateExceptionHandler(0);
-				this.scope.addVariable("_exception_handler", EVAL_TYPE_REF, true);
+				exceptionLoc = this.codeBlock.codePush(0);
+				this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_EXCEPTION_HANDLER);
+				this.scope.addVariable("_exception_handler", EVAL_TYPE_EXCEPTION_HANDLER, true);
 			}
 			for (let i = 0; i < expr.statementCount; i++) {
 				if (ret !== EVAL_RESULT_OK) {
@@ -4192,7 +4152,7 @@ class Compiler {
 				if (whenType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(whenType, "integer").fromExpr(whenStmt.whenExpr);	
 				}
-				this.codeBlock.codeEq();
+				this.codeBlock.codeEq(whenType.slotCount());
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.scope.clearVarStatTmp();
 				let stmtRes = this.evalStatement(whenStmt.statement);
@@ -4216,7 +4176,7 @@ class Compiler {
 				if (ret === null) {
 					ret = EVAL_RESULT_RAISE;
 				}
-				this.codeBlock.codeRaise();
+				this.codeBlock.codeCallInternal(PLW_IFUN_RAISE_EXCEPTION);
 			} else {
 				this.scope.clearVarStatTmp();
 				let stmtRes = this.evalStatement(expr.defaultStmt);
@@ -4295,13 +4255,14 @@ class Compiler {
 			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
-			this.codeBlock.codeDup();
+			this.codeBlock.codeDup(1);
+			this.codeBlock.codePush(caseType.structuralType().innerSlotCount - 1);
 			this.codeBlock.codePush(1);
-			this.codeBlock.codePushPtrOffset();
+			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 			let endLocs = [];
 			let endLocCount = 0;
 			for (let i = 0; i < expr.whenCount; i++) {
-				this.codeBlock.codeDup();
+				this.codeBlock.codeDup(1);
 				let whenType = this.evalType(expr.whens[i].type);
 				if (whenType.isError()) {
 					return whenType;
@@ -4315,12 +4276,13 @@ class Compiler {
 				}
 				kindHasWhen[typeIndex] = true;
 				this.codeBlock.codePush(whenType.globalId);
-				this.codeBlock.codeEq();						
+				this.codeBlock.codeEq(1);						
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.codeBlock.codePopVoid(1);
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
-				this.codeBlock.codePushPtrOffset();
+				this.codeBlock.codePush(whenType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 				this.scope.addVariable(expr.whens[i].varName, whenType, false);
 				this.scope.clearVarStatTmp();
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
@@ -4331,7 +4293,7 @@ class Compiler {
 				if (thenRet === EVAL_RESULT_RETURN) {
 					returnCount++;
 				}
-				this.codeBlock.codePopVoid(1);
+				this.codeBlock.codePopVoid(whenType.slotCount());
 				this.popScope();
 				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 				endLocCount++;
@@ -4444,11 +4406,11 @@ class Compiler {
 				if (sequence.tag == "res-type-sequence") {
 					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeNext();
+					this.codeBlock.codeCallInternal(PLW_IFUN_GET_GENERATOR_NEXT_ITEM);
 					let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
 					let testLoc = this.codeBlock.codeSize;
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeEnded();
+					this.codeBlock.codeCallInternal(PLW_IFUN_HAS_GENERATOR_ENDED);
 					let endLoc = this.codeBlock.codeJnz(0);
 					this.scope.clearVarStatTmp();
 					let stmtRet = this.evalStatement(expr.statement);
@@ -4457,7 +4419,7 @@ class Compiler {
 					}
 					this.scope.clearVarStatTmp();
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeNext();
+					this.codeBlock.codeCallInternal(PLW_IFUN_GET_GENERATOR_NEXT_ITEM);
 					for (let i = 0; i < sequence.underlyingType.slotCount(); i++) {
 						this.codeBlock.codePopLocal(indexVar.offset + sequence.underlyingType.slotCount() - 1 - i);
 					}
@@ -4465,22 +4427,34 @@ class Compiler {
 					this.codeBlock.setLoc(endLoc);
 				} else if (sequence.tag === "res-type-array") {
 					let arrayVar = this.scope.addVariable("_for_array", sequence, false);
-					let lastIndexFuncIndex = sequence.underlyingType.isRef ?
-						this.context.getFunction("last_index_array(ref)").nativeIndex :
-						this.context.getFunction("last_index_basic_array(ref)").nativeIndex;
-					this.codeBlock.codeDup();
-					this.codeBlock.codePush(1);
-					this.codeBlock.codeCallNative(lastIndexFuncIndex);
+					let itemType = sequence.underlyingType;
+					// Get the last_index of the array
+					this.codeBlock.codeDup(1);
+					let lengthType = this.generateFunctionCall("last_index", 1, [sequence], EVAL_TYPE_INTEGER);
+					if (lengthType.isError()) {
+						return lengthType.fromExpr(expr);
+					}
+					if (lengthType !== EVAL_TYPE_INTEGER) {
+						return EvalError.wrongType(lengthType, "integer").fromExpr(expr);
+					}
 					let lastIndexVar = this.scope.addVariable("_for_last_index", EVAL_TYPE_INTEGER, false);
-					this.codeBlock.codePush(0);
+					// Create a variable for the item
+					for (let i = 0; i < itemType.slotCount(); i++) {
+						this.codeBlock.codePush(0);
+					}
 					let itemVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					// Initialize the counter, 0 or last_index * itemSize if reverse
 					if (expr.isReverse === true) {
 						this.codeBlock.codePushLocal(lastIndexVar.offset);
+						this.codeBlock.codePush(itemType.slotCount());
+						this.codeBlock.codeMul();
 					} else {
 						this.codeBlock.codePush(0);
 					}
 					let indexVar = this.scope.addVariable("_for_index", EVAL_TYPE_INTEGER, false);
+					// Begin of the loop
 					let testLoc = this.codeBlock.codeSize;
+					// Test the counter <= last_index, or >= 0 if reverse
 					this.codeBlock.codePushLocal(indexVar.offset);
 					if (expr.isReverse === true) {
 						this.codeBlock.codePush(0);
@@ -4489,24 +4463,34 @@ class Compiler {
 						this.codeBlock.codePushLocal(lastIndexVar.offset);
 						this.codeBlock.codeLte();
 					}
+					// If no, go to the end of the loop
 					let endLoc = this.codeBlock.codeJz(0);
+					// Get the item in the array at the counter index
 					this.codeBlock.codePushLocal(arrayVar.offset);
 					this.codeBlock.codePushLocal(indexVar.offset);
-					this.codeBlock.codePushPtrOffset();
-					this.codeBlock.codePopLocal(itemVar.offset);
+					this.codeBlock.codePush(sequence.underlyingType.slotCount());
+					this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+					// Set the item variable
+					for (let i = 0; i < itemType.slotCount(); i++) {
+						this.codeBlock.codePopLocal(itemVar.offset + itemType.slotCount() - i - 1);
+					}
+					// Evaluate the loop statement
 					this.scope.clearVarStatTmp();
 					let stmtRet = this.evalStatement(expr.statement);
 					if (stmtRet.isError()) {
 						return stmtRet;
 					}
 					this.scope.clearVarStatTmp();
-					this.codeBlock.codePush(1);
+					// Increment the counter, decrement if reverse
+					this.codeBlock.codePush(itemType.slotCount());
 					if (expr.isReverse === true) {
 						this.codeBlock.codeSub();
 					} else {
 						this.codeBlock.codeAdd();
 					}
+					// Go to at the beginning of the loop
 					this.codeBlock.codeJmp(testLoc);
+					// End of the loop
 					this.codeBlock.setLoc(endLoc);
 				} else {
 					return EvalError.wrongType(sequence, "sequence or array").fromExpr(expr.sequence);
@@ -4564,7 +4548,7 @@ class Compiler {
 			if (raiseType !== EVAL_TYPE_INTEGER) {
 				return EvalError.wrongType(raiseType, "integer").fromExpr(expr.expr);
 			}
-			this.codeBlock.codeRaise();
+			this.codeBlock.codeCallInternal(PLW_IFUN_RAISE_EXCEPTION);
 			return EVAL_RESULT_RAISE;
 		}
 		if (expr.tag === "ast-return") {
@@ -4593,13 +4577,7 @@ class Compiler {
 			} else if (retType !== frameScope.returnType) {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			if (retType === null) {
-				this.codeBlock.codeRet();
-			} else if (retType.slotCount() > 1) {
-				this.codeBlock.codeRetTuple(retType.slotCount());
-			} else {
-				this.codeBlock.codeRetVal();
-			}
+			this.codeBlock.codeRet(retType === null ? 0 : retType.slotCount());
 			return EVAL_RESULT_RETURN;
 		}
 		if (expr.tag === "ast-yield") {
@@ -4617,11 +4595,8 @@ class Compiler {
 			if (retType !== frameScope.returnType) {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			if (retType.slotCount() > 1) {
-				this.codeBlock.codeYieldTuple(retType.slotCount());
-			} else {
-				this.codeBlock.codeYield();
-			}
+			this.codeBlock.codePush(retType.slotCount());
+			this.codeBlock.codeCallInternal(PLW_IFUN_YIELD_GENERATOR_ITEM);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-function-declaration") {
@@ -4674,11 +4649,11 @@ class Compiler {
 					return ret;
 				}
 				if (evalFunc.isGenerator === true) {
-					if (returnType.slotCount() > 1) {
-						this.codeBlock.codeYieldDoneTuple(returnType.slotCount());
-					} else {
-						this.codeBlock.codeYieldDone();
+					for (let i = 0; i < returnType.slotCount(); i++) {
+						this.codeBlock.codePush(0);
 					}
+					this.codeBlock.codePush(returnType.slotCount());
+					this.codeBlock.codeCallInternal(PLW_IFUN_YIELD_GENERATOR_ITEM);
 				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
@@ -4726,7 +4701,7 @@ class Compiler {
 					this.context.removeProcedure(evalProc.procedureKey());
 					return ret;
 				}
-				this.codeBlock.codeRet();
+				this.codeBlock.codeRet(0);
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile procedure
@@ -4819,11 +4794,12 @@ class Compiler {
 			if (indexedType.isError()) {
 				return indexedType;
 			}
-			while (indexedType.tag === "res-type-name") {
-				indexedType = indexedType.underlyingType;
-			}
-			if (indexedType.tag !== "res-type-array") {
+			let structType = indexedType.structuralType();
+			if (structType.tag !== "res-type-array") {
 				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
+			}
+			if (structType.underlyingType.slotCount() > 1) {
+				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			// evaluate the index
 			let indexType = this.eval(expr.index);
@@ -4837,32 +4813,28 @@ class Compiler {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			// push the result on the stack
-			this.codeBlock.codePushPtrOffsetForMutate();
-			return indexedType.underlyingType;
+			this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_MUTABLE_OFFSET);
+			return structType.underlyingType;
 		}
 		if (expr.tag === "ast-field") {
 			let recordType = this.evalForMutate(expr.expr);
 			if (recordType.isError()) {
 				return recordType;
 			}
-			while (recordType.tag === "res-type-name") {
-				recordType = recordType.underlyingType;
-			}
-			if (recordType.tag != "res-type-record") {
+			let structType = recordType.structuralType();
+			if (structType.tag != "res-type-record") {
 				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
 			}
-			for (let i = 0; i < recordType.fieldCount; i++) {
-				if (recordType.fields[i].fieldName === expr.fieldName) {
-					if (recordType.fields[i].fieldType.slotCount() > 1) {
-						return EvalError.unassignable(expr.tag).fromExpr(expr);
-					} else {
-						this.codeBlock.codePush(recordType.fields[i].slotOffsets[0]);
-						this.codeBlock.codePushPtrOffsetForMutate();
-						return recordType.fields[i].fieldType;
-					}
-				}
+			let field = structType.getField(expr.fieldName);
+			if (field === null) {
+				return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 			}
-			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+			if (field.fieldType.slotCount() > 1) {
+				return EvalError.unassignable(expr.tag).fromExpr(expr);
+			}
+			this.codeBlock.codePush(field.offset);
+			this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_MUTABLE_OFFSET);
+			return field.fieldType;
 		}
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
 	}
@@ -4885,8 +4857,12 @@ class Compiler {
 			}
 			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueType)) {
 				if (valueType.tag !== "res-type-variant") {
+					for (let i = 0; i < asType.structuralType().innerSlotCount - valueType.slotCount() - 1; i++) {
+						this.codeBlock.codePush(0);
+					}
 					this.codeBlock.codePush(valueType.globalId);
-					this.codeBlock.codeCreateRecord(2);
+					this.codeBlock.codePush(asType.structuralType().innerSlotCount);
+					this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
 				}
 				return asType;
 			}
@@ -4915,7 +4891,8 @@ class Compiler {
 				return EVAL_TYPE_CHAR;
 			}
 			let strId = this.codeBlock.addStrConst(expr.textValue);
-			this.codeBlock.codeCreateString(strId);
+			this.codeBlock.codePush(strId);
+			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_STRING);
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-tuple") {
@@ -4927,7 +4904,7 @@ class Compiler {
 				}
 				itemTypes[i] = itemType;
 			}
-			return this.context.addType(new EvalTypeTuple(expr.itemCount, itemTypes));
+			return this.addType(new EvalTypeTuple(expr.itemCount, itemTypes));
 		}
 		if (expr.tag === "ast-value-array") {
 			if (expr.itemCount === 0) {
@@ -4937,11 +4914,8 @@ class Compiler {
 					if (expectedType.structuralType().tag !== "res-type-array") {
 						return EvalError.wrongType(expectedType, "array").fromExpr(expr);				
 					}
-					if (expectedType.structuralType().underlyingType.isRef === true) {
-						this.codeBlock.codeCreateArray(0);
-					} else {
-						this.codeBlock.codeCreateBasicArray(0);
-					}
+					this.codeBlock.codePush(0);
+					this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
 					return expectedType;
 				}
 			}
@@ -4959,12 +4933,9 @@ class Compiler {
 				}
 			}
 			// Allocate the array
-			if (itemType.isRef === false) {
-				this.codeBlock.codeCreateBasicArray(expr.itemCount);
-			} else {
-				this.codeBlock.codeCreateArray(expr.itemCount);
-			}
-			return this.context.addType(new EvalTypeArray(itemType));
+			this.codeBlock.codePush(expr.itemCount * itemType.slotCount());
+			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
+			return this.addType(new EvalTypeArray(itemType));
 		}
 		if (expr.tag === "ast-value-record") {
 			let fields = [];
@@ -4975,9 +4946,34 @@ class Compiler {
 				}
 				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
 			}
-			let recordType = this.context.addType(new EvalTypeRecord(expr.fieldCount, fields)); 
-			this.codeBlock.codeCreateRecord(recordType.fieldSlotCount);
+			let recordType = this.addType(new EvalTypeRecord(expr.fieldCount, fields));
+			this.codeBlock.codePush(recordType.fieldSlotCount);
+			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
 			return recordType;
+		}
+		if (expr.tag === "ast-concat") {
+			let firstItemType = null;
+			for (let i = 0; i < expr.itemCount; i++) {
+				let itemType = this.eval(expr.items[i]);
+				if (itemType.isError()) {
+					return itemType;
+				}
+				if (itemType.structuralType() !== EVAL_TYPE_TEXT && itemType.structuralType().tag !== "res-type-array") {
+					return EvalError.wrongType(itemsType, "text or array").fromExpr(expr.items[i]);
+				}
+				if (i === 0) {
+					firstItemType = itemType;
+				} else if (firstItemType !== itemType) {
+					return EvalError.wrongType(itemType, firstItemType.typeKey()).fromExpr(expr.items[i]);
+				}
+			}
+			this.codeBlock.codePush(expr.itemCount);
+			if (firstItemType.structuralType() === EVAL_TYPE_TEXT) {
+				this.codeBlock.codeCallInternal(PLW_IFUN_CONCAT_STRING);
+			} else {
+				this.codeBlock.codeCallInternal(PLW_IFUN_CONCAT_BLOB);
+			}
+			return firstItemType;
 		}
 		if (expr.tag === "ast-operator-binary") {
 			if (expr.operator === TOK_AND || expr.operator === TOK_OR) {
@@ -5002,31 +4998,6 @@ class Compiler {
 				this.codeBlock.setLoc(endLoc);
 				return EVAL_TYPE_BOOLEAN;
 			}
-			if (expr.operator === TOK_CONCAT) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
-				}
-				if (leftType.structuralType() !== EVAL_TYPE_TEXT && leftType.structuralType().tag !== "res-type-array") {
-					return EvalError.wrongType(leftType, "text or array").fromExpr(expr.left);
-				}
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
-				}
-				if (rightType.typeKey() !== leftType.typeKey()) {
-					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
-				}
-				this.codeBlock.codePush(2);
-				if (leftType.structuralType() === EVAL_TYPE_TEXT) {
-					this.codeBlock.codeCallNative(this.context.getFunction("concat(text,text)").nativeIndex);
-				} else if (leftType.structuralType().underlyingType.isRef === false) {
-					this.codeBlock.codeCallNative(this.context.getFunction("concat_basic_array(ref,ref)").nativeIndex)
-				} else {
-					this.codeBlock.codeCallNative(this.context.getFunction("concat_array(ref,ref)").nativeIndex);
-				}
-				return leftType;
-			}
 			if (expr.operator === TOK_TIMES) {
 				let leftType = this.eval(expr.left);
 				if (leftType.isError()) {
@@ -5039,12 +5010,9 @@ class Compiler {
 				if (rightType !== EVAL_TYPE_INTEGER) {
 					return EvalError.wrongType(right, "integer").fromExpr(expr.right);
 				}
-				if (leftType.isRef) {
-					this.codeBlock.codeArrayTimes();
-				} else {
-					this.codeBlock.codeBasicArrayTimes();
-				}
-				return this.context.addType(new EvalTypeArray(leftType));
+				this.codeBlock.codePush(leftType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB_REPEAT_ITEM);
+				return this.addType(new EvalTypeArray(leftType));
 			}
 			if (expr.operator === TOK_REM) {
 				let leftType = this.eval(expr.left);
@@ -5138,23 +5106,17 @@ class Compiler {
 				if (rightType.isError()) {
 					return rightType;
 				}
-				let actRightType = rightType;
-				while (actRightType.tag === "res-type-name") {
-					actRightType = actRightType.underlyingType;
-				}
-				if (actRightType.tag !== "res-type-array") {
+				if (rightType.structuralType().tag !== "res-type-array") {
 					return EvalError.wrongType(rightType, "array").fromExpr(expr.right);
 				}
-				if (leftType !== actRightType.underlyingType) {
-					return EvalError.wrongType(leftType, rightType.underlyingType.typeKey()).fromExpr(expr.left);
+				if (leftType !== rightType.structuralType().underlyingType) {
+					return EvalError.wrongType(leftType, rightType.structuralType().underlyingType.typeKey()).fromExpr(expr.left);
 				}
-				this.codeBlock.codePush(2);
-				let nativeFuncKey = leftType.isRef === false ? "in_basic_array(integer,ref)" : "in_array(ref,ref)";
-				let nativeFunc = this.context.getFunction(nativeFuncKey);
-				if (nativeFunc === null) {
-					return EvalError.unknownFunction(nativeFuncKey);
-				}
-				this.codeBlock.codeCallNative(nativeFunc.nativeIndex);
+				this.codeBlock.codePush(leftType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_INDEX_OF_ITEM);
+				this.codeBlock.codePush(-1);
+				this.codeBlock.codeEq(1);
+				this.codeBlock.codeNot();				
 				return EVAL_TYPE_BOOLEAN;
 			}
 			if (expr.operator === TOK_EQ || expr.operator === TOK_NE) {
@@ -5169,10 +5131,9 @@ class Compiler {
 				if (rightType !== leftType) {
 					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
 				}
-				if (expr.operator === TOK_EQ) {
-					this.generateEqForType(leftType);
-				} else {
-					this.generateNeForType(leftType);
+				this.codeBlock.codeEq(leftType.slotCount());				
+				if (expr.operator === TOK_NE) {
+					this.codeBlock.codeNot();
 				}
 				return EVAL_TYPE_BOOLEAN;
 			}
@@ -5226,12 +5187,11 @@ class Compiler {
 			if (indexedType.isError()) {
 				return indexedType;
 			}
-			while (indexedType.tag === "res-type-name") {
-				indexedType = indexedType.underlyingType;
-			}
-			if (indexedType.tag !== "res-type-array") {
+			let structType = indexedType.structuralType();
+			if (structType.tag !== "res-type-array") {
 				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
 			}
+			let itemType = structType.underlyingType;
 			// evaluate the index
 			let indexType = this.eval(expr.index);
 			if (indexType.isError()) {
@@ -5240,10 +5200,14 @@ class Compiler {
 			if (indexType !== EVAL_TYPE_INTEGER) {
 				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
 			}
+			if (itemType.slotCount() > 1) {
+				this.codeBlock.codePush(itemType.slotCount());
+				this.codeBlock.codeMul();
+			}
 			if (expr.indexTo === null) {
-				// push the result on the stack
-				this.codeBlock.codePushPtrOffset();
-				return indexedType.underlyingType;
+				this.codeBlock.codePush(itemType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+				return indexedType.underlyingType;	
 			}
 			// indexTo is not null, we have a range index
 			let indexToType = this.eval(expr.indexTo);
@@ -5253,12 +5217,13 @@ class Compiler {
 			if (indexToType !== EVAL_TYPE_INTEGER) {
 				return EvalError.wrongType(indexToType, "integer").fromExpr(expr.indexTo);
 			}
-			this.codeBlock.codePush(3);
-			if (indexedType.underlyingType.isRef === false) {
-				this.codeBlock.codeCallNative(this.context.getFunction("slice_basic_array(ref,integer,integer)").nativeIndex);
-			} else {
-				this.codeBlock.codeCallNative(this.context.getFunction("slice_array(ref,integer,integer)").nativeIndex);
+			this.codeBlock.codePush(1);
+			this.codeBlock.codeAdd();
+			if (itemType.slotCount() > 1) {
+				this.codeBlock.codePush(itemType.slotCount());
+				this.codeBlock.codeMul();
 			}
+			this.codeBlock.codeCallInternal(PLW_IFUN_SLICE_BLOB);
 			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {
@@ -5266,84 +5231,33 @@ class Compiler {
 			if (recordType.isError()) {
 				return recordType;
 			}
-			while (recordType.tag === "res-type-name") {
-				recordType = recordType.underlyingType;
-			}
-			if (recordType.tag != "res-type-record") {
+			let structType = recordType.structuralType();
+			if (structType.tag != "res-type-record") {
 				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
 			}
-			for (let i = 0; i < recordType.fieldCount; i++) {
-				if (recordType.fields[i].fieldName === expr.fieldName) {
-					let fieldSlotCount = recordType.fields[i].fieldType.slotCount();
-					for (let k = 0; k < fieldSlotCount; k++) {
-						if (k < fieldSlotCount - 1) {
-							this.codeBlock.codeDup();
-						}
-						this.codeBlock.codePush(recordType.fields[i].slotOffsets[k]);
-						this.codeBlock.codePushPtrOffset();
-						if (k < fieldSlotCount - 1) {
-							this.codeBlock.codeSwap();
-						} 
-					}
-					return recordType.fields[i].fieldType;
-				}
+			let field = structType.getField(expr.fieldName);
+			if (field === null) {
+				return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
 			}
-			return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+			this.codeBlock.codePush(field.offset);
+			this.codeBlock.codePush(field.fieldType.slotCount());
+			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+			return field.fieldType;
 		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
-			let argSlotCount = 0;
 			for (let i = 0; i < expr.argList.argCount; i++) {
 				let argType = this.eval(expr.argList.args[i]);
 				if (argType.isError()) {
 					return argType;
 				}
 				argTypes[i] = argType;
-				argSlotCount += argType.slotCount();
 			}
-			let funcKey = expr.functionName + "(";
-			for (let i = 0; i < expr.argList.argCount; i++) {
-				funcKey += (i > 0 ? "," : "") + argTypes[i].typeKey();
+			let resultType = this.generateFunctionCall(expr.functionName, expr.argList.argCount, argTypes, expectedType);
+			if (resultType.isError()) {
+				return resultType.fromExpr(expr);
 			}
-			funcKey += ")";
-			let func = this.context.getFunction(funcKey);
-			if (func === null) {
-				let variantIndex = -1;
-				for (let i = 0; i < expr.argList.argCount; i++) {
-					if (argTypes[i].tag === "res-type-variant") {
-						variantIndex = i;
-						break;
-					}
-				}
-				if (variantIndex !== -1) {
-					let genRes = this.generateVariantDispatchFunction(expr, argTypes, variantIndex, expectedType);
-					if (genRes.isError()) {
-						return genRes.fromExpr(expr);
-					}
-					func = this.context.getFunction(funcKey);
-				} else {
-					let macroFunc = this.context.findMacroFunction(expr.functionName, argTypes);
-					if (macroFunc !== null) {
-						let genRes = this.generateFunctionFromMacro(expr.functionName, argTypes, macroFunc);
-						if (genRes.isError()) {
-							return genRes.fromExpr(expr);
-						}
-					}
-					func = this.context.getFunction(funcKey);
-				}
-				if (func === null) {
-					return EvalError.unknownFunction(funcKey).fromExpr(expr);
-				}
-			}
-			this.codeBlock.codePush(argSlotCount);
-			if (func.nativeIndex !== -1) {
-				this.codeBlock.codeCallNative(func.nativeIndex);
-			} else if (func.isGenerator === true) {
-				this.codeBlock.codeInitGenerator(func.codeBlockIndex);
-			} else {
-				this.codeBlock.codeCall(func.codeBlockIndex);
-			}
-			return func.isGenerator ? this.context.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
+			return resultType;
 		}
 		if (expr.tag === "ast-case") {
 			let caseType = null;
@@ -5358,11 +5272,7 @@ class Compiler {
 			let resultType = null;
 			for (let i = 0; i < expr.whenCount; i++) {
 				if (caseType !== null) {
-					if (caseType.slotCount() > 1) {
-						this.codeBlock.codeDupTuple(caseType.slotCount());
-					} else {
-						this.codeBlock.codeDup();
-					}
+					this.codeBlock.codeDup(caseType.slotCount());
 					let whenType = this.eval(expr.whens[i].whenExpr);
 					if (whenType.isError()) {
 						return whenType;
@@ -5370,7 +5280,7 @@ class Compiler {
 					if (whenType !== caseType) {
 						return EvalError.wrongType(whenType, caseType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 					}
-					this.generateEqForType(caseType);
+					this.codeBlock.codeEq(caseType.slotCount());
 					let nextLoc = this.codeBlock.codeJz(0);
 					this.codeBlock.codePopVoid(caseType.slotCount());
 					let thenType = this.eval(expr.whens[i].thenExpr);
@@ -5433,9 +5343,11 @@ class Compiler {
 			if (caseType.structuralType().tag !== "res-type-variant") {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
 			}
-			this.codeBlock.codeDup();
+			this.codeBlock.codeDup(1);
+			// TODO manage multi slot types in variant
+			this.codeBlock.codePush(caseType.structuralType().innerSlotCount - 1);
 			this.codeBlock.codePush(1);
-			this.codeBlock.codePushPtrOffset();
+			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 			let endLocs = [];
 			let endLocCount = 0;
 			let resultType = null;
@@ -5444,7 +5356,7 @@ class Compiler {
 				kindHasWhen[i] = false;
 			}
 			for (let i = 0; i < expr.whenCount; i++) {
-				this.codeBlock.codeDup();
+				this.codeBlock.codeDup(1);
 				let whenType = this.evalType(expr.whens[i].type);
 				if (whenType.isError()) {
 					return whenType;
@@ -5458,12 +5370,13 @@ class Compiler {
 				}
 				kindHasWhen[typeIndex] = true;
 				this.codeBlock.codePush(whenType.globalId);
-				this.codeBlock.codeEq();						
+				this.codeBlock.codeEq(1);						
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.codeBlock.codePopVoid(1);
 				this.pushScopeBlock();
 				this.codeBlock.codePush(0);
-				this.codeBlock.codePushPtrOffset();
+				this.codeBlock.codePush(whenType.slotCount());
+				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 				this.scope.addVariable(expr.whens[i].varName, whenType, true);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
@@ -5474,8 +5387,11 @@ class Compiler {
 				} else if (thenType !== resultType) {
 					return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 				}
-				this.codeBlock.codeSwap();
-				this.codeBlock.codePopVoid(1);
+				this.codeBlock.codeSwap(whenType.slotCount() + thenType.slotCount());
+				this.codeBlock.codePopVoid(whenType.slotCount());
+				if (thenType.slotCount() > 1) {
+					this.codeBlock.codeSwap(thenType.slotCount());
+				}
 				this.popScope();
 				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 				endLocCount++;
@@ -5558,20 +5474,14 @@ class Compiler {
 ******************************************************************************************************************************************/
 
 const PLW_TAG_REF_EXCEPTION_HANDLER = 1;
-const PLW_TAG_REF_RECORD = 2;
-const PLW_TAG_REF_MAPPED_RECORD = 3;
-const PLW_TAG_REF_STRING = 4;
-const PLW_TAG_REF_BASIC_ARRAY = 5;
-const PLW_TAG_REF_ARRAY = 6;
+const PLW_TAG_REF_STRING = 2;
+const PLW_TAG_REF_BLOB = 3;
 
 const PLW_TAG_REF_NAMES = [
 	"",
 	"EXCEPTION_HANDLER",
-	"RECORD",
-	"MAPPED_RECORD",
 	"STRING",
-	"BASIC_ARRAY",
-	"ARRAY"
+	"BLOB"
 ];
 
 class PlwRefManagerError {
@@ -5605,13 +5515,6 @@ class PlwRefManagerError {
 	
 	hasError() {
 		return this.errorMsg !== null;
-	}
-}
-
-class PlwOffsetValue {
-	constructor(val, isRef) {
-		this.val = val;
-		this.isRef = isRef
 	}
 }
 
@@ -5659,185 +5562,6 @@ class PlwExceptionHandlerRef extends PlwAbstractRef {
 
 }
 
-class PlwRecordRef extends PlwAbstractRef {
-
-	constructor(refSize, totalSize, ptr) {
-		super(PLW_TAG_REF_RECORD);
-		this.refSize = refSize;
-		this.totalSize = totalSize;
-		this.ptr = ptr;
-	}
-	
-	static make(refMan, refSize, totalSize, ptr) {
-		return refMan.addRef(new PlwRecordRef(refSize, totalSize, ptr));
-	}
-			
-	shallowCopy(refMan, refManError) {
-		let newPtr = [...this.ptr];
-		for (let i = 0; i < this.refSize; i++) {
-			refMan.incRefCount(newPtr[i], refManError);
-			if (refManError.hasError()) {
-				return -1;
-			}
-		}
-		return PlwRecordRef.make(refMan, this.refSize, this.totalSize, newPtr);
-	}
-	
-	compareTo(refMan, ref, refManError) {
-		if (this.totalSize !== ref.totalSize || this.refSize !== ref.refSize) {
-			return false;
-		}
-		for (let i = 0; i < this.totalSize; i++) {
-			if (i < this.refSize) {
-				if (!refMan.compareRefs(this.ptr[i], ref.ptr[i], refManError)) {
-					return false;
-				}
-				if (refManError.hasError()) {
-					return false;
-				}
-			} else {
-				if (this.ptr[i] !== ref.ptr[i]) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
-
-	destroy(refMan, refManError) {
-		for (let i = 0; i < this.refSize; i++) {
-			refMan.decRefCount(this.ptr[i], refManError);
-			if (refManError.hasError()) {
-				return;
-			}
-		}
-		this.ptr = null
-	}
-	
-}
-
-
-
-class PlwBasicArrayRef extends PlwAbstractRef {
-
-	constructor(arraySize, ptr) {
-		super(PLW_TAG_REF_BASIC_ARRAY);
-		this.arraySize = arraySize;
-		this.ptr = ptr;
-	}
-	
-	static make(refMan, arraySize, ptr) {
-		return refMan.addRef(new PlwBasicArrayRef(arraySize, ptr));
-	}
-			
-	shallowCopy(refMan, refManError) {
-		return PlwBasicArrayRef.make(refMan, this.arraySize, [...this.ptr]);
-	}
-	
-	compareTo(refMan, ref, refManError) {
-		if (this.arraySize !== ref.arraySize) {
-			return false;
-		}
-		for (let i = 0; i < this.arraySize; i++) {
-			if (this.ptr[i] !== ref.ptr[i]) {
-				return false;
-			}
-		}
-		return true;
-	}
-	
-	destroy(refMan, refManError) {
-		this.ptr = null;
-	}
-
-}
-
-
-class PlwArrayRef extends PlwAbstractRef {
-
-	constructor(arraySize, ptr) {
-		super(PLW_TAG_REF_ARRAY);
-		this.arraySize = arraySize;
-		this.ptr = ptr;
-	}
-	
-	static make(refMan, arraySize, ptr) {
-		return refMan.addRef(new PlwArrayRef(arraySize, ptr));
-	}
-			
-	shallowCopy(refMan, refManError) {
-		let newPtr = [...this.ptr];
-		for (let i = 0; i < this.arraySize; i++) {
-			refMan.incRefCount(newPtr[i], refManError);
-			if (refManError.hasError()) {
-				return -1;
-			}
-		}
-		return PlwArrayRef.make(refMan, this.arraySize, newPtr);
-	}
-	
-	compareTo(refMan, ref, refManError) {
-		if (this.arraySize !== ref.arraySize) {
-			return false;
-		}
-		for (let i = 0; i < this.arraySize; i++) {
-			if (!refMan.compareRefs(this.ptr[i], ref.ptr[i], refManError)) {
-				return false;
-			}
-			if (refManError.hasError()) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	destroy(refMan, refManError) {
-		for (let i = 0; i < this.arraySize; i++) {
-			refMan.decRefCount(this.ptr[i], refManError);
-			if (refManError.hasError()) {
-				return;
-			}
-		}
-		this.ptr = null
-	}
-
-}
-
-
-class PlwMappedRecordRef extends PlwAbstractRef {
-
-	constructor(totalSize, ptr, mapPtr) {
-		super(PLW_TAG_REF_MAPPED_RECORD);
-		this.totalSize = totalSize;
-		this.ptr = ptr;
-		this.mapPtr = mapPtr;
-	}
-	
-	static make(refMan, totalSize, ptr, mapPtr) {
-		return refMan.addRef(new PlwMappedRecordRef(totalSize, ptr, mapPtr));
-	}
-	
-	resizeFrame(newSize) {
-		for (let i = this.totalSize; i < newSize; i++) {
-			this.ptr[i] = 0;
-			this.mapPtr[i] = false;
-		}
-		this.totalSize = newSize;
-	}
-	
-	destroy(refMan, refManError) {
-		for (let i = this.totalSize - 1; i >= 0; i--) {
-			if (this.mapPtr[i] === true) {
-				refMan.decRefCount(this.ptr[i], refManError);
-				if (refManError.hasError()) {
-					return;
-				}
-			}
-		}
-		this.ptr = null;
-	}
-	
-}
 
 class PlwStringRef extends PlwAbstractRef {
 	constructor(str) {
@@ -5857,6 +5581,84 @@ class PlwStringRef extends PlwAbstractRef {
 		this.str = null;
 	}
 }
+
+
+class PlwBlobRef extends PlwAbstractRef {
+
+	constructor(blobSize, ptr, mapPtr) {
+		super(PLW_TAG_REF_BLOB);
+		this.blobSize = blobSize;
+		this.ptr = ptr;
+		this.mapPtr = mapPtr;
+	}
+	
+	static make(refMan, blobSize, ptr, mapPtr) {
+		return refMan.addRef(new PlwBlobRef(blobSize, ptr, mapPtr));
+	}
+	
+	resize(newSize) {
+		for (let i = this.blobSize; i < newSize; i++) {
+			this.ptr[i] = 0;
+			this.mapPtr[i] = false;
+		}
+		this.blobSize = newSize;
+	}
+	
+	shallowCopy(refMan, refManError) {
+		let newPtr = [...this.ptr];
+		let newMapPtr = [...this.mapPtr];
+		for (let i = 0; i < this.blobSize; i++) {
+			if (this.mapPtr[i]) {
+				refMan.incRefCount(newPtr[i], refManError);
+				if (refManError.hasError()) {
+					return -1;
+				}
+			}
+		}
+		return PlwBlobRef.make(refMan, this.blobSize, newPtr, newMapPtr);
+	}
+	
+	compareTo(refMan, ref, refManError) {
+		if (this.blobSize !== ref.blobSize) {
+			return false;
+		}
+		for (let i = 0; i < this.blobSize; i++) {
+			if (this.mapPtr[i] !== ref.mapPtr[i]) {
+				return false;
+			}
+		}
+		for (let i = 0; i < this.blobSize; i++) {
+			if (this.mapPtr[i]) {
+				if (!refMan.compareRefs(this.ptr[i], ref.ptr[i], refManError)) {
+					return false;
+				}
+				if (refManError.hasError()) {
+					return false;
+				}
+			} else {
+				if (this.ptr[i] !== ref.ptr[i]) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	destroy(refMan, refManError) {
+		for (let i = 0; i < this.blobSize; i++) {
+			if (this.mapPtr[i]) {
+				refMan.decRefCount(this.ptr[i], refManError);
+				if (refManError.hasError()) {
+					return;
+				}
+			}
+		}
+		this.ptr = null
+		this.mapPtr = null;
+	}
+
+}
+
 
 
 class PlwRefManager {
@@ -5980,118 +5782,7 @@ class PlwRefManager {
 		ref.refCount--;
 		return newRefId;
 	}
-	
-	setOffsetValue(refId, offset, val, refManError) {
-		let ref = this.getRef(refId, refManError);
-		if (refManError.hasError()) {
-			return;
-		}
-		switch(ref.getTag()) {
-		case PLW_TAG_REF_RECORD:
-			this.setOffsetValueRecord(ref, offset, val, refManError);
-			return;
-		case PLW_TAG_REF_BASIC_ARRAY:	
-			this.setOffsetValueBasicArray(ref, offset, val, refManError);
-			return;
-		case PLW_TAG_REF_ARRAY:
-			this.setOffsetValueArray(ref, offset, val, refManError);
-			return;
-		}
-		refManError.invalidRefTag(ref.tag);
-	}
-	
-	setOffsetValueRecord(ref, offset, val, refManError) {
-		if (offset < 0 || offset >= ref.totalSize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		if (offset < ref.refSize) {
-			this.decRefCount(ref.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return;
-			}
-		}
-		ref.ptr[offset] = val;
-	}
-	
-	setOffsetValueBasicArray(ref, offset, val, refManError) {
-		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		ref.ptr[offset] = val;
-	}
-	
-	setOffsetValueArray(ref, offset, val, refManError) {
-		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		this.decRefCount(ref.ptr[offset], refManError);
-		if (refManError.hasError()) {
-			return;
-		}
-		ref.ptr[offset] = val;
-	}
-	
-	getOffsetValue(refId, offset, isForMutate, refManError, result) {
-		let ref = this.getRef(refId, refManError);
-		if (refManError.hasError()) {
-			return;
-		}
-		switch(ref.getTag()) {
-		case PLW_TAG_REF_RECORD:
-			this.getOffsetValueRecord(ref, offset, isForMutate, refManError, result);
-			return;
-		case PLW_TAG_REF_BASIC_ARRAY:	
-			this.getOffsetValueBasicArray(ref, offset, isForMutate, refManError, result);
-			return;
-		case PLW_TAG_REF_ARRAY:
-			this.getOffsetValueArray(ref, offset, isForMutate, refManError, result);
-			return;
-		}
-		refManError.invalidRefTag(ref.tag);
-	}
-	
-	getOffsetValueRecord(ref, offset, isForMutate, refManError, result) {
-		if (offset < 0 || offset >= ref.totalSize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		if (isForMutate === true) {
-			ref.ptr[offset] = this.makeMutable(ref.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return;
-			}				
-		}
-		result.val = ref.ptr[offset];
-		result.isRef = offset < ref.refSize;
-	}
-		
-	getOffsetValueBasicArray(ref, offset, isForMutate, refManError, result) {
-		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		result.val = ref.ptr[offset];
-		result.isRef = false;
-	}
-	
-	getOffsetValueArray(ref, offset, isForMutate, refManError, result) {
-		if (offset < 0 || offset >= ref.arraySize) {
-			refManError.invalidOffset(offset);
-			return;
-		}
-		if (isForMutate === true) {
-			ref.ptr[offset] = this.makeMutable(ref.ptr[offset], refManError);
-			if (refManError.hasError()) {
-				return;
-			}				
-		}
-		result.val = ref.ptr[offset];
-		result.isRef = true;
-	}
-	
+			
 }
 
 "use strict";
@@ -6115,20 +5806,12 @@ class PlwRefManager {
 		oldBP				<- BP - 1
 		local1				<- BP
 		
-	Frame Object
-		codeBlockId
-		ip
-		arg1
-		argN
-		local1
-		...
-		localN
-
 ******************************************************************************************************************************************/
 
 
 
 class StackMachineError {
+
 	constructor(errorMsg) {
 		this.currentBlockId = -1;
 		this.ip = 0;
@@ -6197,6 +5880,575 @@ class StackMachineError {
 	}
 }
 
+let PLW_NOARG_OPS = [];
+
+PLW_NOARG_OPS[OPCODE_SUSPEND] = function(sm) {
+	return StackMachineError.suspended().fromCode(sm.codeBlockId, sm.ip);
+}
+
+PLW_NOARG_OPS[OPCODE_DIV] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let divisor = sm.stack[sm.sp - 1];
+	if (divisor === 0) {
+		return StackMachineError.divByZero().fromCode(sm.codeBlockId, sm.ip);
+	} else {
+		sm.stack[sm.sp - 2] = Math.trunc(sm.stack[sm.sp - 2] / divisor);
+		sm.sp--;
+	}
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_DIVF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let divisor = sm.stack[sm.sp - 1];
+	if (divisor === 0) {
+		return StackMachineError.divByZero().fromCode(sm.codeBlockId, sm.ip);
+	} else {
+		sm.stack[sm.sp - 2] = sm.stack[sm.sp - 2] / divisor;
+		sm.sp--;
+	}
+	return null;
+};
+	
+PLW_NOARG_OPS[OPCODE_REM] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let divisor = sm.stack[sm.sp - 1];
+	if (divisor === 0) {
+		return StackMachineError.divByZero().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = sm.stack[sm.sp - 2] % divisor;
+	sm.sp--;
+	return null;
+};
+	
+PLW_NOARG_OPS[OPCODE_ADD] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] += sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_ADDF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] += sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_SUB] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] -= sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_SUBF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] -= sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_MUL] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] *= sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_MULF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] *= sm.stack[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_NEG] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 1] = -sm.stack[sm.sp - 1]; 
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_NEGF] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 1] = -sm.stack[sm.sp - 1]; 
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_GT] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] > sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_GTF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] > sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_LT] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] < sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_LTF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] < sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_GTE] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] >= sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_GTEF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] >= sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_LTE] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] <= sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_LTEF] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = (sm.stack[sm.sp - 2] <= sm.stack[sm.sp - 1]) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_AND] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = ((sm.stack[sm.sp - 2] !== 0) && (sm.stack[sm.sp - 1] !== 0)) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_OR] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 2] = ((sm.stack[sm.sp - 2] !== 0) || (sm.stack[sm.sp - 1] !== 0)) ? 1 : 0;
+	sm.sp--;
+	return null;
+};
+
+PLW_NOARG_OPS[OPCODE_NOT] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp - 1] = sm.stack[sm.sp - 1] === 0 ? 1 : 0;
+	return null;
+};
+
+
+let PLW_OPS = [];
+
+PLW_OPS[OPCODE_NOARG] = function(sm, code) {
+	return PLW_NOARG_OPS[code](sm);
+};
+
+PLW_OPS[OPCODE_POP_VOID] = function(sm, cellCount) {
+	if (cellCount < 0 || cellCount > sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	for (let i = sm.sp - 1; i >= sm.sp - cellCount; i--) {
+		if (sm.stackMap[i] === true) {
+			sm.refMan.decRefCount(sm.stack[i], sm.refManError);
+			if (sm.refManError.hasError()) {
+				return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+			}
+		}
+	}
+	sm.sp -= cellCount;
+	return null;
+};
+	
+PLW_OPS[OPCODE_CALL_NATIVE] = function(sm, nativeId) {
+	if (nativeId < 0 || nativeId >= sm.natives.length) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let argCount = sm.stack[sm.sp - 1];
+	if (sm.sp < 1 + argCount) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let error = sm.natives[nativeId](sm);
+	if (error !== null) {
+		if (error.errorMsg.charAt(0) === "@") {
+			return error;
+		}
+		console.log("error from native function " + nativeId);
+		return error.fromCode(sm.codeBlockId, sm.ip);
+	}
+	return null;
+};
+	
+PLW_OPS[OPCODE_CALL_INTERNAL] = function(sm, ifun) {
+	if (ifun < 0 || ifun >= sm.internals.length) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let error = sm.internals[ifun](sm);
+	if (error !== null) {
+		return error.fromCode(sm.codeBlockId, sm.ip);
+	}
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_GLOBAL] = function(sm, offset) {
+	if (offset < 0 || offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.stack[offset];
+	sm.stackMap[sm.sp] = sm.stackMap[offset];
+	if (sm.stackMap[sm.sp] === true) {
+		sm.refMan.incRefCount(sm.stack[sm.sp], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}
+	}
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_GLOBAL_MOVE] = function(sm, offset) {
+	if (offset < 0 || offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.stack[offset];
+	sm.stackMap[sm.sp] = sm.stackMap[offset];
+	sm.stack[offset] = -1;
+	sm.stackMap[offset] = false;
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_GLOBAL_FOR_MUTATE] = function(sm, offset) {
+	if (offset < 0 || offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[offset] = sm.refMan.makeMutable(sm.stack[offset], sm.refManError);
+	if (sm.refManError.hasError()) {
+		return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stackMap[offset] = true;
+	sm.stack[sm.sp] = sm.stack[offset];
+	sm.stackMap[sm.sp] = sm.stackMap[offset];
+	if (sm.stackMap[sm.sp] === true) {
+		sm.refMan.incRefCount(sm.stack[sm.sp], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}
+	}
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_LOCAL] = function(sm, offset) {
+	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.stack[sm.bp + offset];
+	sm.stackMap[sm.sp] = sm.stackMap[sm.bp + offset];
+	if (sm.stackMap[sm.sp] === true) {
+		sm.refMan.incRefCount(sm.stack[sm.sp], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}
+	}
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_LOCAL_MOVE] = function(sm, offset) {
+	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.stack[sm.bp + offset];
+	sm.stackMap[sm.sp] = sm.stackMap[sm.bp + offset];
+	sm.stack[sm.bp + offset] = -1;
+	sm.stackMap[sm.bp + offset] = false;
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH_LOCAL_FOR_MUTATE] = function(sm, offset) {
+	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.bp + offset] = sm.refMan.makeMutable(sm.stack[sm.bp + offset], sm.refManError);
+	if (sm.refManError.hasError()) {
+		return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stackMap[sm.bp + offset] = true;
+	sm.stack[sm.sp] = sm.stack[sm.bp + offset];
+	sm.stackMap[sm.sp] = sm.stackMap[sm.bp + offset];
+	if (sm.stackMap[sm.sp] === true) {
+		sm.refMan.incRefCount(sm.stack[sm.sp], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}
+	}
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_POP_GLOBAL] = function(sm, offset) {
+	if (sm.sp < 1 || offset < 0 || offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (sm.stackMap[offset] === true) {
+		sm.refMan.decRefCount(sm.stack[offset], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}						
+	}
+	sm.stack[offset] = sm.stack[sm.sp - 1];
+	sm.stackMap[offset] = sm.stackMap[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+	
+PLW_OPS[OPCODE_POP_LOCAL] = function(sm, offset) {
+	if (sm.sp < 1 || sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (sm.stackMap[sm.bp + offset] === true) {
+		sm.refMan.decRefCount(sm.stack[sm.bp + offset], sm.refManError);
+		if (sm.refManError.hasError()) {
+			return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+		}
+	}
+	sm.stack[sm.bp + offset] = sm.stack[sm.sp - 1];
+	sm.stackMap[sm.bp + offset] = sm.stackMap[sm.sp - 1];
+	sm.sp--;
+	return null;
+};
+	
+PLW_OPS[OPCODE_JZ] = function(sm, arg1) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (sm.stack[sm.sp - 1] === 0) {
+		sm.ip = arg1;
+	}
+	sm.sp--;
+	return null;
+};
+
+PLW_OPS[OPCODE_JNZ] = function(sm, arg1) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (sm.stack[sm.sp - 1] !== 0) {
+		sm.ip = arg1;
+	}
+	sm.sp--;
+	return null;
+};
+
+PLW_OPS[OPCODE_JMP] = function(sm, arg1) {
+	sm.ip = arg1;
+	return null;
+};
+	
+PLW_OPS[OPCODE_PUSH] = function(sm, arg1) {
+	sm.stack[sm.sp] = arg1;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	return null;
+};
+
+PLW_OPS[OPCODE_CALL] = function(sm, arg1) {
+	if (arg1 < 0 || arg1 > sm.codeBlocks.length) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.codeBlockId;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	sm.stack[sm.sp] = sm.ip;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;					
+	sm.stack[sm.sp] = sm.bp;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	sm.bp = sm.sp;
+	sm.codeBlockId = arg1;
+	sm.ip = 0;
+	return null;
+};
+
+PLW_OPS[OPCODE_PUSHF] = function(sm, floatId) {
+	if (floatId < 0 || floatId >= sm.codeBlocks[sm.codeBlockId].floatConsts.length) {
+		return StackMachineError.constAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);						
+	}
+	sm.stack[sm.sp] = sm.codeBlocks[sm.codeBlockId].floatConsts[floatId];
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	return null;
+};
+	
+PLW_OPS[OPCODE_EQ] = function(sm, count) {
+	if (sm.count < 1 || sm.sp < count * 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let idx1 = sm.sp - 2 * count;
+	let idx2 = sm.sp - count;
+	let result = true;
+	for (let i = 0; i < count; i++) {
+		if (result === true) {
+			if (sm.stackMap[idx1]) {
+				result = sm.refMan.compareRefs(sm.stack[idx1], sm.stack[idx2], sm.refManError);
+				if (sm.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+				}
+				if (sm.refManError.hasError()) {
+					return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+				}
+			} else {
+				result = sm.stack[idx1] === sm.stack[idx2];
+			}
+		}
+		if (sm.stackMap[idx1]) {
+			sm.refMan.decRefCount(sm.stack[idx1], sm.refManError);
+			if (sm.refManError.hasError()) {
+				return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+			}
+		}
+		if (sm.stackMap[idx2]) {
+			sm.refMan.decRefCount(sm.stack[idx2], sm.refManError);
+			if (sm.refManError.hasError()) {
+				return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+			}
+		}
+		idx1++;
+		idx2++;
+	}
+	sm.stack[sm.sp - 2 * count] = result ? 1 : 0;
+	sm.stackMap[sm.sp - 2 * count] = false;
+	sm.sp -= 2 * count - 1;
+	return null;
+};
+	
+PLW_OPS[OPCODE_RET] = function(sm, count) {
+	if (sm.count < 1 || sm.bp < 4 || sm.bp > sm.sp) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let previousBp = sm.stack[sm.bp - 1];
+	let previousIp = sm.stack[sm.bp - 2];
+	let previousCodeBlockId = sm.stack[sm.bp - 3];
+	let argCount = sm.stack[sm.bp - 4];
+	if (sm.bp < 4 + argCount) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	for (let i = sm.sp - count - 1; i >= sm.bp - 4 - argCount; i--) {
+		if (sm.stackMap[i] === true) {
+			sm.refMan.decRefCount(sm.stack[i], sm.refManError);
+			if (sm.refManError.hasError()) {
+				return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+			}
+		}
+	}
+	for (let i = 0; i < count; i++) {
+		sm.stack[sm.bp - 4 - argCount + i] = sm.stack[sm.sp - count + i];
+		sm.stackMap[sm.bp - 4 - argCount + i] = sm.stackMap[sm.sp - count + i];
+	}
+	sm.sp = sm.bp - 4 - argCount + count;
+	sm.bp = previousBp;
+	sm.codeBlockId = previousCodeBlockId;
+	sm.ip = previousIp;
+	return null;
+};
+	
+PLW_OPS[OPCODE_DUP] = function(sm, count) {
+	if (sm.count < 1 || sm.sp < count) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	for (let i = 0; i < count; i++) {
+		sm.stack[sm.sp] = sm.stack[sm.sp - count];
+		sm.stackMap[sm.sp] = sm.stackMap[sm.sp - count];
+		if (sm.stackMap[sm.sp] === true) {
+			sm.refMan.incRefCount(sm.stack[sm.sp], sm.refManError);
+			if (sm.refManError.hasError()) {
+				return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+			}
+		}
+		sm.sp++; 
+	}
+	return null;
+};
+
+PLW_OPS[OPCODE_SWAP] = function(sm, count) {
+	if (sm.count < 1 || sm.sp < count) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	for (let i = 0; i < count / 2; i++) {
+		let tmp = sm.stack[sm.sp - count + i];
+		let tmpMap = sm.stackMap[sm.sp - count + i];
+		sm.stack[sm.sp - count + i] = sm.stack[sm.sp - 1 - i];
+		sm.stackMap[sm.sp - count + i] = sm.stackMap[sm.sp - 1 - i];
+		sm.stack[sm.sp - 1 - i] = tmp;
+		sm.stackMap[sm.sp - 1 - i] = tmpMap;
+	}
+	return null;
+};
+
 class StackMachine {
 
 	constructor() {
@@ -6208,1382 +6460,48 @@ class StackMachine {
 		this.codeBlockId = -1;
 		this.codeBlocks = null;
 		this.natives = null;
+		this.internals = null;
 		this.refMan = new PlwRefManager();
-		this.offsetVal = new PlwOffsetValue();
 		this.refManError = new PlwRefManagerError();
+	}
+	
+	hasRefManError() {
+		return this.refManError.hasError();
+	}
+	
+	errorFromRefMan() {
+		return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
 	}
 	
 	popResult() {
 		this.sp--;
 		return this.stack[this.sp];
 	}
-	
-	raiseError(errorCode, refManError) {
-		while (this.sp > 0) {
-			if (this.stackMap[this.sp - 1] === true) {
-				let refId = this.stack[this.sp - 1];
-				let ref = this.refMan.getRef(refId, refManError);
-				if (refManError.hasError()) {
-					return false;
-				}
-				if (ref.tag === PLW_TAG_REF_EXCEPTION_HANDLER) {
-					this.bp = ref.bp;
-					this.ip = ref.ip;
-					this.codeBlockId = ref.codeBlockId;
-					this.refMan.decRefCount(refId, refManError);
-					if (refManError.hasError()) {
-						return false;
-					}
-					this.stack[this.sp - 1] = errorCode;
-					this.stackMap[this.sp - 1] = false;
-					return true;
-				}
-				this.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return false;
-				}
-			}
-			this.sp--;
-		}
-		return false;
-	}
-	
-	execute(codeBlock, codeBlocks, natives) {
+		
+	execute(codeBlock, codeBlocks, internals, natives) {
 		this.codeBlocks = [...codeBlocks, codeBlock];
+		this.internals = internals;
 		this.natives = natives;
 		this.ip = 0;
 		this.codeBlockId = this.codeBlocks.length - 1;
 		return this.runLoop();
 	}
-	
-	opcodeSwap() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let tmp = this.stack[this.sp - 2];
-		let tmpMap = this.stackMap[this.sp - 2];
-		this.stack[this.sp - 2] = this.stack[this.sp - 1];
-		this.stackMap[this.sp - 2] = this.stackMap[this.sp - 1];
-		this.stack[this.sp - 1] = tmp;
-		this.stackMap[this.sp - 1] = tmpMap;
-		return null;
-	}
-	
-	opcodeDiv() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let divisor = this.stack[this.sp - 1];
-		if (divisor === 0) {
-			if (!this.raiseError(0, this.refManError)) {
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-				return StackMachineError.divByZero().fromCode(this.codeBlockId, this.ip);
-			}
-		} else {
-			this.stack[this.sp - 2] = Math.trunc(this.stack[this.sp - 2] / divisor);
-			this.sp--;
-		}
-		return null;
-	}
-	
-	opcodeRem() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let divisor = this.stack[this.sp - 1];
-		if (divisor === 0) {
-			return StackMachineError.divByZero().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = this.stack[this.sp - 2] % divisor;
-		this.sp--;
-		return null;
-	}
-	
-	opcodePushPtrOffset() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.sp - 2];
-		let offset = this.stack[this.sp - 1];
-		this.refMan.getOffsetValue(refId, offset, false, this.refManError, this.offsetVal);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = this.offsetVal.val;
-		this.stackMap[this.sp - 2] = this.offsetVal.isRef;
-		if (this.offsetVal.isRef === true) {
-			this.refMan.incRefCount(this.stack[this.sp - 2], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp--;
-		this.refMan.decRefCount(refId, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
-	
-	opcodePushPtrOffsetForMutate() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.sp - 2];
-		let offset = this.stack[this.sp - 1];
-		this.refMan.getOffsetValue(refId, offset, true, this.refManError, this.offsetVal);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = this.offsetVal.val;
-		this.stackMap[this.sp - 2] = this.offsetVal.isRef;
-		if (this.offsetVal.isRef === true) {
-			this.refMan.incRefCount(this.stack[this.sp - 2], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp--;
-		this.refMan.decRefCount(refId, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
 
-	opcodeEqRef() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let result = this.refMan.compareRefs(this.stack[this.sp - 2], this.stack[this.sp - 1], this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.refMan.decRefCount(this.stack[this.sp - 2], this.refManError);
-		if (!this.refManError.hasError()) {
-			this.refMan.decRefCount(this.stack[this.sp - 1], this.refManError);
-		}
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = result ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-	
-	opcodePopPtrOffset() {
-		if (this.sp < 3) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}				
-		let refId = this.stack[this.sp - 3];
-		let offset = this.stack[this.sp - 2];
-		let val = this.stack[this.sp - 1];
-		this.refMan.setOffsetValue(refId, offset, val, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.sp -= 3;
-		this.refMan.decRefCount(refId, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
-	
-	opcodeRaise() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let errorCode = this.stack[this.sp - 1];
-		if(!this.raiseError(errorCode, this.refManError)) {
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-			return StackMachineError.exception(errorCode).fromCode(this.codeBlockId, this.ip);					
-		}
-		return null;
-	}
-	
-	opcodeRetVal() {
-		if (this.bp < 4 || this.bp > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let retVal = this.stack[this.sp - 1];
-		let retValIsRef = this.stackMap[this.sp - 1];
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		let argCount = this.stack[this.bp - 4];
-		if (this.bp < 4 + argCount) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		for (let i = this.sp - 2; i >= this.bp - 4 - argCount; i--) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		this.sp = this.bp - 3 - argCount;
-		this.stack[this.sp - 1] = retVal;
-		this.stackMap[this.sp - 1] = retValIsRef;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		return null;
-	}
-	
-	opcodeRet() {
-		if (this.bp < 4 || this.bp > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		let argCount = this.stack[this.bp - 4];
-		if (this.bp < 4 + argCount) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		for (let i = this.sp - 1; i >= this.bp - 4 - argCount; i--) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		this.sp = this.bp - 4 - argCount;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		return null;
-	}
-	
-	opcodeYield() {
-		if (this.bp < 4 || this.bp >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.bp - 4];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		ref.resizeFrame(1 + (this.sp - this.bp));
-		ref.ptr[1] = this.ip;
-		for (let i = 0; i < this.sp - this.bp - 1; i++) {
-			ref.ptr[i + 2] = this.stack[this.bp + i];
-			ref.mapPtr[i + 2] = this.stackMap[this.bp + i];
-		}
-		let retVal = this.stack[this.sp - 1];
-		let retValIsRef = this.stackMap[this.sp - 1];
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		this.sp = this.bp - 3;
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 1] = retVal;
-		this.stackMap[this.sp - 1] = retValIsRef;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		this.refMan.decRefCount(refId, this.refManError);		
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
-	
-	opcodeYieldDone() {
-		if (this.bp < 4 || this.bp > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.bp - 4];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		ref.resizeFrame(2);
-		ref.ptr[1] = this.ip;
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		for (let i = this.sp - 1; i >= this.bp - 4; i --) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		this.sp = this.bp - 3;
-		this.stack[this.sp - 1] = 0;
-		this.stackMap[this.sp - 1] = false;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		return null;
-	}
-	
-	opcodeNext() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.sp - 1];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.codeBlockId;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.stack[this.sp] = this.ip;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.stack[this.sp] = this.bp;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.bp = this.sp;
-		for (let i = 0; i < ref.totalSize - 2; i++) {
-			this.stack[this.sp] = ref.ptr[i + 2];
-			this.stackMap[this.sp] = ref.mapPtr[i + 2];
-			ref.mapPtr[i + 2] = false;
-			this.sp++;
-		}
-		this.codeBlockId = ref.ptr[0];
-		this.ip = ref.ptr[1];
-		return null;
-	}
-	
-	opcodeEnded() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.sp - 1];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		let ended = ref.ptr[1] >= this.codeBlocks[ref.ptr[0]].codeSize ? 1 : 0;
-		this.refMan.decRefCount(this.stack[this.sp - 1], this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 1] = ended;
-		return null;
-	}
-	
-	opcodeBasicArrayTimes() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let val = this.stack[this.sp - 2];
-		let count = this.stack[this.sp - 1];
-		if (count < 0) {
-			count = 0;
-		}
-		let ptr = new Array(count).fill(val);
-		let refId = PlwBasicArrayRef.make(this.refMan, count, ptr);
-		this.stack[this.sp - 2] = refId;
-		this.stackMap[this.sp - 2] = true;
-		this.sp--;
-		return null;
-	}
-	
-	opcodeArrayTimes() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let val = this.stack[this.sp - 2];
-		let count = this.stack[this.sp - 1];
-		if (count < 0) {
-			count = 0;
-		}
-		let ptr = new Array(count).fill(val);
-		let refId = PlwArrayRef.make(this.refMan, count, ptr);
-		if (count === 0) {
-			this.refMan.decRefCount(val, this.refManError);
-		} else {
-			this.refMan.addRefCount(val, count - 1, this.refManError);
-		}
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = refId;
-		this.stackMap[this.sp - 2] = true;
-		this.sp--;
-		return null;
-	}
-	
-	opcodeDup() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.stack[this.sp - 1];
-		this.stackMap[this.sp] = this.stackMap[this.sp - 1];
-		if (this.stackMap[this.sp]) {
-			this.refMan.incRefCount(this.stack[this.sp]);
-		}
-		this.sp++;
-		return null;
-	}
-
-	opcodeAdd() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] += this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeAddf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] += this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeSub() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] -= this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeSubf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] -= this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeDivf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] /= this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeMul() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] *= this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeMulf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] *= this.stack[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-
-	opcodeNeg() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
-		return null;
-	}
-
-	opcodeNegf() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 1] = -this.stack[this.sp - 1]; 
-		return null;
-	}
-
-	opcodeGt() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeGtf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] > this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeLt() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeLtf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] < this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeGte() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeGtef() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] >= this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeLte() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeLtef() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] <= this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeAnd() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) && (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeOr() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = ((this.stack[this.sp - 2] !== 0) || (this.stack[this.sp - 1] !== 0)) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeNot() {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 1] = this.stack[this.sp - 1] === 0 ? 1 : 0;
-		return null;
-	}
-
-	opcodeEq() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeEqf() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] === this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeNe() {
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcodeNef() {	
-		if (this.sp < 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp - 2] = (this.stack[this.sp - 2] !== this.stack[this.sp - 1]) ? 1 : 0;
-		this.sp--;
-		return null;
-	}
-
-	opcode1(code) {
-		switch(code) {
-		case OPCODE_SUSPEND:
-			return StackMachineError.suspended().fromCode(this.codeBlockId, this.ip);
-		case OPCODE_DUP:
-			return this.opcodeDup();
-		case OPCODE_SWAP:
-			return this.opcodeSwap();
-		case OPCODE_ADD:
-			return this.opcodeAdd();
-		case OPCODE_ADDF:
-			return this.opcodeAddf();
-		case OPCODE_SUB:
-			return this.opcodeSub();
-		case OPCODE_SUBF:
-			return this.opcodeSubf();
-		case OPCODE_DIV:
-			return this.opcodeDiv();
-		case OPCODE_DIVF:
-			return this.opcodeDivf();
-		case OPCODE_REM:
-			return this.opcodeRem();
-		case OPCODE_MUL:
-			return this.opcodeMul();
-		case OPCODE_MULF:
-			return this.opcodeMulf();
-		case OPCODE_NEG:
-			return this.opcodeNeg();
-		case OPCODE_NEGF:
-			return this.opcodeNegf();
-		case OPCODE_GT:
-			return this.opcodeGt();
-		case OPCODE_GTF:
-			return this.opcodeGtf();
-		case OPCODE_LT:
-			return this.opcodeLt();
-		case OPCODE_LTF:
-			return this.opcodeLtf();
-		case OPCODE_GTE:
-			return this.opcodeGte();
-		case OPCODE_GTEF:
-			return this.opcodeGtef();
-		case OPCODE_LTE:
-			return this.opcodeLte();
-		case OPCODE_LTEF:
-			return this.opcodeLtef();
-		case OPCODE_AND:
-			return this.opcodeAnd();
-		case OPCODE_OR:
-			return this.opcodeOr();
-		case OPCODE_NOT:
-			return this.opcodeNot();
-		case OPCODE_EQ:
-			return this.opcodeEq();
-		case OPCODE_EQF:
-			return this.opcodeEqf();
-		case OPCODE_EQ_REF:
-			return this.opcodeEqRef();
-		case OPCODE_NE:
-			return this.opcodeNe();
-		case OPCODE_NEF:
-			return this.opcodeNef();
-		case OPCODE_PUSH_PTR_OFFSET:
-			return this.opcodePushPtrOffset();
-		case OPCODE_PUSH_PTR_OFFSET_FOR_MUTATE:
-			return this.opcodePushPtrOffsetForMutate();
-		case OPCODE_POP_PTR_OFFSET:
-			return this.opcodePopPtrOffset();
-		case OPCODE_RAISE:
-			return this.opcodeRaise();
-		case OPCODE_RET_VAL:
-			return this.opcodeRetVal();
-		case OPCODE_RET:
-			return this.opcodeRet();
-		case OPCODE_YIELD:
-			return this.opcodeYield();
-		case OPCODE_YIELD_DONE:
-			return this.opcodeYieldDone();
-		case OPCODE_NEXT:
-			return this.opcodeNext();
-		case OPCODE_ENDED:
-			return this.opcodeEnded();
-		case OPCODE_BASIC_ARRAY_TIMES:
-			return this.opcodeBasicArrayTimes();
-		case OPCODE_ARRAY_TIMES:
-			return this.opcodeArrayTimes();
-		default:
-			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
-		}	
-	}
-	
-	opcodePopVoid(cellCount) {
-		if (cellCount < 0 || cellCount > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		for (let i = this.sp - 1; i >= this.sp - cellCount; i--) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		this.sp -= cellCount;
-		return null;
-	}
-	
-	opcodeCreateString(strId) {
-		if (strId < 0 || strId >= this.codeBlocks[this.codeBlockId].strConsts.length) {
-			return StackMachineError.constAccessOutOfBound().fromCode(this.codeBlockId, this.ip);						
-		}
-		let str = this.codeBlocks[this.codeBlockId].strConsts[strId];
-		this.stack[this.sp] = PlwStringRef.make(this.refMan, str);
-		this.stackMap[this.sp] = true;
-		this.sp++;
-		return null;
-	}
-	
-	opcodeCreateRecord(cellCount) {
-		if (cellCount < 0 || cellCount > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let ptr = new Array(cellCount);
-		let offset = 0;
-		for (let i = 0; i < cellCount; i++) {
-			if (this.stackMap[this.sp - cellCount + i] === true) {
-				ptr[offset] = this.stack[this.sp - cellCount + i];
-				offset++;
-			}
-		}
-		let refSize = offset;
-		if (refSize !== cellCount) {
-			for (let i = 0; i < cellCount; i++) {
-				if (this.stackMap[this.sp - cellCount + i] !== true) {
-					ptr[offset] = this.stack[this.sp - cellCount + i];
-					offset++;
-				}
-			}
-		}
-		let refId = PlwRecordRef.make(this.refMan, refSize, cellCount, ptr);
-		this.sp = this.sp - cellCount + 1;
-		this.stack[this.sp - 1] = refId; 
-		this.stackMap[this.sp - 1] = true;
-		return null;
-	}
-
-	opcodeCreateBasicArray(cellCount) {
-		if (cellCount < 0 || cellCount > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let ptr = this.stack.slice(this.sp - cellCount, this.sp);
-		let refId = PlwBasicArrayRef.make(this.refMan, cellCount, ptr);
-		this.sp = this.sp - cellCount + 1;
-		this.stack[this.sp - 1] = refId; 
-		this.stackMap[this.sp - 1] = true;
-		return null;
-	}
-	
-	opcodeCreateArray(cellCount) {
-		if (cellCount < 0 || cellCount > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let ptr = this.stack.slice(this.sp - cellCount, this.sp);
-		let refId = PlwArrayRef.make(this.refMan, cellCount, ptr);
-		this.sp = this.sp - cellCount + 1;
-		this.stack[this.sp - 1] = refId; 
-		this.stackMap[this.sp - 1] = true;
-		return null;
-	}
-	
-	opcodeCallNative(nativeId) {
-		if (nativeId < 0 || nativeId >= this.natives.length) {
-			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let argCount = this.stack[this.sp - 1];
-		if (this.sp < 1 + argCount) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let error = this.natives[nativeId](this);
-		if (error !== null) {
-			if (error.errorMsg.charAt(0) === "@") {
-				return error;
-			}
-			console.log("error from native function " + nativeId);
-			return error.fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
-	
-	opcodeInitGenerator(codeBlockId) {
-		// stack is:
-		//   arg1              sp - nbParam - 1
-		//   ...
-		//   argN
-		//   nbParam           sp - 1
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (codeBlockId < 0 || codeBlockId > this.codeBlocks.length) {
-			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let nbParam = this.stack[this.sp - 1];
-		if (nbParam < 0 || this.sp < nbParam + 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}					
-		let ptr = new Array(nbParam + 2);
-		let mapPtr = new Array(nbParam + 2);
-		ptr[0] = codeBlockId;
-		ptr[1] = 0;
-		mapPtr[0] = false;
-		mapPtr[1] = false;
-		for (let i = 0; i < nbParam; i++) {
-			ptr[i + 2] = this.stack[this.sp - nbParam - 1 + i];
-			mapPtr[i + 2] = this.stackMap[this.sp - nbParam - 1 + i];
-		}
-		let refId = PlwMappedRecordRef.make(this.refMan, nbParam + 2, ptr, mapPtr);
-		this.stack[this.sp - nbParam - 1] = refId;
-		this.stackMap[this.sp - nbParam - 1] = true;
-		this.sp -= nbParam;
-		return null;
-	}
-	
-	opcodePushGlobal(offset) {
-		if (offset < 0 || offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.stack[offset];
-		this.stackMap[this.sp] = this.stackMap[offset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushGlobalMove(offset) {
-		if (offset < 0 || offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.stack[offset];
-		this.stackMap[this.sp] = this.stackMap[offset];
-		this.stack[offset] = -1;
-		this.stackMap[offset] = false;
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushGlobalForMutate(offset) {
-		if (offset < 0 || offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[offset] = this.refMan.makeMutable(this.stack[offset], this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stackMap[offset] = true;
-		this.stack[this.sp] = this.stack[offset];
-		this.stackMap[this.sp] = this.stackMap[offset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushLocal(offset) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.stack[this.bp + offset];
-		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushLocalMove(offset) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.stack[this.bp + offset];
-		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
-		this.stack[this.bp + offset] = -1;
-		this.stackMap[this.bp + offset] = false;
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushLocalForMutate(offset) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.bp + offset] = this.refMan.makeMutable(this.stack[this.bp + offset], this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stackMap[this.bp + offset] = true;
-		this.stack[this.sp] = this.stack[this.bp + offset];
-		this.stackMap[this.sp] = this.stackMap[this.bp + offset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushIndirect(offset) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let directOffset = this.stack[this.bp + offset];
-		if (directOffset < 0 || directOffset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}		
-		this.stack[this.sp] = this.stack[directOffset];
-		this.stackMap[this.sp] = this.stackMap[directOffset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushIndirectForMutate(offset) {
-		if (this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let directOffset = this.stack[this.bp + offset];
-		if (directOffset < 0 || directOffset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}		
-		this.stack[directOffset] = this.refMan.makeMutable(this.stack[directOffset], this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		this.stackMap[directOffset] = true;
-		this.stack[this.sp] = this.stack[directOffset];
-		this.stackMap[this.sp] = this.stackMap[directOffset];
-		if (this.stackMap[this.sp] === true) {
-			this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.sp++;
-		return null;
-	}
-
-	opcodePopGlobal(offset) {
-		if (this.sp < 1 || offset < 0 || offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.stackMap[offset] === true) {
-			this.refMan.decRefCount(this.stack[offset], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}						
-		}
-		this.stack[offset] = this.stack[this.sp - 1];
-		this.stackMap[offset] = this.stackMap[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-	
-	opcodePopLocal(offset) {
-		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.stackMap[this.bp + offset] === true) {
-			this.refMan.decRefCount(this.stack[this.bp + offset], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.stack[this.bp + offset] = this.stack[this.sp - 1];
-		this.stackMap[this.bp + offset] = this.stackMap[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-	
-	opcodePopIndirect(offset) {
-		if (this.sp < 1 || this.bp + offset < 0 || this.bp + offset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let directOffset = this.stack[this.bp + offset];
-		if (directOffset < 0 || directOffset >= this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.stackMap[directOffset] === true) {
-			this.refMan.decRefCount(this.stack[directOffset], this.refManError);
-			if (this.refManError.hasError()) {
-				return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-			}
-		}
-		this.stack[directOffset] = this.stack[this.sp - 1];
-		this.stackMap[directOffset] = this.stackMap[this.sp - 1];
-		this.sp--;
-		return null;
-	}
-	
-	opcodePushIndirection(arg1) {
-		this.stack[this.sp] = this.bp + arg1;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		return null;
-	}
-	
-	opcodeJz(arg1) {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.stack[this.sp - 1] === 0) {
-			this.ip = arg1;
-		}
-		this.sp--;
-		return null;
-	}
-
-	opcodeJnz(arg1) {
-		if (this.sp < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		if (this.stack[this.sp - 1] !== 0) {
-			this.ip = arg1;
-		}
-		this.sp--;
-		return null;
-	}
-
-	opcodeJmp(arg1) {
-		this.ip = arg1;
-		return null;
-	}
-	
-	opcodePush(arg1) {
-		this.stack[this.sp] = arg1;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		return null;
-	}
-
-	opcodeCall(arg1) {
-		if (arg1 < 0 || arg1 > this.codeBlocks.length) {
-			return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		this.stack[this.sp] = this.codeBlockId;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.stack[this.sp] = this.ip;
-		this.stackMap[this.sp] = false;
-		this.sp++;					
-		this.stack[this.sp] = this.bp;
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		this.bp = this.sp;
-		this.codeBlockId = arg1;
-		this.ip = 0;
-		return null;
-	}
-
-	opcodeCreateExceptionHandler(arg1) {
-		this.stack[this.sp] = PlwExceptionHandlerRef.make(this.refMan, this.codeBlockId, arg1, this.bp);
-		this.stackMap[this.sp] = true;
-		this.sp++;
-		return null;
-	}
-	
-	opcodePushf(floatId) {
-		if (floatId < 0 || floatId >= this.codeBlocks[this.codeBlockId].floatConsts.length) {
-			return StackMachineError.constAccessOutOfBound().fromCode(this.codeBlockId, this.ip);						
-		}
-		this.stack[this.sp] = this.codeBlocks[this.codeBlockId].floatConsts[floatId];
-		this.stackMap[this.sp] = false;
-		this.sp++;
-		return null;
-	}
-	
-	opcodeEqTuple(count) {
-		if (this.count < 1 || this.sp < count * 2) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let idx1 = this.sp - 2 * count;
-		let idx2 = this.sp - count;
-		let result = true;
-		for (let i = 0; i < count; i++) {
-			if (result === true) {
-				if (this.stackMap[idx1]) {
-					result = this.refMan.compareRefs(this.stack[idx1], this.stack[idx2], this.refManError);
-					if (this.refManError.hasError()) {
-						return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-					}
-					if (this.refManError.hasError()) {
-						return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-					}
-				} else {
-					result = this.stack[idx1] === this.stack[idx2];
-				}
-			}
-			if (this.stackMap[idx1]) {
-				this.refMan.decRefCount(this.stack[idx1], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-			if (this.stackMap[idx2]) {
-				this.refMan.decRefCount(this.stack[idx2], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-			idx1++;
-			idx2++;
-		}
-		this.stack[this.sp - 2 * count] = result ? 1 : 0;
-		this.stackMap[this.sp - 2 * count] = false;
-		this.sp -= 2 * count - 1;
-		return null;
-	}
-	
-	opcodeRetTuple(count) {
-		if (this.count < 1 || this.bp < 4 || this.bp > this.sp) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		let argCount = this.stack[this.bp - 4];
-		if (this.bp < 4 + argCount) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		for (let i = this.sp - count - 1; i >= this.bp - 4 - argCount; i--) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		for (let i = 0; i < count; i++) {
-			this.stack[this.bp - 4 - argCount + i] = this.stack[this.sp - count + i];
-			this.stackMap[this.bp - 4 - argCount + i] = this.stackMap[this.sp - count + i];
-		}
-		this.sp = this.bp - 4 - argCount + count;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		return null;
-	}
-	
-	opcodeDupTuple(count) {
-		if (this.count < 1 || this.sp < count) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		for (let i = 0; i < count; i++) {
-			this.stack[this.sp] = this.stack[this.sp - count];
-			this.stackMap[this.sp] = this.stackMap[this.sp - count];
-			if (this.stackMap[this.sp] === true) {
-				this.refMan.incRefCount(this.stack[this.sp], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-			this.sp++; 
-		}
-		return null;
-	}
-	
-	opcodeYieldTuple(count) {
-		if (this.bp < 4 || this.bp >= this.sp || this.sp < count || this.count < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.bp - 4];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		ref.resizeFrame(2 + (this.sp - this.bp) - count);
-		ref.ptr[1] = this.ip;
-		for (let i = 0; i < this.sp - this.bp - count; i++) {
-			ref.ptr[i + 2] = this.stack[this.bp + i];
-			ref.mapPtr[i + 2] = this.stackMap[this.bp + i];
-		}
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		for (let i = 0; i < count; i++) {
-			this.stack[this.bp - 4 + i] = this.stack[this.sp - count + i];
-			this.stackMap[this.bp - 4 + i] = this.stackMap[this.sp - count + i];
-		}
-		this.sp = this.bp - 4 + count;
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		this.refMan.decRefCount(refId, this.refManError);		
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		return null;
-	}
-	
-	opcodeYieldDoneTuple(count) {
-		if (this.bp < 4 || this.bp > this.sp || this.count < 1) {
-			return StackMachineError.stackAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-		}
-		let refId = this.stack[this.bp - 4];
-		let ref = this.refMan.getRefOfType(refId, PLW_TAG_REF_MAPPED_RECORD, this.refManError);
-		if (this.refManError.hasError()) {
-			return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-		}
-		ref.resizeFrame(2);
-		ref.ptr[1] = this.ip;
-		let previousBp = this.stack[this.bp - 1];
-		let previousIp = this.stack[this.bp - 2];
-		let previousCodeBlockId = this.stack[this.bp - 3];
-		for (let i = this.sp - 1; i >= this.bp - 4; i--) {
-			if (this.stackMap[i] === true) {
-				this.refMan.decRefCount(this.stack[i], this.refManError);
-				if (this.refManError.hasError()) {
-					return StackMachineError.referenceManagerError(this.refManError).fromCode(this.codeBlockId, this.ip);
-				}
-			}
-		}
-		this.sp = this.bp - 4 + count;
-		for (let i = 0; i < count; i++) {
-			this.stack[this.sp - 1 - i] = 0;
-			this.stackMap[this.sp - 1 - i] = false;
-		}
-		this.bp = previousBp;
-		this.codeBlockId = previousCodeBlockId;
-		this.ip = previousIp;
-		return null;
-	}
-
-	opcode2(code, arg1) {
-		switch(code) {
-		case OPCODE_JZ:
-			return this.opcodeJz(arg1);
-		case OPCODE_JNZ:
-			return this.opcodeJnz(arg1);
-		case OPCODE_JMP:
-			return this.opcodeJmp(arg1);
-		case OPCODE_PUSH:
-			return this.opcodePush(arg1);
-		case OPCODE_PUSH_GLOBAL:
-			return this.opcodePushGlobal(arg1);
-		case OPCODE_PUSH_GLOBAL_MOVE:
-			return this.opcodePushGlobalMove(arg1);
-		case OPCODE_PUSH_GLOBAL_FOR_MUTATE:
-			return this.opcodePushGlobalForMutate(arg1);
-		case OPCODE_PUSH_LOCAL:
-			return this.opcodePushLocal(arg1);
-		case OPCODE_PUSH_LOCAL_MOVE:
-			return this.opcodePushLocalMove(arg1);
-		case OPCODE_PUSH_LOCAL_FOR_MUTATE:
-			return this.opcodePushLocalForMutate(arg1);
-		case OPCODE_PUSH_INDIRECTION:
-			return this.opcodePushIndirection(arg1);
-		case OPCODE_PUSH_INDIRECT:
-			return this.opcodePushIndirect(arg1);
-		case OPCODE_PUSH_INDIRECT_FOR_MUTATE:
-			return this.opcodePushIndirectForMutate(arg1);
-		case OPCODE_POP_GLOBAL:
-			return this.opcodePopGlobal(arg1);
-		case OPCODE_POP_LOCAL:
-			return this.opcodePopLocal(arg1);
-		case OPCODE_POP_INDIRECT:
-			return this.opcodePopIndirect(arg1);
-		case OPCODE_POP_VOID:
-			return this.opcodePopVoid(arg1);
-		case OPCODE_CREATE_STRING:
-			return this.opcodeCreateString(arg1);
-		case OPCODE_CREATE_RECORD:
-			return this.opcodeCreateRecord(arg1);
-		case OPCODE_CREATE_BASIC_ARRAY:
-			return this.opcodeCreateBasicArray(arg1);
-		case OPCODE_CREATE_ARRAY:
-			return this.opcodeCreateArray(arg1);
-		case OPCODE_CALL:
-			return this.opcodeCall(arg1);
-		case OPCODE_CALL_NATIVE:
-			return this.opcodeCallNative(arg1);
-		case OPCODE_INIT_GENERATOR:
-			return this.opcodeInitGenerator(arg1);
-		case OPCODE_CREATE_EXCEPTION_HANDLER:
-			return this.opcodeCreateExceptionHandler(arg1);
-		case OPCODE_PUSHF:
-			return this.opcodePushf(arg1);
-		case OPCODE_EQ_TUPLE:
-			return this.opcodeEqTuple(arg1);
-		case OPCODE_RET_TUPLE:
-			return this.opcodeRetTuple(arg1);
-		case OPCODE_DUP_TUPLE:
-			return this.opcodeDupTuple(arg1);
-		case OPCODE_YIELD_TUPLE:
-			return this.opcodeYieldTuple(arg1);
-		case OPCODE_YIELD_DONE_TUPLE:
-			return this.opcodeYieldDoneTuple(arg1);
-		default:
-			return StackMachineError.unknownOp().fromCode(this.codeBlockId, this.ip);
-		}
-	}
-	
 	runLoop() {
 		let code = 0;
 		let ret = null;
-		let arg1 = 0;
-		while (this.ip < this.codeBlocks[this.codeBlockId].codeSize) {
-			code = this.codeBlocks[this.codeBlockId].codes[this.ip];
-			this.ip++;
-			if (code <= OPCODE1_MAX) {
-				ret = this.opcode1(code);
-			} else {
-				if (this.ip >= this.codeBlocks[this.codeBlockId].codeSize) {
-					return StackMachineError.codeAccessOutOfBound().fromCode(this.codeBlockId, this.ip);
-				}
-				arg1 = this.codeBlocks[this.codeBlockId].codes[this.ip];
-				this.ip++;
-				ret = this.opcode2(code, arg1);
+		let arg = 0;
+		let codeBlock = null;
+		for (;;) {
+			codeBlock = this.codeBlocks[this.codeBlockId];
+			if (this.ip >= codeBlock.codeSize - 1) {
+				break;
 			}
+			code = codeBlock.codes[this.ip];
+			this.ip++;
+			arg = codeBlock.codes[this.ip];
+			this.ip++;
+			ret = PLW_OPS[code](this, arg);
 			if (ret !== null) {
 				return ret;
 			}
@@ -7596,16 +6514,17 @@ class StackMachine {
 		if (this.codeBlockId !== -1) {
 			let codeBlock = this.codeBlocks[this.codeBlockId];
 			println("codeblock " + this.codeBlockId + ": " + codeBlock.blockName);
-			for (let i = 0; i < codeBlock.codeSize; i++) {
+			for (let i = 0; i < codeBlock.codeSize - 1; i += 2) {
 				let opcode = codeBlock.codes[i];
-				let opcodeName = PLW_OPCODES[opcode];
+				let arg1 = codeBlock.codes[i + 1];
 				let prefix = (i === this.ip ? "> " : "") + i + ": ";
 				prefix = "          ".substring(0, 10 - prefix.length) + prefix;
-				if (opcode <= OPCODE1_MAX) {
-					println(prefix + opcodeName);
+				if (opcode === OPCODE_NOARG) {
+					println(prefix + PLW_NOARG_OPCODES[arg1]);
+				} else if (opcode === OPCODE_CALL_INTERNAL) {
+					println(prefix + PLW_IFUNS[arg1]);
 				} else {
-					i++;
-					let arg1 = codeBlock.codes[i];
+					let opcodeName = PLW_OPCODES[opcode];
 					println(prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1);
 				}
 			}
@@ -7631,6 +6550,610 @@ class StackMachine {
 
 "use strict";
 
+let PLW_INTERNALS = new Array(PLW_MAX_IFUN + 1).fill(function(sm) {
+	return StackMachineError.suspended().fromCode(sm.codeBlockId, sm.ip);
+});
+
+/* create_string(stringId integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CREATE_STRING] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let strId = sm.stack[sm.sp - 1];
+	if (strId < 0 || strId >= sm.codeBlocks[sm.codeBlockId].strConsts.length) {
+		return StackMachineError.constAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);						
+	}
+	let str = sm.codeBlocks[sm.codeBlockId].strConsts[strId];
+	sm.stack[sm.sp - 1] = PlwStringRef.make(sm.refMan, str);
+	sm.stackMap[sm.sp - 1] = true;
+	return null;
+}
+
+
+/* concat_string(items ...String, itemCount integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CONCAT_STRING] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemCount = sm.stack[sm.sp - 1];
+	if (itemCount < 0 || sm.sp < itemCount + 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let strs = new Array(itemCount);
+	for (let i = 0; i < itemCount; i++) {
+		let refId = sm.stack[sm.sp - itemCount - 1 + i];
+		let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+		if (sm.hasRefManError()) {
+			return sm.errorFromRefMan();
+		}
+		strs[i] = ref.str;
+	}
+	let resultRefId = PlwStringRef.make(sm.refMan, strs.join(""));
+	for (let i = 0; i < itemCount; i++) {
+		let refId = sm.stack[sm.sp - itemCount - 1 + i];
+		sm.refMan.decRefCount(refId, sm.refManError);
+		if (sm.hasRefManError()) {
+			return sm.errorFromRefMan();
+		}
+	}
+	sm.stack[sm.sp - itemCount - 1] = resultRefId;
+	sm.stackMap[sm.sp - itemCount - 1] = true;
+	sm.sp -= itemCount;
+	return null;
+}
+
+/* create_blob(item ...integer, blobSize integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CREATE_BLOB] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let blobSize = sm.stack[sm.sp - 1];
+	if (blobSize < 0 || sm.sp < 1 + blobSize) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let ptr = sm.stack.slice(sm.sp - 1 - blobSize, sm.sp - 1);
+	let mapPtr = sm.stackMap.slice(sm.sp - 1 - blobSize, sm.sp - 1);
+	let refId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	sm.sp -= blobSize;
+	sm.stack[sm.sp - 1] = refId; 
+	sm.stackMap[sm.sp - 1] = true;
+	return null;
+}
+
+/* read_blob(refId Blob, offset integer, size integer)
+ */
+PLW_INTERNALS[PLW_IFUN_READ_BLOB] = function(sm) {
+	if (sm.sp < 3) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let size = sm.stack[sm.sp - 1];
+	let offset = sm.stack[sm.sp - 2];
+	let refId = sm.stack[sm.sp - 3];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (offset < 0 || size < 0 || offset + size > ref.blobSize) {
+		return StackMachineError.refAccessOutOfBound();
+	}
+	sm.sp += size - 3;
+	for (let i = 0; i < size; i++) {
+		let value = ref.ptr[offset + i];
+		let valueIsRef = ref.mapPtr[offset + i];
+		sm.stack[sm.sp - size + i] = value;
+		sm.stackMap[sm.sp - size + i] = valueIsRef;
+		if (valueIsRef) {
+			sm.refMan.incRefCount(value, sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	return null;
+}
+
+/* write_blob(refId Blob, offset integer, val ...integer, size integer)
+ */
+PLW_INTERNALS[PLW_IFUN_WRITE_BLOB] = function(sm) {
+	if (sm.sp < 3) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let size = sm.stack[sm.sp - 1];
+	if (size < 0 || sm.sp < 3 + size) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let offset = sm.stack[sm.sp - 2 - size];
+	let refId = sm.stack[sm.sp - 3 - size];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (offset < 0 || offset + size > ref.blobSize) {
+		return StackMachineError.refAccessOutOfBound();
+	}
+	for (let i = 0; i < size; i++) {
+		if (ref.mapPtr[offset + i] === true) {
+			sm.refMan.decRefCount(ref.ptr[offset + i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+		ref.ptr[offset + i] = sm.stack[sm.sp - 1 - size + i];
+		ref.mapPtr[offset + i] = sm.stackMap[sm.sp - 1 - size + i];
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.sp -= 3 + size;
+	return null;
+}
+
+/* concat_blob(blob ...Blob, itemCount integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CONCAT_BLOB] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemCount = sm.stack[sm.sp - 1];
+	if (itemCount < 0 || sm.sp < itemCount + 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let ptrs = new Array(itemCount);
+	let mapPtrs = new Array(itemCount);
+	let blobSize = 0;
+	for (let i = 0; i < itemCount; i++) {
+		let refId = sm.stack[sm.sp - itemCount - 1 + i];
+		let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+		if (sm.hasRefManError()) {
+			return sm.errorFromRefMan();
+		}
+		ptrs[i] = ref.ptr;
+		mapPtrs[i] = ref.mapPtr;
+		blobSize += ref.blobSize;
+	}
+	let ptr = [].concat(...ptrs);
+	let mapPtr = [].concat(...mapPtrs);
+	for(let i = 0; i < blobSize; i++) {
+		if (mapPtr[i] === true) {
+			sm.refMan.incRefCount(ptr[i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	let resultRefId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	for (let i = 0; i < itemCount; i++) {
+		let refId = sm.stack[sm.sp - itemCount - 1 + i];
+		sm.refMan.decRefCount(refId, sm.refManError);
+		if (sm.hasRefManError()) {
+			return sm.errorFromRefMan();
+		}
+	}
+	sm.stack[sm.sp - itemCount - 1] = resultRefId;
+	sm.stackMap[sm.sp - itemCount - 1] = true;
+	sm.sp -= itemCount;
+	return null;
+}
+
+/* get_blob_mutable_offset(refId Blob, offset integer)
+ */
+PLW_INTERNALS[PLW_IFUN_GET_BLOB_MUTABLE_OFFSET] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let offset = sm.stack[sm.sp - 1];
+	let refId = sm.stack[sm.sp - 2];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (offset < 0 || offset >= ref.blobSize || ref.mapPtr[offset] === false) {
+		return StackMachineError.refAccessOutOfBound();
+	}
+	let value = sm.refMan.makeMutable(ref.ptr[offset], sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	ref.ptr[offset] = value;
+	sm.refMan.incRefCount(value, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.stack[sm.sp - 2] = value;
+	sm.stackMap[sm.sp - 2] = true;
+	sm.sp--;
+	return null;
+}
+
+/* get_blob_size(refId Blob)
+ */
+PLW_INTERNALS[PLW_IFUN_GET_BLOB_SIZE] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 1];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	let blobSize = ref.blobSize;
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.stack[sm.sp - 1] = blobSize;
+	sm.stackMap[sm.sp - 1] = false;
+	return null;
+}
+
+/* get_blob_index_of_item(item ...integer, refId Blob, itemSize integer)
+ */
+PLW_INTERNALS[PLW_IFUN_GET_BLOB_INDEX_OF_ITEM] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemSize = sm.stack[sm.sp - 1];
+	if (itemSize < 1 && sm.sp < 2 + itemSize) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 2];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	let indexOf = -1;	
+	let baseOffset = sm.sp - 2 - itemSize;
+	let ptrOffset = 0;
+	for (let i = 0; i < ref.blobSize / itemSize; i++) {
+		let isItemEqual = true;
+		for (let k = 0; k < itemSize; k++) {
+			isItemEqual = ref.mapPtr[k] === true ?
+				sm.refMan.compareRefs(sm.stack[baseOffset + k], ref.ptr[ptrOffset + k], sm.refManError) :
+				sm.stack[baseOffset + k] === ref.ptr[ptrOffset + k];
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+			if (isItemEqual === false) {
+				break;
+			}
+		}
+		if (isItemEqual === true) {
+			indexOf = i;
+			break;
+		}
+		ptrOffset += itemSize;
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	for (let i = itemSize - 1; i >= 0; i--) {
+		if (sm.stackMap[baseOffset + i] === true) {
+			sm.refMan.decRefCount(sm.stack[baseOffset + i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	sm.stack[baseOffset] = indexOf;
+	sm.stackMap[baseOffset] = false;
+	sm.sp = baseOffset + 1;
+	return null;
+};
+
+/* slice_blob(refId Blob, beginIndex integer, endIndex integer)
+ */
+PLW_INTERNALS[PLW_IFUN_SLICE_BLOB] = function(sm) {
+	if (sm.sp < 3) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 3];
+	let beginIndex = sm.stack[sm.sp - 2];
+	let endIndex = sm.stack[sm.sp - 1];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (beginIndex < 0) {
+		beginIndex = 0;
+	}
+	if (endIndex > ref.blobSize) {
+		endIndex = ref.blobSize;
+	}
+	if (endIndex < beginIndex) {
+		endIndex = beginIndex;
+	}
+	let blobSize = endIndex - beginIndex;
+	let ptr = ref.ptr.slice(beginIndex, endIndex);
+	let mapPtr = ref.mapPtr.slice(beginIndex, endIndex);
+	for (let i = 0; i < blobSize; i++) {
+		if (mapPtr[i] === true) {
+			sm.refMan.incRefCount(ptr[i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	let resultRefId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.stack[sm.sp - 3] = resultRefId;
+	sm.stackMap[sm.sp - 3] = true;
+	sm.sp -= 2;
+	return null;
+};
+
+/* create_blob_repeat_item(item ...integer, itemCount integer, itemSize integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CREATE_BLOB_REPEAT_ITEM] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemSize = sm.stack[sm.sp - 1];
+	if (itemSize < 0 || sm.sp < 2 + itemSize) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemCount = sm.stack[sm.sp - 2];
+	if (itemCount < 0) {
+		itemCount = 0;
+	}
+	let blobSize = itemCount * itemSize;
+	let ptr = new Array(blobSize);
+	let mapPtr = new Array(blobSize);
+	let baseOffset = sm.sp - 2 - itemSize;
+	for (let i = 0; i < itemSize; i++) {
+		ptr[i] = sm.stack[baseOffset + i];
+		mapPtr[i] = sm.stackMap[baseOffset + i];
+	}
+	for (let i = itemSize; i < blobSize; i++) {
+		ptr[i] = sm.stack[baseOffset + i % itemSize];
+		mapPtr[i] = sm.stackMap[baseOffset + i % itemSize];
+		if (mapPtr[i] === true) {
+			sm.refMan.incRefCount(ptr[i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	let refId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	sm.stack[baseOffset] = refId; 
+	sm.stackMap[baseOffset] = true;
+	sm.sp = baseOffset + 1;
+	return null;
+}
+
+
+/* create_exception_handler(offset integer)
+ */
+PLW_INTERNALS[PLW_IFUN_CREATE_EXCEPTION_HANDLER] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let offset = sm.stack[sm.sp - 1];
+	sm.stack[sm.sp - 1] = PlwExceptionHandlerRef.make(sm.refMan, sm.codeBlockId, offset, sm.bp);
+	sm.stackMap[sm.sp - 1] = true;
+	return null;
+}
+
+/* raise_exception(errorCode integer)
+ */
+PLW_INTERNALS[PLW_IFUN_RAISE_EXCEPTION] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let errorCode = sm.stack[sm.sp - 1];
+	while (sm.sp > 0) {
+		if (sm.stackMap[sm.sp - 1] === true) {
+			let refId = sm.stack[sm.sp - 1];
+			let ref = sm.refMan.getRef(refId, sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+			if (ref.tag === PLW_TAG_REF_EXCEPTION_HANDLER) {
+				sm.bp = ref.bp;
+				sm.ip = ref.ip;
+				sm.codeBlockId = ref.codeBlockId;
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
+				}
+				sm.stack[sm.sp - 1] = errorCode;
+				sm.stackMap[sm.sp - 1] = false;
+				return null;
+			}
+			sm.refMan.decRefCount(refId, sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+		sm.sp--;
+	}
+	return StackMachineError.exception(errorCode).fromCode(sm.codeBlockId, sm.ip);
+}
+
+/* create_generator(param ...integer, paramCount integer, codeBlockId integer)
+ * layout of the created blob is:
+ *     0:   codeBlockId
+ *     1:   ip
+ *     2:   param1
+ *     1+n: paramN
+ */
+PLW_INTERNALS[PLW_IFUN_CREATE_GENERATOR] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let codeBlockId = sm.stack[sm.sp - 1]
+	let paramCount = sm.stack[sm.sp - 2];
+	if (paramCount < 0 || sm.sp < paramCount + 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}					
+	let ptr = new Array(paramCount + 2);
+	let mapPtr = new Array(paramCount + 2);
+	ptr[0] = codeBlockId;
+	ptr[1] = 0;
+	mapPtr[0] = false;
+	mapPtr[1] = false;
+	for (let i = 0; i < paramCount; i++) {
+		ptr[i + 2] = sm.stack[sm.sp - paramCount - 2 + i];
+		mapPtr[i + 2] = sm.stackMap[sm.sp - paramCount - 2 + i];
+	}
+	let refId = PlwBlobRef.make(sm.refMan, paramCount + 2, ptr, mapPtr);
+	sm.stack[sm.sp - paramCount - 2] = refId;
+	sm.stackMap[sm.sp - paramCount - 2] = true;
+	sm.sp -= paramCount + 1;
+	return null;	
+}
+
+/* get_generator_next_item(refId Generator)
+ *
+ * make the stack like this:
+ *      refId			 parameter already on the stack
+ *		oldCodeBlockId
+ *      oldIp
+ *      oldBp
+ *   bp param1			 this and below copied from the generator blob
+ *      ...
+ *      paramN
+ *      local1
+ *      ...
+ *      localN   
+ */
+PLW_INTERNALS[PLW_IFUN_GET_GENERATOR_NEXT_ITEM] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 1];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (ref.blobSize < 2) {
+		return StackMachineError.refAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.stack[sm.sp] = sm.codeBlockId;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	sm.stack[sm.sp] = sm.ip;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	sm.stack[sm.sp] = sm.bp;
+	sm.stackMap[sm.sp] = false;
+	sm.sp++;
+	sm.bp = sm.sp;
+	for (let i = 0; i < ref.blobSize - 2; i++) {
+		sm.stack[sm.sp] = ref.ptr[i + 2];
+		sm.stackMap[sm.sp] = ref.mapPtr[i + 2];
+		ref.mapPtr[i + 2] = false;
+		sm.sp++;
+	}
+	let codeBlockId = ref.ptr[0];
+	let ip = ref.ptr[1];
+	if (codeBlockId < 0 || codeBlockId >= sm.codeBlocks.length) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	if (ip < 0 || ip > sm.codeBlocks[codeBlockId].codeSize) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	sm.codeBlockId = codeBlockId;
+	sm.ip = ip;
+	return null;
+}
+
+/* has_generator_ended(refId Generator)
+ */
+PLW_INTERNALS[PLW_IFUN_HAS_GENERATOR_ENDED] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 1];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (ref.blobSize < 2) {
+		return StackMachineError.refAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let codeBlockId = ref.ptr[0];
+	if (codeBlockId < 0 || codeBlockId >= sm.codeBlocks.length) {
+		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let ended = ref.ptr[1] >= sm.codeBlocks[codeBlockId].codeSize ? 1 : 0;
+	sm.refMan.decRefCount(sm.stack[sm.sp - 1], sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	sm.stack[sm.sp - 1] = ended;
+	sm.stackMap[sm.sp - 1] = false;
+	return null;
+}
+
+/* yield_generator_item(item ...integer, itemSize)
+ * 
+ * in a generator, the stack is like this:
+ *      refId			 refId of the generator
+ *		oldCodeBlockId
+ *      oldIp
+ *      oldBp
+ *   bp param1			 this and below copied from the generator blob
+ *      ...
+ *      paramN
+ *      local1
+ *      ...
+ *      localN   
+ */
+PLW_INTERNALS[PLW_IFUN_YIELD_GENERATOR_ITEM] = function(sm) {
+	if (sm.sp < 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let itemSize = sm.stack[sm.sp - 1];
+	if (sm.bp < 4 || itemSize < 0 || sm.sp < sm.bp + itemSize + 1) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.bp - 4];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.refManError.hasError()) {
+		return StackMachineError.referenceManagerError(sm.refManError).fromCode(sm.codeBlockId, sm.ip);
+	}
+	ref.resize(2 + (sm.sp - sm.bp) - itemSize - 1);
+	ref.ptr[1] = sm.ip;
+	for (let i = 0; i < sm.sp - sm.bp - itemSize - 1; i++) {
+		ref.ptr[i + 2] = sm.stack[sm.bp + i];
+		ref.mapPtr[i + 2] = sm.stackMap[sm.bp + i];
+	}
+	let previousBp = sm.stack[sm.bp - 1];
+	let previousIp = sm.stack[sm.bp - 2];
+	let previousCodeBlockId = sm.stack[sm.bp - 3];
+	for (let i = 0; i < itemSize; i++) {
+		sm.stack[sm.bp - 4 + i] = sm.stack[sm.sp - itemSize - 1 + i];
+		sm.stackMap[sm.bp - 4 + i] = sm.stackMap[sm.sp - itemSize - 1 + i];
+	}
+	sm.sp = sm.bp - 4 + itemSize;
+	sm.bp = previousBp;
+	sm.codeBlockId = previousCodeBlockId;
+	sm.ip = previousIp;
+	sm.refMan.decRefCount(refId, sm.refManError);		
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	return null;
+}
+
+"use strict";
+
 class NativeFunctionManager {
 	constructor() {
 		this.functions = [];
@@ -7644,10 +7167,11 @@ class NativeFunctionManager {
 		return i;
 	}
 	
-	static initStdNativeFunctions(compilerContext) {
-		let nativeFunctionManager = new NativeFunctionManager();
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+	
+	static initStdNativeFunctions(compiler) {
+		let nativeFunctionManager = new NativeFunctionManager();	
+				
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"get_char",
 			new EvalResultParameterList(0, []),
 			EVAL_TYPE_CHAR,
@@ -7656,7 +7180,7 @@ class NativeFunctionManager {
 			})
 		));	
 		
-		compilerContext.addProcedure(EvalResultProcedure.fromNative(
+		compiler.context.addProcedure(EvalResultProcedure.fromNative(
 			"write",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			nativeFunctionManager.addFunction(function(sm) {
@@ -7664,22 +7188,21 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				addTextOut(ref.str);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.sp -= 2;
 				return null;
 			})
 		));		
 		
-		compilerContext.addProcedure(EvalResultProcedure.fromNative(
+		compiler.context.addProcedure(EvalResultProcedure.fromNative(
 			"print",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			nativeFunctionManager.addFunction(function(sm) {
@@ -7687,22 +7210,21 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				printTextOut(ref.str);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.sp -= 2;
 				return null;
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"print",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			EVAL_TYPE_TEXT,
@@ -7711,10 +7233,9 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				printTextOut(ref.str);
 				sm.sp -= 1;
@@ -7722,7 +7243,7 @@ class NativeFunctionManager {
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_INTEGER)]),
 			EVAL_TYPE_TEXT,
@@ -7737,7 +7258,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
 			EVAL_TYPE_TEXT,
@@ -7752,7 +7273,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_CHAR)]),
 			EVAL_TYPE_TEXT,
@@ -7767,7 +7288,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_BOOLEAN)]),
 			EVAL_TYPE_TEXT,
@@ -7781,112 +7302,8 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
-				
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"length_basic_array",
-			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 1) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let len = ref.arraySize;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 2] = len;
-				sm.stackMap[sm.sp - 2] = false;
-				sm.sp -= 1;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"last_index_basic_array",
-			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 1) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let lastIndex = ref.arraySize - 1;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 2] = lastIndex;
-				sm.stackMap[sm.sp - 2] = false;
-				sm.sp -= 1;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"length_array",
-			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 1) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let len = ref.arraySize;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 2] = len;
-				sm.stackMap[sm.sp - 2] = false;
-				sm.sp -= 1;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"last_index_array",
-			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REF)]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 1) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let lastIndex = ref.arraySize - 1;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 2] = lastIndex;
-				sm.stackMap[sm.sp - 2] = false;
-				sm.sp -= 1;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+							
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"length",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			EVAL_TYPE_INTEGER,
@@ -7895,15 +7312,14 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let len = ref.str.length;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = len;
 				sm.stackMap[sm.sp - 2] = false;
@@ -7911,105 +7327,24 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"index_of_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("item", EVAL_TYPE_REF),
-				new EvalResultParameter("array", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refIdItem = sm.stack[sm.sp - 3];
-				let refIdArray = sm.stack[sm.sp - 2];
-				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}				
-				let indexOf = -1;
-				for (let i = 0; i < refArray.arraySize; i++) {
-					let isEquals = sm.refMan.compareRefs(refIdItem, refArray.ptr[i], refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					if (isEquals === true) {
-						indexOf = i;
-						break;
-					}
-				}
-				sm.refMan.decRefCount(refIdItem, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.refMan.decRefCount(refIdArray, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 3] = indexOf;
-				sm.stackMap[sm.sp - 3] = false;
-				sm.sp -= 2;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"index_of_basic_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("item", EVAL_TYPE_INTEGER),
-				new EvalResultParameter("array", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_INTEGER,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let item = sm.stack[sm.sp - 3];
-				let refIdArray = sm.stack[sm.sp - 2];
-				let refArray = sm.refMan.getRefOfType(refIdArray, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}				
-				let indexOf = -1;
-				for (let i = 0; i < refArray.arraySize; i++) {
-					if (item === refArray.ptr[i]) {
-						indexOf = i;
-						break;
-					}
-				}
-				sm.refMan.decRefCount(refIdArray, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 3] = indexOf;
-				sm.stackMap[sm.sp - 3] = false;
-				sm.sp -= 2;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+				
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
-			new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_CHAR)))]),
+			new EvalResultParameterList(1, [new EvalResultParameter("t", compiler.addType(new EvalTypeArray(EVAL_TYPE_CHAR)))]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let resultId = PlwStringRef.make(sm.refMan, String.fromCharCode(...ref.ptr));
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -8018,24 +7353,23 @@ class NativeFunctionManager {
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
-			new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_INTEGER)))]),
+			new EvalResultParameterList(1, [new EvalResultParameter("t", compiler.addType(new EvalTypeArray(EVAL_TYPE_INTEGER)))]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let resultId = PlwStringRef.make(sm.refMan, "[" + ref.ptr + "]");
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -8044,24 +7378,23 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
-			new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_BOOLEAN)))]),
+			new EvalResultParameterList(1, [new EvalResultParameter("t", compiler.addType(new EvalTypeArray(EVAL_TYPE_BOOLEAN)))]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let resultId = PlwStringRef.make(sm.refMan, "[" + ref.ptr + "]");
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -8070,33 +7403,32 @@ class NativeFunctionManager {
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"text",
-			new EvalResultParameterList(1, [new EvalResultParameter("t", compilerContext.addType(new EvalTypeArray(EVAL_TYPE_TEXT)))]),
+			new EvalResultParameterList(1, [new EvalResultParameter("t", compiler.addType(new EvalTypeArray(EVAL_TYPE_TEXT)))]),
 			EVAL_TYPE_TEXT,
 			nativeFunctionManager.addFunction(function(sm) {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let str = "[";
 				for (let i = 0; i < ref.arraySize; i++) {
-					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
+					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, sm.refManError);
+					if (sm.hasRefManError()) {
+						return sm.errorFromRefMan();
 					}
 					str += (i > 0 ? ", " : "") + subRef.str;
 				}
 				str += "]";
 				let resultId = PlwStringRef.make(sm.refMan, str);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = resultId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -8105,7 +7437,7 @@ class NativeFunctionManager {
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"concat",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t1", EVAL_TYPE_TEXT),
@@ -8116,32 +7448,31 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId1 = sm.stack[sm.sp - 3];
 				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
-				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				if (ref1.refCount === 1) {
 					ref1.str += ref2.str;
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
+					sm.refMan.decRefCount(refId2, sm.refManError);
+					if (sm.hasRefManError()) {
+						return sm.errorFromRefMan();
 					}
 				} else {
 					let resultRefId = PlwStringRef.make(sm.refMan, ref1.str + ref2.str);
-					sm.refMan.decRefCount(refId1, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
+					sm.refMan.decRefCount(refId1, sm.refManError);
+					if (sm.hasRefManError()) {
+						return sm.errorFromRefMan();
 					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
+					sm.refMan.decRefCount(refId2, sm.refManError);
+					if (sm.hasRefManError()) {
+						return sm.errorFromRefMan();
 					}
 					sm.stack[sm.sp - 3] = resultRefId;
 					sm.stackMap[sm.sp - 3] = true;
@@ -8152,7 +7483,7 @@ class NativeFunctionManager {
 		));
 
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"subtext",
 			new EvalResultParameterList(3, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
@@ -8164,13 +7495,12 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 3) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 4];
 				let beginIndex = sm.stack[sm.sp - 3];
 				let length = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				if (beginIndex < 0) {
 					return StackMachineError.refAccessOutOfBound();
@@ -8182,9 +7512,9 @@ class NativeFunctionManager {
 					return StackMachineError.refAccessOutOfBound();
 				}
 				let resultRefId = PlwStringRef.make(sm.refMan, length === 0 ? "" : ref.str.substr(beginIndex, length));
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 4] = resultRefId;
 				sm.stackMap[sm.sp - 4] = true;
@@ -8193,7 +7523,7 @@ class NativeFunctionManager {
 			})
 		));	
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"subtext",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
@@ -8204,12 +7534,11 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let beginIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				if (beginIndex < 0) {
 					return StackMachineError.refAccessOutOfBound();
@@ -8218,9 +7547,9 @@ class NativeFunctionManager {
 					return StackMachineError.refAccessOutOfBound();
 				}
 				let resultRefId = PlwStringRef.make(sm.refMan, ref.str.substr(beginIndex));
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = resultRefId;
 				sm.stackMap[sm.sp - 3] = true;
@@ -8229,7 +7558,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"trim",
 			new EvalResultParameterList(1, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT)
@@ -8239,16 +7568,15 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 1) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let resultRefId = PlwStringRef.make(sm.refMan, ref.str.trim());
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = resultRefId;
 				sm.stackMap[sm.sp - 2] = true;
@@ -8257,7 +7585,7 @@ class NativeFunctionManager {
 			})
 		));	
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"char_code",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
@@ -8268,20 +7596,19 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let index = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				if (index < 0 || index >= ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();
 				}
 				let charCode = ref.str.charCodeAt(index)
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = charCode;
 				sm.stackMap[sm.sp - 3] = false;
@@ -8290,7 +7617,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"char_at",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
@@ -8301,20 +7628,19 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let index = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				if (index < 0 || index >= ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();
 				}
 				let charCode = ref.str.charCodeAt(index)
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = charCode;
 				sm.stackMap[sm.sp - 3] = false;
@@ -8323,7 +7649,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"index_of",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("c", EVAL_TYPE_CHAR),
@@ -8334,17 +7660,16 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let ch = sm.stack[sm.sp - 3];
 				let refId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let index = ref.str.indexOf(String.fromCharCode(ch));
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = index;
 				sm.stackMap[sm.sp - 3] = false;
@@ -8353,7 +7678,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"index_of",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("c", EVAL_TYPE_TEXT),
@@ -8364,25 +7689,24 @@ class NativeFunctionManager {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refIdSub = sm.stack[sm.sp - 3];
-				let refSub = sm.refMan.getRefOfType(refIdSub, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let refSub = sm.refMan.getRefOfType(refIdSub, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let index = ref.str.indexOf(refSub.str);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
-				sm.refMan.decRefCount(refIdSub, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refIdSub, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = index;
 				sm.stackMap[sm.sp - 3] = false;
@@ -8391,41 +7715,40 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"split",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("t", EVAL_TYPE_TEXT),
 				new EvalResultParameter("s", EVAL_TYPE_TEXT)
 			]),
-			compilerContext.addType(new EvalTypeArray(EVAL_TYPE_TEXT)),
+			compiler.addType(new EvalTypeArray(EVAL_TYPE_TEXT)),
 			nativeFunctionManager.addFunction(function(sm) {
 				if (sm.stack[sm.sp - 1] !== 2) {
 					return StackMachineError.nativeArgCountMismatch();
 				}
-				let refManError = new PlwRefManagerError();
 				let refId = sm.stack[sm.sp - 3];
 				let sepId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
-				let sep = sm.refMan.getRefOfType(sepId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let sep = sm.refMan.getRefOfType(sepId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let strs = ref.str.split(sep.str);
 				let strIds = new Array(strs.length);
 				for (let i = 0; i < strs.length; i++) {
 					strIds[i] = PlwStringRef.make(sm.refMan, strs[i]);
 				}
-				let resultId = PlwArrayRef.make(sm.refMan, strs.length, strIds);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let resultId = PlwBlobRef.make(sm.refMan, strs.length, strIds, new Array(strs.length).fill(true));
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
-				sm.refMan.decRefCount(sepId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(sepId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 3] = resultId;
 				sm.stackMap[sm.sp - 3] = true;
@@ -8433,291 +7756,8 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
-
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"slice_basic_array",
-			new EvalResultParameterList(3, [
-				new EvalResultParameter("array", EVAL_TYPE_REF),
-				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
-				new EvalResultParameter("endIndex", EVAL_TYPE_INTEGER),
-			]),
-			EVAL_TYPE_REF,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 3) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refId = sm.stack[sm.sp - 4];
-				let beginIndex = sm.stack[sm.sp - 3];
-				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				if (beginIndex < 0 || endIndex >= ref.arraySize) {
-					return StackMachineError.refAccessOutOfBound();
-				}
-				let arraySize = endIndex - beginIndex + 1;
-				if (arraySize < 0) {
-					arraySize = 0;
-				}
-				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
-				let resultRefId = PlwBasicArrayRef.make(sm.refMan, arraySize, ptr);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 4] = resultRefId;
-				sm.stackMap[sm.sp - 4] = true;
-				sm.sp -= 3;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"slice_array",
-			new EvalResultParameterList(3, [
-				new EvalResultParameter("array", EVAL_TYPE_REF),
-				new EvalResultParameter("beginIndex", EVAL_TYPE_INTEGER),
-				new EvalResultParameter("endIndex", EVAL_TYPE_INTEGER),
-			]),
-			EVAL_TYPE_REF,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 3) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refId = sm.stack[sm.sp - 4];
-				let beginIndex = sm.stack[sm.sp - 3];
-				let endIndex = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				if (beginIndex < 0 || endIndex >= ref.arraySize) {
-					return StackMachineError.refAccessOutOfBound();
-				}
-				let arraySize = endIndex - beginIndex + 1;
-				if (arraySize < 0) {
-					arraySize = 0;
-				}
-				let ptr = ref.ptr.slice(beginIndex, beginIndex + arraySize);
-				for (let i = 0; i < arraySize; i++) {
-					sm.refMan.incRefCount(ptr[i], refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-				}
-				let resultRefId = PlwArrayRef.make(sm.refMan, arraySize, ptr);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 4] = resultRefId;
-				sm.stackMap[sm.sp - 4] = true;
-				sm.sp -= 3;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"in_basic_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("item", EVAL_TYPE_INTEGER),
-				new EvalResultParameter("array", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_BOOLEAN,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let item = sm.stack[sm.sp - 3];
-				let refId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let isIn = ref.ptr.indexOf(item) > -1 ? 1 : 0;
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 3] = isIn;
-				sm.stackMap[sm.sp - 3] = false;
-				sm.sp -= 2;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"in_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("item", EVAL_TYPE_REF),
-				new EvalResultParameter("array", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_BOOLEAN,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refIdItem = sm.stack[sm.sp - 3];
-				let refId = sm.stack[sm.sp - 2];
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let isIn = 0;
-				for (let i = 0; i < ref.arraySize; i++) {
-					let isEqual = sm.refMan.compareRefs(refIdItem, ref.ptr[i], refManError);
-					if(refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);						
-					}
-					if (isEqual === true) {
-						isIn = 1;
-						break;
-					}
-				}
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.refMan.decRefCount(refIdItem, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				sm.stack[sm.sp - 3] = isIn;
-				sm.stackMap[sm.sp - 3] = false;
-				sm.sp -= 2;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"concat_basic_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("a1", EVAL_TYPE_REF),
-				new EvalResultParameter("a2", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_REF,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refId1 = sm.stack[sm.sp - 3];
-				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_BASIC_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				if (ref1.refCount === 1) {
-					ref1.ptr.push(...ref2.ptr);
-					ref1.arraySize += ref2.arraySize;
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-				} else {		
-					let newArraySize = ref1.arraySize + ref2.arraySize;
-					let ptr = ref1.ptr.concat(ref2.ptr);
-					let resultRefId = PlwBasicArrayRef.make(sm.refMan, newArraySize, ptr);
-					sm.refMan.decRefCount(refId1, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.stack[sm.sp - 3] = resultRefId;
-					sm.stackMap[sm.sp - 3] = true;
-				}
-				sm.sp -= 2;
-				return null;
-			})
-		));
-
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
-			"concat_array",
-			new EvalResultParameterList(2, [
-				new EvalResultParameter("a1", EVAL_TYPE_REF),
-				new EvalResultParameter("a2", EVAL_TYPE_REF)
-			]),
-			EVAL_TYPE_REF,
-			nativeFunctionManager.addFunction(function(sm) {
-				if (sm.stack[sm.sp - 1] !== 2) {
-					return StackMachineError.nativeArgCountMismatch();
-				}
-				let refManError = new PlwRefManagerError();
-				let refId1 = sm.stack[sm.sp - 3];
-				let refId2 = sm.stack[sm.sp - 2];
-				let ref1 = sm.refMan.getRefOfType(refId1, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}		
-				let ref2 = sm.refMan.getRefOfType(refId2, PLW_TAG_REF_ARRAY, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
-				}
-				if (ref1.refCount === 1) {
-					ref1.ptr.push(...ref2.ptr);
-					ref1.arraySize += ref2.arraySize;
-					if (ref2.refCount === 1) {
-						ref2.arraySize = 0;
-						ref2.ptr = null;
-					} else {
-						for (let i = 0; i < ref2.arraySize; i++) {
-							sm.refMan.incRefCount(ref2.ptr[i], refManError);
-							if (refManError.hasError()) {
-								return StackMachineError.referenceManagerError(refManError);
-							}
-						}						
-					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}					
-				} else {
-					let newArraySize = ref1.arraySize + ref2.arraySize;
-					let ptr = ref1.ptr.concat(ref2.ptr);
-					for (let i = 0; i < newArraySize; i++) {
-						sm.refMan.incRefCount(ptr[i], refManError);
-						if (refManError.hasError()) {
-							return StackMachineError.referenceManagerError(refManError);
-						}
-					}
-					let resultRefId = PlwArrayRef.make(sm.refMan, newArraySize, ptr);
-					sm.refMan.decRefCount(refId1, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.refMan.decRefCount(refId2, refManError);
-					if (refManError.hasError()) {
-						return StackMachineError.referenceManagerError(refManError);
-					}
-					sm.stack[sm.sp - 3] = resultRefId;
-					sm.stackMap[sm.sp - 3] = true;
-				}
-				sm.sp -= 2;
-				return null;
-			})
-		));
-		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"abs",
 			new EvalResultParameterList(1, [new EvalResultParameter("i", EVAL_TYPE_INTEGER)]),
 			EVAL_TYPE_INTEGER,
@@ -8734,9 +7774,8 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
-
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"real",
 			new EvalResultParameterList(1, [new EvalResultParameter("i", EVAL_TYPE_INTEGER)]),
 			EVAL_TYPE_REAL,
@@ -8750,7 +7789,7 @@ class NativeFunctionManager {
 			})
 		));
 
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"sqrt",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
 			EVAL_TYPE_REAL,
@@ -8765,7 +7804,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"log",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
 			EVAL_TYPE_REAL,
@@ -8780,7 +7819,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"now",
 			new EvalResultParameterList(0, []),
 			EVAL_TYPE_INTEGER,
@@ -8794,7 +7833,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"random",
 			new EvalResultParameterList(2, [
 				new EvalResultParameter("low_bound", EVAL_TYPE_INTEGER),
@@ -8813,7 +7852,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"integer",
 			new EvalResultParameterList(1, [new EvalResultParameter("t", EVAL_TYPE_TEXT)]),
 			EVAL_TYPE_INTEGER,
@@ -8822,15 +7861,14 @@ class NativeFunctionManager {
 					return StackMachineError.nativeArgCountMismatch();
 				}
 				let refId = sm.stack[sm.sp - 2];
-				let refManError = new PlwRefManagerError();
-				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_STRING, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				let result = parseInt(ref.str);
-				sm.refMan.decRefCount(refId, refManError);
-				if (refManError.hasError()) {
-					return StackMachineError.referenceManagerError(refManError);
+				sm.refMan.decRefCount(refId, sm.refManError);
+				if (sm.hasRefManError()) {
+					return sm.errorFromRefMan();
 				}
 				sm.stack[sm.sp - 2] = result;
 				sm.stackMap[sm.sp - 2] = false;
@@ -8839,7 +7877,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"ceil",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
 			EVAL_TYPE_INTEGER,
@@ -8854,7 +7892,7 @@ class NativeFunctionManager {
 			})
 		));
 		
-		compilerContext.addFunction(EvalResultFunction.fromNative(
+		compiler.context.addFunction(EvalResultFunction.fromNative(
 			"floor",
 			new EvalResultParameterList(1, [new EvalResultParameter("r", EVAL_TYPE_REAL)]),
 			EVAL_TYPE_INTEGER,
@@ -8868,7 +7906,7 @@ class NativeFunctionManager {
 				return null;
 			})
 		));
-
+		
 		return nativeFunctionManager;
 	}
 }
@@ -8885,7 +7923,7 @@ function printTextOut(txt) {
 }
 
 let compilerContext = new CompilerContext();
-let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(compilerContext);
+let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(new Compiler(compilerContext));
 let stackMachine = new StackMachine();
 
 if (process.argv.length < 3) {
@@ -8911,7 +7949,8 @@ while (parser.peekToken() !== TOK_EOF) {
 		console.log(result);
 		break;
 	} else {
-		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks, nativeFunctionManager.functions);
+		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
+			PLW_INTERNALS, nativeFunctionManager.functions);
 		while (smRet !== null && smRet.errorMsg === "@get_char") {
 			let buffer = new Int8Array(1);
 	  		fs.readSync(0, buffer, 0, 1);
@@ -8921,7 +7960,7 @@ while (parser.peekToken() !== TOK_EOF) {
 		}
 		if (smRet !== null) {
 			console.log(JSON.stringify(smRet));
-			console.log(JSON.stringify(stackMachine.codeBlocks[smRet.currentBlockId], undefined, 4));
+			stackMachine.dump(printTextOut);
 			break;
 		}
 	}

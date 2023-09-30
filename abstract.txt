@@ -256,8 +256,24 @@ Quick Win Strategie:
 
 	
 	
-	
+Linear Type
+===========
+
+begin
+  var toto := 'hello';
+  var titi := toto || toto;   # illegal, toto is unset by first reference			
+end;
 		
+begin
+  var toto := 'hello';
+  var titi := dup(toto) || toto;   # Ok, dup incremente the ref count			
+end;
+
+
+begin
+  var toto := ['hello'];
+  var titi := toto[0];				#			
+end;
 		
 		
 		

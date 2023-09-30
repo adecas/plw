@@ -146,6 +146,14 @@ class AstOperatorUnary extends AstNode {
 	}
 }
 
+class AstConcat extends AstNode {
+	constructor(itemCount, items) {
+		super("ast-concat");
+		this.itemCount = itemCount;
+		this.items = items;
+	}
+}
+
 class AstVariableDeclaration extends AstNode {
 	constructor(varNameCount, varNames, valueExpr, isConst) {
 		super("ast-variable-declaration");

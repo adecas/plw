@@ -156,7 +156,7 @@ class Parser {
 	}
 		
 	readExpr4() {
-		let left = this.readExpr3();
+		let left = this.readExpr3bis();
 		if (Parser.isError(left)) {
 			return left;
 		}
@@ -171,7 +171,7 @@ class Parser {
 			this.peekToken() === TOK_IN
 		) {
 			let operator = this.readToken();
-			let right = this.readExpr3();
+			let right = this.readExpr3bis();
 			if (Parser.isError(right)) {
 				return right;
 			}
@@ -179,6 +179,32 @@ class Parser {
 		}
 		
 		return left;
+	}
+	
+	readExpr3bis() {
+		let expr = this.readExpr3();		
+		if (Parser.isError(expr)) {
+			return expr;
+		}
+		if (this.peekToken() !== TOK_CONCAT) {
+			return expr;
+		}
+		let itemCount = 1;
+		let items = [expr];
+		let token = this.readToken();
+		for (;;) {
+			let item = this.readExpr3();
+			if (Parser.isError(item)) {
+				return item;
+			}
+			items[itemCount] = item;
+			itemCount++;
+			if (this.peekToken() !== TOK_CONCAT) {
+				break;
+			}
+			this.readToken();
+		}
+		return new AstConcat(itemCount, items).fromToken(token);
 	}
 
 	readExpr3() {
@@ -188,10 +214,7 @@ class Parser {
 		}
 			
 		while (
-			this.peekToken() === TOK_ADD ||
-			this.peekToken() === TOK_SUB ||
-			this.peekToken() === TOK_CONCAT
-		) {
+			this.peekToken() === TOK_ADD || this.peekToken() === TOK_SUB) {
 			let operator = this.readToken();
 			
 			let right = this.readExpr2();
