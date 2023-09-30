@@ -2530,13 +2530,13 @@ class EvalTypeVariant extends EvalResultType {
 		this.typeCount = typeCount;
 		this.types = types;
 		this.key = EvalTypeVariant.makeTypeKey(typeCount, types);
-		this.innerSlotCount = 0;
+		this.maxSlotCount = 0;
 		for (let i = 0; i < this.typeCount; i++) {
-			if (this.types[i].slotCount() > this.innerSlotCount) {
-				this.innerSlotCount = this.types[i].slotCount();
+			if (this.types[i].slotCount() > this.maxSlotCount) {
+				this.maxSlotCount = this.types[i].slotCount();
 			}
 		}
-		this.innerSlotCount++;
+		this.maxSlotCount++;
 	}
 
 	static makeTypeKey(typeCount, types) {
@@ -2545,6 +2545,10 @@ class EvalTypeVariant extends EvalResultType {
 			keys[i] = types[i].typeKey();
 		}
 		return keys.join('|');
+	}
+	
+	slotCount() {
+		return this.maxSlotCount;
 	}
 	
 	contains(type) {
@@ -4255,13 +4259,10 @@ class Compiler {
 			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
-			this.codeBlock.codeDup(1);
-			this.codeBlock.codePush(caseType.structuralType().innerSlotCount - 1);
-			this.codeBlock.codePush(1);
-			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 			let endLocs = [];
 			let endLocCount = 0;
 			for (let i = 0; i < expr.whenCount; i++) {
+				// Duplicate the last slot of the variant which is the variantType
 				this.codeBlock.codeDup(1);
 				let whenType = this.evalType(expr.whens[i].type);
 				if (whenType.isError()) {
@@ -4275,14 +4276,14 @@ class Compiler {
 					return EvalError.variantKindAlreadyManaged(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
 				kindHasWhen[typeIndex] = true;
+				// Compare the variant type with the when type
 				this.codeBlock.codePush(whenType.globalId);
-				this.codeBlock.codeEq(1);						
+				this.codeBlock.codeEq(1);
+				// If false, loop						
 				let nextLoc = this.codeBlock.codeJz(0);
-				this.codeBlock.codePopVoid(1);
+				// If true, resize the variant to the actual type size to make the when var
+				this.codeBlock.codePopVoid(caseType.slotCount() - whenType.slotCount());
 				this.pushScopeBlock();
-				this.codeBlock.codePush(0);
-				this.codeBlock.codePush(whenType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 				this.scope.addVariable(expr.whens[i].varName, whenType, false);
 				this.scope.clearVarStatTmp();
 				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
@@ -4293,13 +4294,17 @@ class Compiler {
 				if (thenRet === EVAL_RESULT_RETURN) {
 					returnCount++;
 				}
+				// Pop the when var
 				this.codeBlock.codePopVoid(whenType.slotCount());
 				this.popScope();
+				// It is done, goto end
 				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 				endLocCount++;
 				this.codeBlock.setLoc(nextLoc);
 			}
-			this.codeBlock.codePopVoid(2);
+			// No match, we still have the case var on the stack, we pop it
+			this.codeBlock.codePopVoid(caseType.slotCount());
+			// Execute the else statement if there is one
 			if (expr.elseBlock !== null) {
 				this.scope.clearVarStatTmp();
 				let elseRet = this.evalStatement(expr.elseBlock);
@@ -4857,12 +4862,10 @@ class Compiler {
 			}
 			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueType)) {
 				if (valueType.tag !== "res-type-variant") {
-					for (let i = 0; i < asType.structuralType().innerSlotCount - valueType.slotCount() - 1; i++) {
+					for (let i = 0; i < asType.structuralType().slotCount() - valueType.slotCount() - 1; i++) {
 						this.codeBlock.codePush(0);
 					}
 					this.codeBlock.codePush(valueType.globalId);
-					this.codeBlock.codePush(asType.structuralType().innerSlotCount);
-					this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
 				}
 				return asType;
 			}
@@ -5343,11 +5346,6 @@ class Compiler {
 			if (caseType.structuralType().tag !== "res-type-variant") {
 				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
 			}
-			this.codeBlock.codeDup(1);
-			// TODO manage multi slot types in variant
-			this.codeBlock.codePush(caseType.structuralType().innerSlotCount - 1);
-			this.codeBlock.codePush(1);
-			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 			let endLocs = [];
 			let endLocCount = 0;
 			let resultType = null;
@@ -5356,6 +5354,7 @@ class Compiler {
 				kindHasWhen[i] = false;
 			}
 			for (let i = 0; i < expr.whenCount; i++) {
+				// Duplicate the last slot of the variant which is the variantType
 				this.codeBlock.codeDup(1);
 				let whenType = this.evalType(expr.whens[i].type);
 				if (whenType.isError()) {
@@ -5369,14 +5368,14 @@ class Compiler {
 					return EvalError.variantKindAlreadyManaged(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
 				kindHasWhen[typeIndex] = true;
+				// Duplicate the last slot of the variant which is the variantType
 				this.codeBlock.codePush(whenType.globalId);
-				this.codeBlock.codeEq(1);						
+				this.codeBlock.codeEq(1);
+				// If false, loop
 				let nextLoc = this.codeBlock.codeJz(0);
-				this.codeBlock.codePopVoid(1);
+				// If true, resize the variant type to the actual type size
+				this.codeBlock.codePopVoid(caseType.slotCount() - whenType.slotCount());
 				this.pushScopeBlock();
-				this.codeBlock.codePush(0);
-				this.codeBlock.codePush(whenType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
 				this.scope.addVariable(expr.whens[i].varName, whenType, true);
 				let thenType = this.eval(expr.whens[i].thenExpr);
 				if (thenType.isError()) {
@@ -5387,17 +5386,22 @@ class Compiler {
 				} else if (thenType !== resultType) {
 					return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 				}
+				// Replace the when var with the then value, and pop the when var
 				this.codeBlock.codeSwap(whenType.slotCount() + thenType.slotCount());
 				this.codeBlock.codePopVoid(whenType.slotCount());
 				if (thenType.slotCount() > 1) {
 					this.codeBlock.codeSwap(thenType.slotCount());
 				}
 				this.popScope();
+				// We are done, goto end
 				endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 				endLocCount++;
 				this.codeBlock.setLoc(nextLoc);
 			}
-			this.codeBlock.codePopVoid(1);
+			// No match, we still have the case var on the stack, we pop it
+			this.codeBlock.codePopVoid(caseType.slotCount());
+			// If there is no else expression, we check that all the kind where managed
+			// Otherwise we evaluate the else expression
 			if (expr.elseExpr === null) {
 				for (let i = 0; i < caseType.structuralType().typeCount; i++) {
 					if (kindHasWhen[i] === false) {
