@@ -612,7 +612,7 @@ class CodeBlock {
 	}
 	
 	code1(inst) {
-		this.codes[this.codeSize] = OPCODE_NOARG;
+		this.codes[this.codeSize] = PLW_OPCODE_NOARG;
 		this.codeSize++;
 		this.codes[this.codeSize] = inst;
 		this.codeSize++;
@@ -626,183 +626,183 @@ class CodeBlock {
 	}
 	
 	codeSuspend() {
-		this.code1(OPCODE_SUSPEND);
+		this.code1(PLW_OPCODE_SUSPEND);
 	}
 	
 	codePush(val) {
-		this.code2(OPCODE_PUSH, val);
+		this.code2(PLW_OPCODE_PUSH, val);
 		return this.codeSize - 1;
 	}
 	
 	codePushf(val) {
-		this.code2(OPCODE_PUSHF, val);
+		this.code2(PLW_OPCODE_PUSHF, val);
 	}
 		
 	codePushGlobal(offset) {
-		this.code2(OPCODE_PUSH_GLOBAL, offset);
+		this.code2(PLW_OPCODE_PUSH_GLOBAL, offset);
 	}
 	
 	codePushGlobalForMutate(offset) {
-		this.code2(OPCODE_PUSH_GLOBAL_FOR_MUTATE, offset);
+		this.code2(PLW_OPCODE_PUSH_GLOBAL_FOR_MUTATE, offset);
 	}
 	
 	codePushLocal(offset) {
-		this.code2(OPCODE_PUSH_LOCAL, offset);
+		this.code2(PLW_OPCODE_PUSH_LOCAL, offset);
 	}
 	
 	codePushLocalMove(offset) {
-		this.code2(OPCODE_PUSH_LOCAL_MOVE, offset);
+		this.code2(PLW_OPCODE_PUSH_LOCAL_MOVE, offset);
 	}	
 	
 	codePushLocalForMutate(offset) {
-		this.code2(OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
+		this.code2(PLW_OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
 	}	
 		
 	codePopGlobal(offset) {
-		this.code2(OPCODE_POP_GLOBAL, offset);
+		this.code2(PLW_OPCODE_POP_GLOBAL, offset);
 	}
 	
 	codePopLocal(offset) {
-		this.code2(OPCODE_POP_LOCAL, offset);
+		this.code2(PLW_OPCODE_POP_LOCAL, offset);
 	}
 	
 	codePopVoid(count) {
-		this.code2(OPCODE_POP_VOID, count);
+		this.code2(PLW_OPCODE_POP_VOID, count);
 	}
 	
 	codeAdd() {
-		this.code1(OPCODE_ADD);
+		this.code1(PLW_OPCODE_ADD);
 	}
 	
 	codeSub() {
-		this.code1(OPCODE_SUB);
+		this.code1(PLW_OPCODE_SUB);
 	}
 
 	codeDiv() {
-		this.code1(OPCODE_DIV);
+		this.code1(PLW_OPCODE_DIV);
 	}
 
 	codeRem() {
-		this.code1(OPCODE_REM);
+		this.code1(PLW_OPCODE_REM);
 	}
 
 	codeMul() {
-		this.code1(OPCODE_MUL);
+		this.code1(PLW_OPCODE_MUL);
 	}
 	
 	codeNeg() {
-		this.code1(OPCODE_NEG);
+		this.code1(PLW_OPCODE_NEG);
 	}
 	
 	codeGt() {
-		this.code1(OPCODE_GT);
+		this.code1(PLW_OPCODE_GT);
 	}
 
 	codeGte() {
-		this.code1(OPCODE_GTE);
+		this.code1(PLW_OPCODE_GTE);
 	}
 
 	codeLt() {
-		this.code1(OPCODE_LT);
+		this.code1(PLW_OPCODE_LT);
 	}
 
 	codeLte() {
-		this.code1(OPCODE_LTE);
+		this.code1(PLW_OPCODE_LTE);
 	}
 	
 	// real
 
 	codeAddf() {
-		this.code1(OPCODE_ADDF);
+		this.code1(PLW_OPCODE_ADDF);
 	}
 	
 	codeSubf() {
-		this.code1(OPCODE_SUBF);
+		this.code1(PLW_OPCODE_SUBF);
 	}
 
 	codeDivf() {
-		this.code1(OPCODE_DIVF);
+		this.code1(PLW_OPCODE_DIVF);
 	}
 
 	codeMulf() {
-		this.code1(OPCODE_MULF);
+		this.code1(PLW_OPCODE_MULF);
 	}
 	
 	codeNegf() {
-		this.code1(OPCODE_NEGF);
+		this.code1(PLW_OPCODE_NEGF);
 	}
 	
 	codeGtf() {
-		this.code1(OPCODE_GTF);
+		this.code1(PLW_OPCODE_GTF);
 	}
 
 	codeGtef() {
-		this.code1(OPCODE_GTEF);
+		this.code1(PLW_OPCODE_GTEF);
 	}
 
 	codeLtf() {
-		this.code1(OPCODE_LTF);
+		this.code1(PLW_OPCODE_LTF);
 	}
 
 	codeLtef() {
-		this.code1(OPCODE_LTEF);
+		this.code1(PLW_OPCODE_LTEF);
 	}
 		
 	// real
 
 	codeAnd() {
-		this.code1(OPCODE_AND);
+		this.code1(PLW_OPCODE_AND);
 	}
 	
 	codeOr() {
-		this.code1(OPCODE_OR);
+		this.code1(PLW_OPCODE_OR);
 	}
 	
 	codeNot() {
-		this.code1(OPCODE_NOT);
+		this.code1(PLW_OPCODE_NOT);
 	}
 		
 	codeJz(offset) {
-		this.code2(OPCODE_JZ, offset);
+		this.code2(PLW_OPCODE_JZ, offset);
 		return this.codeSize - 1;
 	}
 	
 	codeJnz(offset) {
-		this.code2(OPCODE_JNZ, offset);
+		this.code2(PLW_OPCODE_JNZ, offset);
 		return this.codeSize - 1;
 	}
 	
 	codeJmp(offset) {
-		this.code2(OPCODE_JMP, offset);
+		this.code2(PLW_OPCODE_JMP, offset);
 		return this.codeSize - 1;
 	}
 				
 	codeCall(ptr) {
-		this.code2(OPCODE_CALL, ptr);
+		this.code2(PLW_OPCODE_CALL, ptr);
 	}
 		
 	codeCallNative(ptr) {
-		this.code2(OPCODE_CALL_NATIVE, ptr);
+		this.code2(PLW_OPCODE_CALL_NATIVE, ptr);
 	}
 	
 	codeEq(count) {
-		this.code2(OPCODE_EQ, count);
+		this.code2(PLW_OPCODE_EQ, count);
 	}
 	
 	codeRet(count) {
-		this.code2(OPCODE_RET, count);
+		this.code2(PLW_OPCODE_RET, count);
 	}
 	
 	codeDup(count) {
-		this.code2(OPCODE_DUP, count);
+		this.code2(PLW_OPCODE_DUP, count);
 	}
 	
 	codeSwap(count) {
-		this.code2(OPCODE_SWAP, count);
+		this.code2(PLW_OPCODE_SWAP, count);
 	}
 		
-	codeCallInternal(ifun) {
-		this.code2(OPCODE_CALL_INTERNAL, ifun);
+	codeExt(extOpcode) {
+		this.code2(PLW_OPCODE_EXT, extOpcode);
 	}
 	
 }
@@ -1179,10 +1179,10 @@ class Compiler {
 						console.log("Inconsistent loc " + loc.loc);
 					} else {
 						let opcode = this.codeBlock.codes[codeOffset];
-						if (opcode === OPCODE_PUSH_GLOBAL) {
-							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_GLOBAL_MOVE;
-						} else if (opcode === OPCODE_PUSH_LOCAL) {
-							this.codeBlock.codes[codeOffset] = OPCODE_PUSH_LOCAL_MOVE;
+						if (opcode === PLW_OPCODE_PUSH_GLOBAL) {
+							this.codeBlock.codes[codeOffset] = PLW_OPCODE_PUSH_GLOBAL_MOVE;
+						} else if (opcode === PLW_OPCODE_PUSH_LOCAL) {
+							this.codeBlock.codes[codeOffset] = PLW_OPCODE_PUSH_LOCAL_MOVE;
 						} else {
 							console.log("Inconsistent opcode " + this.codeBlock.codes[loc.loc]);
 						}
@@ -1222,12 +1222,12 @@ class Compiler {
 		);
 		let itemType = evalType.underlyingType;	
 		if (itemType.slotCount() == 1) {
-			func.internalIndex = PLW_IFUN_GET_BLOB_SIZE;
+			func.internalIndex = PLW_LOPCODE_GET_BLOB_SIZE;
 		} else {
 			func.codeBlockIndex = this.context.addCodeBlock(func.functionKey());
 			let cb = this.context.codeBlocks[func.codeBlockIndex];
 			cb.codePushLocal(-5);
-			cb.codeCallInternal(PLW_IFUN_GET_BLOB_SIZE);
+			cb.codeExt(PLW_LOPCODE_GET_BLOB_SIZE);
 			cb.codePush(evalType.underlyingType.slotCount());
 			cb.codeDiv();
 			cb.codeRet(1);
@@ -1250,7 +1250,7 @@ class Compiler {
 			cb.codePush(1);
 			cb.codeCall(lengthFunc.codeBlockIndex);
 		} else {
-			cb.codeCallInternal(lengthFunc.internalIndex);
+			cb.codeExt(lengthFunc.internalIndex);
 		}
 		cb.codePush(1);
 		cb.codeSub();
@@ -1275,7 +1275,7 @@ class Compiler {
 			cb.codePushLocal(-5 - itemType.slotCount() + i);
 		}
 		cb.codePush(itemType.slotCount());
-		cb.codeCallInternal(PLW_IFUN_GET_BLOB_INDEX_OF_ITEM);
+		cb.codeExt(PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM);
 		cb.codeRet(1);
 		this.context.addFunction(func);
 		return func;
@@ -1320,11 +1320,11 @@ class Compiler {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCallNative(func.nativeIndex);
 		} else if (func.internalIndex !== -1) {
-			this.codeBlock.codeCallInternal(func.internalIndex);
+			this.codeBlock.codeExt(func.internalIndex);
 		} else if (func.isGenerator === true) {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codePush(func.codeBlockIndex);
-			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_GENERATOR);
+			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_GENERATOR);
 		} else {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCall(func.codeBlockIndex);
@@ -1679,7 +1679,7 @@ class Compiler {
 				}
 				// Assign the value
 				this.codeBlock.codePush(itemType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_WRITE_BLOB);
+				this.codeBlock.codeExt(PLW_LOPCODE_WRITE_BLOB);
 				return EVAL_RESULT_OK;
 			}
 			if (expr.left.tag === "ast-field") {
@@ -1709,7 +1709,7 @@ class Compiler {
 				}
 				// Assigne the value
 				this.codeBlock.codePush(field.fieldType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_WRITE_BLOB);
+				this.codeBlock.codeExt(PLW_LOPCODE_WRITE_BLOB);
 				return EVAL_RESULT_OK;
 			}
 			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
@@ -1721,7 +1721,7 @@ class Compiler {
 			if (expr.exception !== null) {
 				this.scope.clearVarStatTmp();
 				exceptionLoc = this.codeBlock.codePush(0);
-				this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_EXCEPTION_HANDLER);
+				this.codeBlock.codeExt(PLW_LOPCODE_CREATE_EXCEPTION_HANDLER);
 				this.scope.addVariable("_exception_handler", EVAL_TYPE_EXCEPTION_HANDLER, true);
 			}
 			for (let i = 0; i < expr.statementCount; i++) {
@@ -1807,7 +1807,7 @@ class Compiler {
 				if (ret === null) {
 					ret = EVAL_RESULT_RAISE;
 				}
-				this.codeBlock.codeCallInternal(PLW_IFUN_RAISE_EXCEPTION);
+				this.codeBlock.codeExt(PLW_LOPCODE_RAISE_EXCEPTION);
 			} else {
 				this.scope.clearVarStatTmp();
 				let stmtRes = this.evalStatement(expr.defaultStmt);
@@ -2038,11 +2038,11 @@ class Compiler {
 				if (sequence.tag == "res-type-sequence") {
 					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeCallInternal(PLW_IFUN_GET_GENERATOR_NEXT_ITEM);
+					this.codeBlock.codeExt(PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM);
 					let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
 					let testLoc = this.codeBlock.codeSize;
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeCallInternal(PLW_IFUN_HAS_GENERATOR_ENDED);
+					this.codeBlock.codeExt(PLW_LOPCODE_HAS_GENERATOR_ENDED);
 					let endLoc = this.codeBlock.codeJnz(0);
 					this.scope.clearVarStatTmp();
 					let stmtRet = this.evalStatement(expr.statement);
@@ -2051,7 +2051,7 @@ class Compiler {
 					}
 					this.scope.clearVarStatTmp();
 					this.codeBlock.codePushLocal(sequenceVar.offset);
-					this.codeBlock.codeCallInternal(PLW_IFUN_GET_GENERATOR_NEXT_ITEM);
+					this.codeBlock.codeExt(PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM);
 					for (let i = 0; i < sequence.underlyingType.slotCount(); i++) {
 						this.codeBlock.codePopLocal(indexVar.offset + sequence.underlyingType.slotCount() - 1 - i);
 					}
@@ -2101,7 +2101,7 @@ class Compiler {
 					this.codeBlock.codePushLocal(arrayVar.offset);
 					this.codeBlock.codePushLocal(indexVar.offset);
 					this.codeBlock.codePush(sequence.underlyingType.slotCount());
-					this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+					this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
 					// Set the item variable
 					for (let i = 0; i < itemType.slotCount(); i++) {
 						this.codeBlock.codePopLocal(itemVar.offset + itemType.slotCount() - i - 1);
@@ -2180,7 +2180,7 @@ class Compiler {
 			if (raiseType !== EVAL_TYPE_INTEGER) {
 				return EvalError.wrongType(raiseType, "integer").fromExpr(expr.expr);
 			}
-			this.codeBlock.codeCallInternal(PLW_IFUN_RAISE_EXCEPTION);
+			this.codeBlock.codeExt(PLW_LOPCODE_RAISE_EXCEPTION);
 			return EVAL_RESULT_RAISE;
 		}
 		if (expr.tag === "ast-return") {
@@ -2228,7 +2228,7 @@ class Compiler {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
 			this.codeBlock.codePush(retType.slotCount());
-			this.codeBlock.codeCallInternal(PLW_IFUN_YIELD_GENERATOR_ITEM);
+			this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
 			return EVAL_RESULT_OK;
 		}
 		if (expr.tag === "ast-function-declaration") {
@@ -2285,7 +2285,7 @@ class Compiler {
 						this.codeBlock.codePush(0);
 					}
 					this.codeBlock.codePush(returnType.slotCount());
-					this.codeBlock.codeCallInternal(PLW_IFUN_YIELD_GENERATOR_ITEM);
+					this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
 				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
@@ -2445,7 +2445,7 @@ class Compiler {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			// push the result on the stack
-			this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_MUTABLE_OFFSET);
+			this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET);
 			return structType.underlyingType;
 		}
 		if (expr.tag === "ast-field") {
@@ -2465,7 +2465,7 @@ class Compiler {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			this.codeBlock.codePush(field.offset);
-			this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_MUTABLE_OFFSET);
+			this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET);
 			return field.fieldType;
 		}
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
@@ -2522,7 +2522,7 @@ class Compiler {
 			}
 			let strId = this.codeBlock.addStrConst(expr.textValue);
 			this.codeBlock.codePush(strId);
-			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_STRING);
+			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_STRING);
 			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-value-tuple") {
@@ -2545,7 +2545,7 @@ class Compiler {
 						return EvalError.wrongType(expectedType, "array").fromExpr(expr);				
 					}
 					this.codeBlock.codePush(0);
-					this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
+					this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
 					return expectedType;
 				}
 			}
@@ -2564,7 +2564,7 @@ class Compiler {
 			}
 			// Allocate the array
 			this.codeBlock.codePush(expr.itemCount * itemType.slotCount());
-			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
+			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
 			return this.addType(new EvalTypeArray(itemType));
 		}
 		if (expr.tag === "ast-value-record") {
@@ -2578,7 +2578,7 @@ class Compiler {
 			}
 			let recordType = this.addType(new EvalTypeRecord(expr.fieldCount, fields));
 			this.codeBlock.codePush(recordType.fieldSlotCount);
-			this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB);
+			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
 			return recordType;
 		}
 		if (expr.tag === "ast-concat") {
@@ -2599,9 +2599,9 @@ class Compiler {
 			}
 			this.codeBlock.codePush(expr.itemCount);
 			if (firstItemType.structuralType() === EVAL_TYPE_TEXT) {
-				this.codeBlock.codeCallInternal(PLW_IFUN_CONCAT_STRING);
+				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);
 			} else {
-				this.codeBlock.codeCallInternal(PLW_IFUN_CONCAT_BLOB);
+				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_BLOB);
 			}
 			return firstItemType;
 		}
@@ -2641,7 +2641,7 @@ class Compiler {
 					return EvalError.wrongType(right, "integer").fromExpr(expr.right);
 				}
 				this.codeBlock.codePush(leftType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_CREATE_BLOB_REPEAT_ITEM);
+				this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM);
 				return this.addType(new EvalTypeArray(leftType));
 			}
 			if (expr.operator === TOK_REM) {
@@ -2743,7 +2743,7 @@ class Compiler {
 					return EvalError.wrongType(leftType, rightType.structuralType().underlyingType.typeKey()).fromExpr(expr.left);
 				}
 				this.codeBlock.codePush(leftType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_GET_BLOB_INDEX_OF_ITEM);
+				this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM);
 				this.codeBlock.codePush(-1);
 				this.codeBlock.codeEq(1);
 				this.codeBlock.codeNot();				
@@ -2836,7 +2836,7 @@ class Compiler {
 			}
 			if (expr.indexTo === null) {
 				this.codeBlock.codePush(itemType.slotCount());
-				this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+				this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
 				return indexedType.underlyingType;	
 			}
 			// indexTo is not null, we have a range index
@@ -2853,7 +2853,7 @@ class Compiler {
 				this.codeBlock.codePush(itemType.slotCount());
 				this.codeBlock.codeMul();
 			}
-			this.codeBlock.codeCallInternal(PLW_IFUN_SLICE_BLOB);
+			this.codeBlock.codeExt(PLW_LOPCODE_SLICE_BLOB);
 			return indexedType;
 		}		
 		if (expr.tag === "ast-field") {
@@ -2871,7 +2871,7 @@ class Compiler {
 			}
 			this.codeBlock.codePush(field.offset);
 			this.codeBlock.codePush(field.fieldType.slotCount());
-			this.codeBlock.codeCallInternal(PLW_IFUN_READ_BLOB);
+			this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
 			return field.fieldType;
 		}
 		if (expr.tag === "ast-function") {

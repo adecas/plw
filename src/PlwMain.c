@@ -1,8 +1,7 @@
 #include "PlwRefManager.h"
-#include "PlwAbstractRef.h"
-#include "PlwRecordRef.h"
 #include "PlwCommon.h"
 #include "PlwStackMachine.h"
+#include "PlwLangOpcode.h"
 #include "PlwNative.h"
 #include <string.h>
 #include <stdio.h>
@@ -268,6 +267,7 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 	
+	PlwStackMachine_SetExtops(sm, PlwLangOpcodeCount, PlwLangOps);
 	PlwStackMachine_SetNatives(sm, PlwNativeFunctionCount, PlwNativeFunctions);
 	PlwStackMachine_SetCodeBlocks(sm, codeBlockCount, codeBlocks);
 	

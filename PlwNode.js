@@ -37,7 +37,7 @@ while (parser.peekToken() !== TOK_EOF) {
 		break;
 	} else {
 		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
-			PLW_INTERNALS, nativeFunctionManager.functions);
+			PLW_LOPS, nativeFunctionManager.functions);
 		while (smRet !== null && smRet.errorMsg === "@get_char") {
 			let buffer = new Int8Array(1);
 	  		fs.readSync(0, buffer, 0, 1);
@@ -52,7 +52,5 @@ while (parser.peekToken() !== TOK_EOF) {
 		}
 	}
 }
-
-console.log("done");
 
 

@@ -15,7 +15,9 @@ void *PlwAlloc(size_t size, PlwError *error) {
 }
 
 void PlwFree(void *ptr) {
-	free(ptr);
+	if (ptr != NULL) {
+		free(ptr);
+	}
 }
 
 void *PlwRealloc(void *ptr, size_t size, PlwError *error) {

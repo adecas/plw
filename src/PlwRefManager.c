@@ -205,29 +205,3 @@ PlwRefId PlwRefManager_MakeMutable(PlwRefManager *refMan, PlwRefId refId, PlwErr
 	return newRefId;
 }
 
-void PlwRefManager_GetOffsetValue(PlwRefManager *refMan, PlwRefId refId, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result) {
-	PlwAbstractRef *ref;
-	PlwRefManager_CheckRefIdValid(refMan, refId, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	ref = refMan->refs[refId];
-	PlwAbstractRef_GetOffsetValue(refMan, ref, offset, isForMutate, error, result);
-	if (PlwIsError(error)) {
-		int msgLen = strlen(error->message);
-		snprintf(error->message + msgLen, PLW_ERROR_MESSAGE_MAX - msgLen, " for refId %ld", refId);
-	}
-}
-
-
-void PlwRefManager_SetOffsetValue(PlwRefManager *refMan, PlwRefId refId, PlwInt offset, PlwInt val, PlwError *error) {
-	PlwAbstractRef *ref;
-	PlwRefManager_CheckRefIdValid(refMan, refId, error);
-	if (PlwIsError(error)) {
-		return;
-	}
-	ref = refMan->refs[refId];
-	PlwAbstractRef_SetOffsetValue(refMan, ref, offset, val, error);
-}
-
-

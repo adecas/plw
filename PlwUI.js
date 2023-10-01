@@ -81,7 +81,7 @@ function execLoop() {
 			return;
 		}
 		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
-			PLW_INTERNALS, nativeFunctionManager.functions);
+			PLW_LOPS, nativeFunctionManager.functions);
 		if (smRet !== null && smRet.errorMsg === "@get_char") {
 			setConsoleInStatus("@get_char");
 			if (!inputLoop()) {

@@ -5,11 +5,6 @@
 
 typedef PlwInt PlwRefId ;
 
-typedef struct PlwOffsetValue {
-	PlwInt value;
-	PlwBoolean isRef;
-} PlwOffsetValue;
-
 extern const char * const PlwRefManErrorInvalidRefId;
 extern const char * const PlwRefManErrorInvalidRefType;
 extern const char * const PlwRefManErrorInvalidOffset;
@@ -43,9 +38,5 @@ void PlwRefManager_DecRefCount(PlwRefManager *refMan, PlwRefId refId, PlwError *
 PlwBoolean PlwRefManager_CompareRefs(PlwRefManager *refMan, PlwRefId refId1, PlwRefId refId2, PlwError *error);
 
 PlwRefId PlwRefManager_MakeMutable(PlwRefManager *refMan, PlwRefId refId, PlwError *error);
-
-void PlwRefManager_GetOffsetValue(PlwRefManager *refMan, PlwRefId refId, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result);
-
-void PlwRefManager_SetOffsetValue(PlwRefManager *refMan, PlwRefId refId, PlwInt offset, PlwInt val, PlwError *error);
 
 #endif

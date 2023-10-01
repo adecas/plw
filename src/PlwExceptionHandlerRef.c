@@ -14,8 +14,6 @@ const char * const PlwExceptionHandlerRefTagName = "PlwExceptionHandlerRef";
 
 const PlwAbstractRefTag PlwExceptionHandlerRefTag = {
 	PlwExceptionHandlerRefTagName,
-	PlwExceptionHandlerRef_SetOffsetValue,
-	PlwExceptionHandlerRef_GetOffsetValue,
 	PlwExceptionHandlerRef_ShallowCopy,
 	PlwExceptionHandlerRef_CompareTo,
 	PlwExceptionHandlerRef_Destroy,
@@ -52,14 +50,6 @@ PlwInt PlwExceptionHandlerRef_Ip(PlwExceptionHandlerRef *ref) {
 
 PlwInt PlwExceptionHandlerRef_Bp(PlwExceptionHandlerRef *ref) {
 	return ref->bp;
-}
-
-void PlwExceptionHandlerRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error) {
-	PlwRefManError_InvalidOperation(error, PlwExceptionHandlerRefTagName, "SetOffsetValue");
-}
-
-void PlwExceptionHandlerRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result) {
-	PlwRefManError_InvalidOperation(error, PlwExceptionHandlerRefTagName, "GetOffsetValue");
 }
 
 PlwRefId PlwExceptionHandlerRef_ShallowCopy(PlwRefManager *refMan, void *ref, PlwError *error) {

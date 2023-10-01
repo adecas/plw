@@ -95,11 +95,11 @@ class StackMachineError {
 
 let PLW_NOARG_OPS = [];
 
-PLW_NOARG_OPS[OPCODE_SUSPEND] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_SUSPEND] = function(sm) {
 	return StackMachineError.suspended().fromCode(sm.codeBlockId, sm.ip);
 }
 
-PLW_NOARG_OPS[OPCODE_DIV] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_DIV] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -113,7 +113,7 @@ PLW_NOARG_OPS[OPCODE_DIV] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_DIVF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_DIVF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -127,7 +127,7 @@ PLW_NOARG_OPS[OPCODE_DIVF] = function(sm) {
 	return null;
 };
 	
-PLW_NOARG_OPS[OPCODE_REM] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_REM] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -140,7 +140,7 @@ PLW_NOARG_OPS[OPCODE_REM] = function(sm) {
 	return null;
 };
 	
-PLW_NOARG_OPS[OPCODE_ADD] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_ADD] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -149,7 +149,7 @@ PLW_NOARG_OPS[OPCODE_ADD] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_ADDF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_ADDF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -158,7 +158,7 @@ PLW_NOARG_OPS[OPCODE_ADDF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_SUB] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_SUB] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -167,7 +167,7 @@ PLW_NOARG_OPS[OPCODE_SUB] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_SUBF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_SUBF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -176,7 +176,7 @@ PLW_NOARG_OPS[OPCODE_SUBF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_MUL] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_MUL] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -185,7 +185,7 @@ PLW_NOARG_OPS[OPCODE_MUL] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_MULF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_MULF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -194,7 +194,7 @@ PLW_NOARG_OPS[OPCODE_MULF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_NEG] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_NEG] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -202,7 +202,7 @@ PLW_NOARG_OPS[OPCODE_NEG] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_NEGF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_NEGF] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -210,7 +210,7 @@ PLW_NOARG_OPS[OPCODE_NEGF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_GT] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_GT] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -219,7 +219,7 @@ PLW_NOARG_OPS[OPCODE_GT] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_GTF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_GTF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -228,7 +228,7 @@ PLW_NOARG_OPS[OPCODE_GTF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_LT] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_LT] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -237,7 +237,7 @@ PLW_NOARG_OPS[OPCODE_LT] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_LTF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_LTF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -246,7 +246,7 @@ PLW_NOARG_OPS[OPCODE_LTF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_GTE] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_GTE] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -255,7 +255,7 @@ PLW_NOARG_OPS[OPCODE_GTE] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_GTEF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_GTEF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -264,7 +264,7 @@ PLW_NOARG_OPS[OPCODE_GTEF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_LTE] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_LTE] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -273,7 +273,7 @@ PLW_NOARG_OPS[OPCODE_LTE] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_LTEF] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_LTEF] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -282,7 +282,7 @@ PLW_NOARG_OPS[OPCODE_LTEF] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_AND] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_AND] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -291,7 +291,7 @@ PLW_NOARG_OPS[OPCODE_AND] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_OR] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_OR] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -300,7 +300,7 @@ PLW_NOARG_OPS[OPCODE_OR] = function(sm) {
 	return null;
 };
 
-PLW_NOARG_OPS[OPCODE_NOT] = function(sm) {
+PLW_NOARG_OPS[PLW_OPCODE_NOT] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -311,11 +311,11 @@ PLW_NOARG_OPS[OPCODE_NOT] = function(sm) {
 
 let PLW_OPS = [];
 
-PLW_OPS[OPCODE_NOARG] = function(sm, code) {
+PLW_OPS[PLW_OPCODE_NOARG] = function(sm, code) {
 	return PLW_NOARG_OPS[code](sm);
 };
 
-PLW_OPS[OPCODE_POP_VOID] = function(sm, cellCount) {
+PLW_OPS[PLW_OPCODE_POP_VOID] = function(sm, cellCount) {
 	if (cellCount < 0 || cellCount > sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -331,7 +331,7 @@ PLW_OPS[OPCODE_POP_VOID] = function(sm, cellCount) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_CALL_NATIVE] = function(sm, nativeId) {
+PLW_OPS[PLW_OPCODE_CALL_NATIVE] = function(sm, nativeId) {
 	if (nativeId < 0 || nativeId >= sm.natives.length) {
 		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -353,18 +353,18 @@ PLW_OPS[OPCODE_CALL_NATIVE] = function(sm, nativeId) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_CALL_INTERNAL] = function(sm, ifun) {
-	if (ifun < 0 || ifun >= sm.internals.length) {
+PLW_OPS[PLW_OPCODE_EXT] = function(sm, extOpcode) {
+	if (extOpcode < 0 || extOpcode >= sm.extops.length) {
 		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
-	let error = sm.internals[ifun](sm);
+	let error = sm.extops[extOpcode](sm);
 	if (error !== null) {
 		return error.fromCode(sm.codeBlockId, sm.ip);
 	}
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_GLOBAL] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_GLOBAL] = function(sm, offset) {
 	if (offset < 0 || offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -380,7 +380,7 @@ PLW_OPS[OPCODE_PUSH_GLOBAL] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_GLOBAL_MOVE] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_GLOBAL_MOVE] = function(sm, offset) {
 	if (offset < 0 || offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -392,7 +392,7 @@ PLW_OPS[OPCODE_PUSH_GLOBAL_MOVE] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_GLOBAL_FOR_MUTATE] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_GLOBAL_FOR_MUTATE] = function(sm, offset) {
 	if (offset < 0 || offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -413,7 +413,7 @@ PLW_OPS[OPCODE_PUSH_GLOBAL_FOR_MUTATE] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_LOCAL] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_LOCAL] = function(sm, offset) {
 	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -429,7 +429,7 @@ PLW_OPS[OPCODE_PUSH_LOCAL] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_LOCAL_MOVE] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_LOCAL_MOVE] = function(sm, offset) {
 	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -441,7 +441,7 @@ PLW_OPS[OPCODE_PUSH_LOCAL_MOVE] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH_LOCAL_FOR_MUTATE] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_PUSH_LOCAL_FOR_MUTATE] = function(sm, offset) {
 	if (sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -462,7 +462,7 @@ PLW_OPS[OPCODE_PUSH_LOCAL_FOR_MUTATE] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_POP_GLOBAL] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_POP_GLOBAL] = function(sm, offset) {
 	if (sm.sp < 1 || offset < 0 || offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -478,7 +478,7 @@ PLW_OPS[OPCODE_POP_GLOBAL] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_POP_LOCAL] = function(sm, offset) {
+PLW_OPS[PLW_OPCODE_POP_LOCAL] = function(sm, offset) {
 	if (sm.sp < 1 || sm.bp + offset < 0 || sm.bp + offset >= sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -494,7 +494,7 @@ PLW_OPS[OPCODE_POP_LOCAL] = function(sm, offset) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_JZ] = function(sm, arg1) {
+PLW_OPS[PLW_OPCODE_JZ] = function(sm, arg1) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -505,7 +505,7 @@ PLW_OPS[OPCODE_JZ] = function(sm, arg1) {
 	return null;
 };
 
-PLW_OPS[OPCODE_JNZ] = function(sm, arg1) {
+PLW_OPS[PLW_OPCODE_JNZ] = function(sm, arg1) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -516,19 +516,19 @@ PLW_OPS[OPCODE_JNZ] = function(sm, arg1) {
 	return null;
 };
 
-PLW_OPS[OPCODE_JMP] = function(sm, arg1) {
+PLW_OPS[PLW_OPCODE_JMP] = function(sm, arg1) {
 	sm.ip = arg1;
 	return null;
 };
 	
-PLW_OPS[OPCODE_PUSH] = function(sm, arg1) {
+PLW_OPS[PLW_OPCODE_PUSH] = function(sm, arg1) {
 	sm.stack[sm.sp] = arg1;
 	sm.stackMap[sm.sp] = false;
 	sm.sp++;
 	return null;
 };
 
-PLW_OPS[OPCODE_CALL] = function(sm, arg1) {
+PLW_OPS[PLW_OPCODE_CALL] = function(sm, arg1) {
 	if (arg1 < 0 || arg1 > sm.codeBlocks.length) {
 		return StackMachineError.codeAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -547,7 +547,7 @@ PLW_OPS[OPCODE_CALL] = function(sm, arg1) {
 	return null;
 };
 
-PLW_OPS[OPCODE_PUSHF] = function(sm, floatId) {
+PLW_OPS[PLW_OPCODE_PUSHF] = function(sm, floatId) {
 	if (floatId < 0 || floatId >= sm.codeBlocks[sm.codeBlockId].floatConsts.length) {
 		return StackMachineError.constAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);						
 	}
@@ -557,8 +557,8 @@ PLW_OPS[OPCODE_PUSHF] = function(sm, floatId) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_EQ] = function(sm, count) {
-	if (sm.count < 1 || sm.sp < count * 2) {
+PLW_OPS[PLW_OPCODE_EQ] = function(sm, count) {
+	if (count < 1 || sm.sp < count * 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
 	let idx1 = sm.sp - 2 * count;
@@ -599,8 +599,8 @@ PLW_OPS[OPCODE_EQ] = function(sm, count) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_RET] = function(sm, count) {
-	if (sm.count < 1 || sm.bp < 4 || sm.bp > sm.sp) {
+PLW_OPS[PLW_OPCODE_RET] = function(sm, count) {
+	if (count < 0 || sm.bp < 4 || sm.bp > sm.sp) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
 	let previousBp = sm.stack[sm.bp - 1];
@@ -629,8 +629,8 @@ PLW_OPS[OPCODE_RET] = function(sm, count) {
 	return null;
 };
 	
-PLW_OPS[OPCODE_DUP] = function(sm, count) {
-	if (sm.count < 1 || sm.sp < count) {
+PLW_OPS[PLW_OPCODE_DUP] = function(sm, count) {
+	if (count < 1 || sm.sp < count) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
 	for (let i = 0; i < count; i++) {
@@ -647,8 +647,8 @@ PLW_OPS[OPCODE_DUP] = function(sm, count) {
 	return null;
 };
 
-PLW_OPS[OPCODE_SWAP] = function(sm, count) {
-	if (sm.count < 1 || sm.sp < count) {
+PLW_OPS[PLW_OPCODE_SWAP] = function(sm, count) {
+	if (count < 1 || sm.sp < count) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
 	for (let i = 0; i < count / 2; i++) {
@@ -673,7 +673,7 @@ class StackMachine {
 		this.codeBlockId = -1;
 		this.codeBlocks = null;
 		this.natives = null;
-		this.internals = null;
+		this.extops = null;
 		this.refMan = new PlwRefManager();
 		this.refManError = new PlwRefManagerError();
 	}
@@ -691,9 +691,9 @@ class StackMachine {
 		return this.stack[this.sp];
 	}
 		
-	execute(codeBlock, codeBlocks, internals, natives) {
+	execute(codeBlock, codeBlocks, extops, natives) {
 		this.codeBlocks = [...codeBlocks, codeBlock];
-		this.internals = internals;
+		this.extops = extops;
 		this.natives = natives;
 		this.ip = 0;
 		this.codeBlockId = this.codeBlocks.length - 1;
@@ -732,10 +732,10 @@ class StackMachine {
 				let arg1 = codeBlock.codes[i + 1];
 				let prefix = (i === this.ip ? "> " : "") + i + ": ";
 				prefix = "          ".substring(0, 10 - prefix.length) + prefix;
-				if (opcode === OPCODE_NOARG) {
+				if (opcode === PLW_OPCODE_NOARG) {
 					println(prefix + PLW_NOARG_OPCODES[arg1]);
-				} else if (opcode === OPCODE_CALL_INTERNAL) {
-					println(prefix + PLW_IFUNS[arg1]);
+				} else if (opcode === PLW_OPCODE_EXT) {
+					println(prefix + PLW_LOPCODES[arg1]);
 				} else {
 					let opcodeName = PLW_OPCODES[opcode];
 					println(prefix + opcodeName + "                              ".substring(0, 26 - opcodeName.length) + arg1);

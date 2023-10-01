@@ -7926,16 +7926,21 @@ let compilerContext = new CompilerContext();
 let nativeFunctionManager = NativeFunctionManager.initStdNativeFunctions(new Compiler(compilerContext));
 let stackMachine = new StackMachine();
 
-if (process.argv.length < 3) {
-	console.log("Error: no source file");
+if (process.argv.length < 4) {
+	console.log("Usage: plwc.sh <source file> <output file>");
 	process.exit(1);
 }
 
-const sourceCode = fs.readFileSync(process.argv[2], 'utf8');
+let inFileName = process.argv[2];
+let outFileName = process.argv[3];
+
+const sourceCode = fs.readFileSync(inFileName, 'utf8');
 
 let tokenReader = new TokenReader(sourceCode, 1, 1);
 let parser = new Parser(tokenReader);
 let compiler = new Compiler(compilerContext);
+
+let rootCodeBlocks = [];
 
 while (parser.peekToken() !== TOK_EOF) {
 	let expr = parser.readStatement();
@@ -7947,25 +7952,37 @@ while (parser.peekToken() !== TOK_EOF) {
 	let result = compiler.evalStatement(expr);
 	if (result.isError()) {
 		console.log(result);
+		process.exit(2);
 		break;
-	} else {
-		let smRet = stackMachine.execute(compiler.codeBlock, compilerContext.codeBlocks,
-			PLW_LOPS, nativeFunctionManager.functions);
-		while (smRet !== null && smRet.errorMsg === "@get_char") {
-			let buffer = new Int8Array(1);
-	  		fs.readSync(0, buffer, 0, 1);
-			stackMachine.stack[stackMachine.sp - 1] = buffer[0];
-			stackMachine.stackMap[stackMachine.sp - 1] = false;
-			smRet = stackMachine.runLoop();
-		}
-		if (smRet !== null) {
-			console.log(JSON.stringify(smRet));
-			stackMachine.dump(printTextOut);
-			break;
-		}
+	}
+	if (compiler.codeBlock.codeSize > 0) {
+		rootCodeBlocks[rootCodeBlocks.length] = compiler.codeBlock;
 	}
 }
 
-console.log("done");
+let codeBlockId = compilerContext.codeBlocks.length;
+let codeBlocks = [...compilerContext.codeBlocks, ...rootCodeBlocks];
+let codeBlockCount = codeBlocks.length;
+let compiled = "" + codeBlockCount + " " + codeBlockId + "\n";
+for (let i = 0; i < codeBlockCount; i++) {
+	let cb = codeBlocks[i];
+	compiled += cb.blockName.length + " " + cb.blockName + "\n" + cb.strConstSize + "\n";
+	for (let j = 0; j < cb.strConstSize; j++) {
+		compiled += cb.strConsts[j].length + " " + cb.strConsts[j] + "\n";
+	}
+	compiled += cb.floatConstSize + "\n";
+	for (let j = 0; j < cb.floatConstSize; j++) {
+		compiled += cb.floatConsts[j] + "\n";
+	}		
+	compiled += cb.codeSize + "\n";
+	for (let j = 0; j < cb.codeSize; j++) {
+		compiled += cb.codes[j] + " ";
+		if (j % 50 == 49) {
+			compiled += "\n";
+		}
+	}
+	compiled += "\n";
+}
 
+fs.writeFileSync(outFileName, compiled);
 

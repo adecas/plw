@@ -6,8 +6,6 @@
 
 typedef struct PlwAbstractRefTag {
 	const char *name;
-	void (*SetOffsetValue)(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error);
-	void (*GetOffsetValue)(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result);
 	PlwRefId (*ShallowCopy)(PlwRefManager *refMan, void *ref, PlwError *error);
 	PlwBoolean (*CompareTo)(PlwRefManager *refMan, void *ref1, void *ref2, PlwError *error);
 	void (*Destroy)(PlwRefManager *refMan, void *ref, PlwError *error);
@@ -20,10 +18,6 @@ typedef struct PlwAbstractRef {
 } PlwAbstractRef;
 
 #define AsPlwAbstractRef(p) ((PlwAbstractRef *)(p))
-
-void PlwAbstractRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error);
-
-void PlwAbstractRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result);
 
 PlwRefId PlwAbstractRef_ShallowCopy(PlwRefManager *refMan, void *ref, PlwError *error);
 

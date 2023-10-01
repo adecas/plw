@@ -12,8 +12,6 @@ const char * const PlwStringRefTagName = "PlwStringRef";
 
 const PlwAbstractRefTag PlwStringRefTag = {
 	PlwStringRefTagName,
-	PlwStringRef_SetOffsetValue,
-	PlwStringRef_GetOffsetValue,
 	PlwStringRef_ShallowCopy,
 	PlwStringRef_CompareTo,
 	PlwStringRef_Destroy,
@@ -25,6 +23,7 @@ PlwRefId PlwStringRef_Make(PlwRefManager *refMan, char *ptr, PlwError *error) {
 	PlwRefId refId;
 	ref = PlwAlloc(sizeof(PlwStringRef), error);
 	if (PlwIsError(error)) {
+		PlwFree(ptr);
 		return -1;
 	}
 	ref->super.tag = &PlwStringRefTag;
@@ -32,6 +31,7 @@ PlwRefId PlwStringRef_Make(PlwRefManager *refMan, char *ptr, PlwError *error) {
 	ref->ptr = ptr;
 	refId = PlwRefManager_AddRef(refMan, ref, error);
 	if (PlwIsError(error)) {
+		PlwFree(ptr);
 		PlwFree(ref);
 		return -1;
 	}
@@ -44,14 +44,6 @@ char *PlwStringRef_Ptr(PlwStringRef *ref) {
 
 void PlwStringRef_SetPtr(PlwStringRef *ref, char *ptr) {
 	ref->ptr = ptr;
-}
-
-void PlwStringRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error) {
-	PlwRefManError_InvalidOperation(error, PlwStringRefTagName, "SetOffsetValue");
-}
-
-void PlwStringRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result) {
-	PlwRefManError_InvalidOperation(error, PlwStringRefTagName, "GetOffsetValue");
 }
 
 PlwRefId PlwStringRef_ShallowCopy(PlwRefManager *refMan, void *ref, PlwError *error) {

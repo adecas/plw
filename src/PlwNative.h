@@ -3,7 +3,7 @@
 
 #include "PlwStackMachine.h"
 
-const char * const PlwNativeErrorNotImplemented;
+extern const char * const PlwNativeErrorNotImplemented;
 
 extern const PlwNativeFunction PlwNativeFunctions[];
 

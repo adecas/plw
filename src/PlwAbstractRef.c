@@ -1,15 +1,5 @@
 #include "PlwAbstractRef.h"
 
-void PlwAbstractRef_SetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwInt value, PlwError *error) {
-	PlwAbstractRef *abstractRef = ref;
-	abstractRef->tag->SetOffsetValue(refMan, ref, offset, value, error);
-}
-
-void PlwAbstractRef_GetOffsetValue(PlwRefManager *refMan, void *ref, PlwInt offset, PlwBoolean isForMutate, PlwError *error, PlwOffsetValue *result) {
-	PlwAbstractRef *abstractRef = ref;
-	abstractRef->tag->GetOffsetValue(refMan, ref, offset, isForMutate, error, result);	
-}
-
 PlwRefId PlwAbstractRef_ShallowCopy(PlwRefManager *refMan, void *ref, PlwError *error) {
 	PlwAbstractRef *abstractRef = ref;
 	return abstractRef->tag->ShallowCopy(refMan, ref, error);	

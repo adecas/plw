@@ -1,12 +1,10 @@
 "use strict";
 
-let PLW_INTERNALS = new Array(PLW_MAX_IFUN + 1).fill(function(sm) {
-	return StackMachineError.suspended().fromCode(sm.codeBlockId, sm.ip);
-});
+let PLW_LOPS = [];
 
 /* create_string(stringId integer)
  */
-PLW_INTERNALS[PLW_IFUN_CREATE_STRING] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CREATE_STRING] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -23,7 +21,7 @@ PLW_INTERNALS[PLW_IFUN_CREATE_STRING] = function(sm) {
 
 /* concat_string(items ...String, itemCount integer)
  */
-PLW_INTERNALS[PLW_IFUN_CONCAT_STRING] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CONCAT_STRING] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -56,7 +54,7 @@ PLW_INTERNALS[PLW_IFUN_CONCAT_STRING] = function(sm) {
 
 /* create_blob(item ...integer, blobSize integer)
  */
-PLW_INTERNALS[PLW_IFUN_CREATE_BLOB] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CREATE_BLOB] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -75,7 +73,7 @@ PLW_INTERNALS[PLW_IFUN_CREATE_BLOB] = function(sm) {
 
 /* read_blob(refId Blob, offset integer, size integer)
  */
-PLW_INTERNALS[PLW_IFUN_READ_BLOB] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_READ_BLOB] = function(sm) {
 	if (sm.sp < 3) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -111,7 +109,7 @@ PLW_INTERNALS[PLW_IFUN_READ_BLOB] = function(sm) {
 
 /* write_blob(refId Blob, offset integer, val ...integer, size integer)
  */
-PLW_INTERNALS[PLW_IFUN_WRITE_BLOB] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_WRITE_BLOB] = function(sm) {
 	if (sm.sp < 3) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -148,7 +146,7 @@ PLW_INTERNALS[PLW_IFUN_WRITE_BLOB] = function(sm) {
 
 /* concat_blob(blob ...Blob, itemCount integer)
  */
-PLW_INTERNALS[PLW_IFUN_CONCAT_BLOB] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CONCAT_BLOB] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -195,7 +193,7 @@ PLW_INTERNALS[PLW_IFUN_CONCAT_BLOB] = function(sm) {
 
 /* get_blob_mutable_offset(refId Blob, offset integer)
  */
-PLW_INTERNALS[PLW_IFUN_GET_BLOB_MUTABLE_OFFSET] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -229,7 +227,7 @@ PLW_INTERNALS[PLW_IFUN_GET_BLOB_MUTABLE_OFFSET] = function(sm) {
 
 /* get_blob_size(refId Blob)
  */
-PLW_INTERNALS[PLW_IFUN_GET_BLOB_SIZE] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_GET_BLOB_SIZE] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -250,7 +248,7 @@ PLW_INTERNALS[PLW_IFUN_GET_BLOB_SIZE] = function(sm) {
 
 /* get_blob_index_of_item(item ...integer, refId Blob, itemSize integer)
  */
-PLW_INTERNALS[PLW_IFUN_GET_BLOB_INDEX_OF_ITEM] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM] = function(sm) {
 	if (sm.sp < 2) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -305,7 +303,7 @@ PLW_INTERNALS[PLW_IFUN_GET_BLOB_INDEX_OF_ITEM] = function(sm) {
 
 /* slice_blob(refId Blob, beginIndex integer, endIndex integer)
  */
-PLW_INTERNALS[PLW_IFUN_SLICE_BLOB] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_SLICE_BLOB] = function(sm) {
 	if (sm.sp < 3) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -349,7 +347,7 @@ PLW_INTERNALS[PLW_IFUN_SLICE_BLOB] = function(sm) {
 
 /* create_blob_repeat_item(item ...integer, itemCount integer, itemSize integer)
  */
-PLW_INTERNALS[PLW_IFUN_CREATE_BLOB_REPEAT_ITEM] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -389,7 +387,7 @@ PLW_INTERNALS[PLW_IFUN_CREATE_BLOB_REPEAT_ITEM] = function(sm) {
 
 /* create_exception_handler(offset integer)
  */
-PLW_INTERNALS[PLW_IFUN_CREATE_EXCEPTION_HANDLER] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CREATE_EXCEPTION_HANDLER] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -401,7 +399,7 @@ PLW_INTERNALS[PLW_IFUN_CREATE_EXCEPTION_HANDLER] = function(sm) {
 
 /* raise_exception(errorCode integer)
  */
-PLW_INTERNALS[PLW_IFUN_RAISE_EXCEPTION] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_RAISE_EXCEPTION] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -442,7 +440,7 @@ PLW_INTERNALS[PLW_IFUN_RAISE_EXCEPTION] = function(sm) {
  *     2:   param1
  *     1+n: paramN
  */
-PLW_INTERNALS[PLW_IFUN_CREATE_GENERATOR] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_CREATE_GENERATOR] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -482,7 +480,7 @@ PLW_INTERNALS[PLW_IFUN_CREATE_GENERATOR] = function(sm) {
  *      ...
  *      localN   
  */
-PLW_INTERNALS[PLW_IFUN_GET_GENERATOR_NEXT_ITEM] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -525,7 +523,7 @@ PLW_INTERNALS[PLW_IFUN_GET_GENERATOR_NEXT_ITEM] = function(sm) {
 
 /* has_generator_ended(refId Generator)
  */
-PLW_INTERNALS[PLW_IFUN_HAS_GENERATOR_ENDED] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_HAS_GENERATOR_ENDED] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
@@ -565,7 +563,7 @@ PLW_INTERNALS[PLW_IFUN_HAS_GENERATOR_ENDED] = function(sm) {
  *      ...
  *      localN   
  */
-PLW_INTERNALS[PLW_IFUN_YIELD_GENERATOR_ITEM] = function(sm) {
+PLW_LOPS[PLW_LOPCODE_YIELD_GENERATOR_ITEM] = function(sm) {
 	if (sm.sp < 1) {
 		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
 	}
