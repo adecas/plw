@@ -263,7 +263,7 @@ class NativeFunctionManager {
 					return sm.errorFromRefMan();
 				}
 				let str = "[";
-				for (let i = 0; i < ref.arraySize; i++) {
+				for (let i = 0; i < ref.blobSize; i++) {
 					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, sm.refManError);
 					if (sm.hasRefManError()) {
 						return sm.errorFromRefMan();

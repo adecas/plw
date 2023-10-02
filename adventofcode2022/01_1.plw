@@ -2279,10 +2279,10 @@ var input2 := '
 
 function parse_input(input text) [[integer]] begin
 	var lines := split(input, text(10 as char));
+	lines := lines[1 .. last_index(lines) - 1];
 	var result := [] as [[integer]];
 	var current := [] as [integer];
-	for i in 1 .. last_index(lines) loop
-		var line := lines[i];
+	for line in lines loop
 		if length(line) = 0 then
 			result := result || [current];
 			current := [] as [integer];

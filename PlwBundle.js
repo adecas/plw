@@ -2417,6 +2417,26 @@ class EvalResultType extends EvalResult {
 
 }
 
+class EvalTypeNull extends EvalResultType {
+
+	constructor() {
+		super("res-type-null", false);
+	}
+	
+	typeKey() {
+		return "null";
+	}
+	
+	toAst() {
+		return new AstNull();
+	}
+	
+	slotCount() {
+		return 0;
+	}
+
+}
+
 class EvalTypeBuiltIn extends EvalResultType {
 	constructor(typeName, isRef) {
 		super("res-type-built-in", isRef);
@@ -2429,8 +2449,8 @@ class EvalTypeBuiltIn extends EvalResultType {
 	}
 }
 
+const EVAL_TYPE_NULL = new EvalTypeNull();
 const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", true);
-const EVAL_TYPE_NULL = new EvalTypeBuiltIn("null", false);
 const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
 const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
@@ -4431,7 +4451,7 @@ class Compiler {
 				} else if (sequence.tag === "res-type-array") {
 					let arrayVar = this.scope.addVariable("_for_array", sequence, false);
 					let itemType = sequence.underlyingType;
-					// Get the last_index of the array
+					// Get the last_index of the array, multiply it by the itemSize
 					this.codeBlock.codeDup(1);
 					let lengthType = this.generateFunctionCall("last_index", 1, [sequence], EVAL_TYPE_INTEGER);
 					if (lengthType.isError()) {
@@ -4439,6 +4459,10 @@ class Compiler {
 					}
 					if (lengthType !== EVAL_TYPE_INTEGER) {
 						return EvalError.wrongType(lengthType, "integer").fromExpr(expr);
+					}
+					if (itemType.slotCount() > 1) {
+						this.codeBlock.codePush(itemType.slotCount());
+						this.codeBlock.codeMul();
 					}
 					let lastIndexVar = this.scope.addVariable("_for_last_index", EVAL_TYPE_INTEGER, false);
 					// Create a variable for the item
@@ -4449,15 +4473,13 @@ class Compiler {
 					// Initialize the counter, 0 or last_index * itemSize if reverse
 					if (expr.isReverse === true) {
 						this.codeBlock.codePushLocal(lastIndexVar.offset);
-						this.codeBlock.codePush(itemType.slotCount());
-						this.codeBlock.codeMul();
 					} else {
 						this.codeBlock.codePush(0);
 					}
 					let indexVar = this.scope.addVariable("_for_index", EVAL_TYPE_INTEGER, false);
 					// Begin of the loop
 					let testLoc = this.codeBlock.codeSize;
-					// Test the counter <= last_index, or >= 0 if reverse
+					// Test the counter <= last_index * itemSize, or >= 0 if reverse
 					this.codeBlock.codePushLocal(indexVar.offset);
 					if (expr.isReverse === true) {
 						this.codeBlock.codePush(0);
@@ -4874,7 +4896,6 @@ class Compiler {
 			return EVAL_TYPE_BOOLEAN;
 		}
 		if (expr.tag === "ast-null") {
-			this.codeBlock.codePush(0);
 			return EVAL_TYPE_NULL;
 		}
 		if (expr.tag === "ast-value-integer") {
@@ -7417,7 +7438,7 @@ class NativeFunctionManager {
 					return sm.errorFromRefMan();
 				}
 				let str = "[";
-				for (let i = 0; i < ref.arraySize; i++) {
+				for (let i = 0; i < ref.blobSize; i++) {
 					let subRef = sm.refMan.getRefOfType(ref.ptr[i], PLW_TAG_REF_STRING, sm.refManError);
 					if (sm.hasRefManError()) {
 						return sm.errorFromRefMan();
