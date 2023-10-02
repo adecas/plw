@@ -4960,7 +4960,7 @@ class Compiler {
 					return itemType;
 				}
 				if (itemType.structuralType() !== EVAL_TYPE_TEXT && itemType.structuralType().tag !== "res-type-array") {
-					return EvalError.wrongType(itemsType, "text or array").fromExpr(expr.items[i]);
+					return EvalError.wrongType(itemType, "text or array").fromExpr(expr.items[i]);
 				}
 				if (i === 0) {
 					firstItemType = itemType;
