@@ -7,10 +7,8 @@ typedef PlwInt PlwRefId ;
 
 extern const char * const PlwRefManErrorInvalidRefId;
 extern const char * const PlwRefManErrorInvalidRefType;
-extern const char * const PlwRefManErrorInvalidOffset;
 extern const char * const PlwRefManErrorInvalidOperation;
 
-void PlwRefManError_InvalidOffset(PlwError *error, PlwInt offset);
 void PlwRefManError_InvalidOperation(PlwError *error, const char *refType, const char *operation);
 
 

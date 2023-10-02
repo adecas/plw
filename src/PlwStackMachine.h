@@ -10,7 +10,7 @@ extern const char * const PlwStackMachineErrorCodeAccessOutOfBound;
 void PlwStackMachineError_Suspended(PlwError *error);
 void PlwStackMachineError_CodeAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt ip);
 void PlwStackMachineError_StackAccessOutOfBound(PlwError *error);
-void PlwStackMachineError_ConstAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt strId);
+void PlwStackMachineError_StrConstAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt strId);
 void PlwStackMachineError_RefAccessOutOfBound(PlwError *error);
 void PlwStackMachineError_Exception(PlwError *error, PlwInt errorCode);
 
@@ -30,6 +30,8 @@ struct PlwStackMachine {
 	PlwInt codeBlockId;
 	PlwInt codeBlockCount;
 	const PlwCodeBlock *codeBlocks;
+	PlwInt *codes;
+	PlwInt codeCount;
 	PlwInt extopsCount;
 	const PlwNativeFunction *extops;
 	PlwInt nativeCount;
@@ -49,5 +51,11 @@ void PlwStackMachine_SetNatives(PlwStackMachine *sm, PlwInt nativeCount, const P
 void PlwStackMachine_Execute(PlwStackMachine *sm, PlwInt codeBlockId, PlwError *error);
 
 void PlwStackMachine_GrowStack(PlwStackMachine *sm, PlwInt addedSize, PlwError *error);
+
+void PlwStackMachine_SetCodeBlockId(PlwStackMachine *sm, PlwInt codeBlockId, PlwError *error);
+
+void PlwStackMachine_SetCodeBlockIdAndIp(PlwStackMachine *sm, PlwInt codeBlockId, PlwInt ip, PlwError *error);
+
+void PlwStackMachine_SetIp(PlwStackMachine *sm, PlwInt ip, PlwError *error);
 
 #endif

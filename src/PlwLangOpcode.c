@@ -41,7 +41,7 @@ static void PlwLangOp_CreateString(PlwStackMachine *sm, PlwError *error) {
 	}
 	strId = sm->stack[sm->sp - 1];
 	if (strId < 0 || strId >= sm->codeBlocks[sm->codeBlockId].strConstCount) {
-		PlwStackMachineError_ConstAccessOutOfBound(error, sm->codeBlockId, strId);
+		PlwStackMachineError_StrConstAccessOutOfBound(error, sm->codeBlockId, strId);
 		return;
 	}
 	str = PlwStrDup(sm->codeBlocks[sm->codeBlockId].strConsts[strId], error);
@@ -622,8 +622,10 @@ static void PlwLangOp_RaiseException(PlwStackMachine *sm, PlwError *error) {
 			}
 			if (AsPlwAbstractRef(ref)->tag->name == PlwExceptionHandlerRefTagName) {
 				sm->bp = PlwExceptionHandlerRef_Bp(ref);
-				sm->ip = PlwExceptionHandlerRef_Ip(ref);
-				sm->codeBlockId = PlwExceptionHandlerRef_CodeBlockId(ref);
+				PlwStackMachine_SetCodeBlockIdAndIp(sm, PlwExceptionHandlerRef_CodeBlockId(ref), PlwExceptionHandlerRef_Ip(ref), error);
+				if (PlwIsError(error)) {
+					return;
+				}
 				PlwRefManager_DecRefCount(sm->refMan, refId, error);
 				if (PlwIsError(error)) {
 					return;
@@ -758,8 +760,7 @@ static void PlwLangOp_GetGeneratorNextItem(PlwStackMachine *sm, PlwError *error)
 		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, ip);
 		return;
 	}
-	sm->codeBlockId = codeBlockId;
-	sm->ip = ip;
+	PlwStackMachine_SetCodeBlockIdAndIp(sm, codeBlockId, ip, error);
 }
 
 /* has_generator_ended(refId Generator)
@@ -856,8 +857,10 @@ static void PlwLangOp_YieldGeneratorItem(PlwStackMachine *sm, PlwError *error) {
 	}
 	sm->sp = sm->bp - 4 + itemSize;
 	sm->bp = previousBp;
-	sm->codeBlockId = previousCodeBlockId;
-	sm->ip = previousIp;
+	PlwStackMachine_SetCodeBlockIdAndIp(sm, previousCodeBlockId, previousIp, error);
+	if (PlwIsError(error)) {
+		return;
+	}
 	PlwRefManager_DecRefCount(sm->refMan, refId, error);		
 	if (PlwIsError(error)) {
 		return;

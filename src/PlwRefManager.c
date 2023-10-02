@@ -18,17 +18,10 @@ void PlwRefManError_InvalidRefType(PlwError *error, PlwRefId refId, const char *
 	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "RefId %ld is of type %s instead of %s", refId, refType, expectedRefType);
 }
 
-const char * const PlwRefManErrorInvalidOffset = "PlwRefManErrorInvalidOffset";
-
-void PlwRefManError_InvalidOffset(PlwError *error, PlwInt offset) {
-	error->code = PlwRefManErrorInvalidOffset;
-	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Invalid offset %ld", offset);
-}
-
 const char * const PlwRefManErrorInvalidOperation = "PlwRefManErrorInvalidOperation";
 
 void PlwRefManError_InvalidOperation(PlwError *error, const char *refType, const char *operation) {
-	error->code = PlwRefManErrorInvalidOffset;
+	error->code = PlwRefManErrorInvalidOperation;
 	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Invalid operation %s for type %s", operation, refType);
 }
 

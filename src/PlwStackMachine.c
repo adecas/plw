@@ -81,13 +81,19 @@ void PlwStackMachineError_Exception(PlwError *error, PlwInt errorCode) {
 	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Exception %ld", errorCode);
 }
 
-const char * const PlwStackMachineErrorConstAccessOutOfBound = "PlwStackMachineErrorConstAccessOutOfBound";
+const char * const PlwStackMachineErrorStrConstAccessOutOfBound = "PlwStackMachineErrorStrConstAccessOutOfBound";
 
-void PlwStackMachineError_ConstAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt strId) {
-	error->code = PlwStackMachineErrorConstAccessOutOfBound;
+void PlwStackMachineError_StrConstAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt strId) {
+	error->code = PlwStackMachineErrorStrConstAccessOutOfBound;
 	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "String constant %ld in code block %ld does not exist", strId, codeBlockId);
 }
 
+const char * const PlwStackMachineErrorFloatConstAccessOutOfBound = "PlwStackMachineErrorFloatConstAccessOutOfBound";
+
+void PlwStackMachineError_FloatConstAccessOutOfBound(PlwError *error, PlwInt codeBlockId, PlwInt floatId) {
+	error->code = PlwStackMachineErrorFloatConstAccessOutOfBound;
+	snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Float constant %ld in code block %ld does not exist", floatId, codeBlockId);
+}
 
 PlwStackMachine *PlwStackMachine_Create(PlwError *error) {
 	PlwStackMachine *sm;
@@ -408,7 +414,7 @@ static void PlwStackMachine_OpcodeJz(PlwStackMachine *sm, PlwInt arg1, PlwError 
 		return;
 	}
 	if (sm->stack[sm->sp - 1] == 0) {
-		sm->ip = arg1;
+		PlwStackMachine_SetIp(sm, arg1, error);
 	}
 	sm->sp--;
 }
@@ -419,15 +425,13 @@ static void PlwStackMachine_OpcodeJnz(PlwStackMachine *sm, PlwInt arg1, PlwError
 		return;
 	}
 	if (sm->stack[sm->sp - 1] != 0) {
-		sm->ip = arg1;
-		/* TODO check that ip is not out of bound */
+		PlwStackMachine_SetIp(sm, arg1, error);
 	}
 	sm->sp--;
 }
 
 static void PlwStackMachine_OpcodeJmp(PlwStackMachine *sm, PlwInt arg, PlwError *error) {
-	sm->ip = arg;
-	/* TODO check that ip is not out of bound */
+	PlwStackMachine_SetIp(sm, arg, error);
 }
 
 static void PlwStackMachine_OpcodePush(PlwStackMachine *sm, PlwInt arg1, PlwError *error) {
@@ -630,9 +634,8 @@ static void PlwStackMachine_OpcodeCall(PlwStackMachine *sm, PlwInt arg1, PlwErro
 	sm->stackMap[sm->sp] = PlwFalse;
 	sm->sp++;
 	sm->bp = sm->sp;
-	sm->codeBlockId = arg1;
-	/* TODO check that codeBlockId is not out of bound */
-	sm->ip = 0;	
+	sm->ip = 0;
+	PlwStackMachine_SetCodeBlockId(sm, arg1, error);
 }
 
 static void PlwStackMachine_OpcodeCallNative(PlwStackMachine *sm, PlwInt nativeId, PlwError *error) {
@@ -655,7 +658,7 @@ static void PlwStackMachine_OpcodePushf(PlwStackMachine *sm, PlwInt floatId, Plw
 	PlwWord w;
 	const PlwCodeBlock *codeBlock = &sm->codeBlocks[sm->codeBlockId];
 	if (floatId < 0 || floatId >= codeBlock->floatConstCount) {
-		PlwStackMachineError_ConstAccessOutOfBound(error, sm->codeBlockId, floatId);
+		PlwStackMachineError_FloatConstAccessOutOfBound(error, sm->codeBlockId, floatId);
 		return;				
 	}
 	PlwStackMachine_GrowStack(sm, 1, error);
@@ -743,8 +746,7 @@ static void PlwStackMachine_OpcodeRet(PlwStackMachine *sm, PlwInt count, PlwErro
 	}
 	sm->sp = sm->bp - 4 - argCount + count;
 	sm->bp = previousBp;
-	sm->codeBlockId = previousCodeBlockId;
-	sm->ip = previousIp;
+	PlwStackMachine_SetCodeBlockIdAndIp(sm, previousCodeBlockId, previousIp, error);
 }
 
 static void PlwStackMachine_OpcodeDup(PlwStackMachine *sm, PlwInt count, PlwError *error) {
@@ -941,18 +943,46 @@ static void PlwStackMachine_Opcode(PlwStackMachine *sm, PlwInt code, PlwInt arg,
 	}
 }
 
+void PlwStackMachine_SetCodeBlockId(PlwStackMachine *sm, PlwInt codeBlockId, PlwError *error) {
+	if (codeBlockId < 0 || codeBlockId >= sm->codeBlockCount) {
+		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, 0);
+		return;
+	} 
+	sm->codeBlockId = codeBlockId;
+	sm->codes = sm->codeBlocks[sm->codeBlockId].codes;
+	sm->codeCount = sm->codeBlocks[sm->codeBlockId].codeCount;
+}
+
+void PlwStackMachine_SetCodeBlockIdAndIp(PlwStackMachine *sm, PlwInt codeBlockId, PlwInt ip, PlwError *error) {
+	if (codeBlockId < 0 || codeBlockId >= sm->codeBlockCount) {
+		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, 0);
+		return;
+	} 
+	sm->codeBlockId = codeBlockId;
+	sm->codes = sm->codeBlocks[sm->codeBlockId].codes;
+	sm->codeCount = sm->codeBlocks[sm->codeBlockId].codeCount;
+	if (ip < 0 || ip > sm->codeCount) {
+		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, ip);
+		return;
+	}
+	sm->ip = ip;
+}
+
+void PlwStackMachine_SetIp(PlwStackMachine *sm, PlwInt ip, PlwError *error) {
+	if (ip < 0 || ip > sm->codeCount) {
+		PlwStackMachineError_CodeAccessOutOfBound(error, sm->codeBlockId, ip);
+		return;
+	}
+	sm->ip = ip;
+}
+
 static void PlwStackMachine_RunLoop(PlwStackMachine *sm, PlwError *error) {
 	PlwInt code;
 	PlwInt arg;
-	const PlwCodeBlock *codeBlock;
-	for (;;) {
-		codeBlock = &sm->codeBlocks[sm->codeBlockId];
-		if (sm->ip >= codeBlock->codeCount - 1) {
-			break;
-		}
-		code = codeBlock->codes[sm->ip];
+	while (sm->ip < sm->codeCount - 1) {
+		code = sm->codes[sm->ip];
 		sm->ip++;
-		arg = codeBlock->codes[sm->ip];
+		arg = sm->codes[sm->ip];
 		sm->ip++;
 #ifdef PLW_DEBUG_SM
 		printf("sp: %ld, bp: %ld, cs: %ld, ip: %ld nbrefs: %ld   %s\n",
@@ -967,7 +997,10 @@ static void PlwStackMachine_RunLoop(PlwStackMachine *sm, PlwError *error) {
 
 void PlwStackMachine_Execute(PlwStackMachine *sm, PlwInt codeBlockId, PlwError *error) {
 	sm->ip = 0;
-	sm->codeBlockId = codeBlockId;
+	PlwStackMachine_SetCodeBlockId(sm, codeBlockId, error);
+	if (PlwIsError(error)) {
+		return;
+	}
 	PlwStackMachine_RunLoop(sm, error);
 }
 

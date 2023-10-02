@@ -42,6 +42,7 @@ end if;
 var start_time := now();
 var r := calc(100);
 var end_time := now();
+print(text(r));
 print('Elapsed ms: ' || text(end_time - start_time));
 
 
