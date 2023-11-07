@@ -207,20 +207,22 @@ begin
 	return (gain + max_next_gain, [node_id1] || max_path1, [node_id2] || max_path2);
 end eval;
 
-var begin_time := now();
-var (nodes, starting_node_id) := parse_input(input);
-print_nodes(nodes);
-print('Starting node: ' || text(starting_node_id));
+function solve(input text) integer begin
+	var begin_time := now();
+	var (nodes, starting_node_id) := parse_input(input);
+	print_nodes(nodes);
+	print('Starting node: ' || text(starting_node_id));
+	var (total, path1, path2) := eval(starting_node_id, starting_node_id, 26, 26, nodes, [] as [integer], [] as [integer]);
+	print('elapsed: ' || text(now() - begin_time) || ' ms');
+	print(text(total));
+	print(text(path1));
+	print(text(path2));
+	return total;
+end solve;
 
-var (total, path1, path2) := eval(starting_node_id, starting_node_id, 26, 26, nodes, [] as [integer], [] as [integer]);
-print('elapse: ' || text(now() - begin_time) || ' ms');
-print(text(total));
-print(text(path1));
-print(text(path2));
-
-if total = 2416 then
+if solve(input) = 2416 then
 	print('Correct');
 else
-	print('Error');
+	print('Wrong');
 end if;
 

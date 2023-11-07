@@ -1,4 +1,23 @@
-var input := '
+var input1 := '
+Sensor at x=2, y=18: closest beacon is at x=-2, y=15
+Sensor at x=9, y=16: closest beacon is at x=10, y=16
+Sensor at x=13, y=2: closest beacon is at x=15, y=3
+Sensor at x=12, y=14: closest beacon is at x=10, y=16
+Sensor at x=10, y=20: closest beacon is at x=10, y=16
+Sensor at x=14, y=17: closest beacon is at x=10, y=16
+Sensor at x=8, y=7: closest beacon is at x=2, y=10
+Sensor at x=2, y=0: closest beacon is at x=2, y=10
+Sensor at x=0, y=11: closest beacon is at x=2, y=10
+Sensor at x=20, y=14: closest beacon is at x=25, y=17
+Sensor at x=17, y=20: closest beacon is at x=21, y=22
+Sensor at x=16, y=7: closest beacon is at x=15, y=3
+Sensor at x=14, y=3: closest beacon is at x=15, y=3
+Sensor at x=20, y=1: closest beacon is at x=15, y=3
+';
+
+const search_range1 := 20;
+
+var input2 := '
 Sensor at x=3482210, y=422224: closest beacon is at x=2273934, y=-202439
 Sensor at x=3679395, y=2737332: closest beacon is at x=4104213, y=2980736
 Sensor at x=3173475, y=3948494: closest beacon is at x=3494250, y=3554521
@@ -20,98 +39,100 @@ Sensor at x=3990843, y=3393575: closest beacon is at x=4104213, y=2980736
 Sensor at x=768875, y=2665271: closest beacon is at x=-85806, y=2000000
 ';
 
-var search_range := 4000000;
+const search_range2 := 4000000;
 
 type sensor {
 	x integer,
 	y integer,
-	bx integer,
-	by integer
+	range integer
 };
 
-var sensors := [] as [sensor];
-
-for line in split(input, '
-')
-loop
-	if length(line) > 0 then
+function parse_input(input text) [sensor] begin
+	var lines := split(input, text(10 as char));
+	lines := lines[1 .. last_index(lines) - 1];
+	var sensors := [] as [sensor];
+	for line in lines loop
 		var parts := split(line, ' ');
-		sensors := sensors || [{
-			x: integer(subtext(parts[2], 2, length(parts[2]) - 3)),
-			y: integer(subtext(parts[3], 2, length(parts[3]) - 3)),
-			bx: integer(subtext(parts[8], 2, length(parts[8]) - 3)),
-			by: integer(subtext(parts[9], 2, length(parts[9]) - 2))
-		} as sensor] ;
-	end if;
-end loop;
+		var	x  := integer(subtext(parts[2], 2, length(parts[2]) - 3));
+		var	y  := integer(subtext(parts[3], 2, length(parts[3]) - 3));
+		var	bx := integer(subtext(parts[8], 2, length(parts[8]) - 3));
+		var	by := integer(subtext(parts[9], 2, length(parts[9]) - 2));
+		sensors := sensors || [{x: x, y: y, range: abs(x - bx) + abs(y - by)} as sensor];
+	end loop;
+	return sensors;
+end parse_input;
 
+function ranges_minus(rl [(x1 integer, x2 integer)], rc integer, x1 integer, x2 integer) (rl [(x1 integer, x2 integer)], rc integer) begin
+	var i := 0;
+	var li := last_index(rl);
+	var nrc := 0;
+	while i < rc loop
+		var (rx1, rx2) := rl[i];
+		if x2 < rx1 or x1 > rx2 then
+			i := i + 1;
+		elsif x1 <= rx1 and x2 >= rx2 then
+			rc := rc - 1;
+			rl[i] := rl[rc];
+		elsif x1 > rx1 and x2 < rx2 then
+			rl[i] := (rx1, x1 - 1);
+			rl[li - nrc] := (x2 + 1, rx2);
+			nrc := nrc + 1;
+			i := i + 1;
+		elsif x1 <= rx1 and x2 >= rx1 then
+			rl[i] := (x2 + 1, rx2);
+			i := i + 1;
+		else
+			rl[i] := (rx1, x1 - 1);
+			i := i + 1;	 
+		end if;
+	end loop;
+	for k in 0 .. nrc - 1 loop
+		rl[rc] := rl[li - k];
+		rc := rc + 1;
+	end loop;
+	return (rl, rc);
+end ranges_minus;
 
-function nobpos(y integer, range integer, sensors [sensor]) [{x1 integer, x2 integer}] begin
-	var p := [] as [{x1 integer, x2 integer}];
-	for s in sensors loop
-		var dist := abs(s.x - s.bx) + abs(s.y - s.by);
-		dist := dist - abs(y - s.y);
-		if dist >= 0 then
+function find_frequency(sensors [sensor], search_range integer) integer begin
+	var r := (0, 0) ** (length(sensors) + 1);
+	var rc := 0;
+	for i in 0 .. search_range loop
+		r[0] := (0, search_range);
+		rc := 1;
+		for s in sensors loop
+			var dist := s.range - abs(i - s.y);
 			var x1 := s.x - dist;
 			var x2 := s.x + dist;
-			if x1 < 0 then
-				x1 := 0;
-			elsif x2 > range then
-				x2 := range;
+			if x2 >= x1 and x2 >= 0 and x1 <= search_range then
+				(r, rc) := ranges_minus(r, rc, x1, x2);
+				exit when rc = 0;
 			end if;
-			if x2 >= x1 then 
-				p := p || [{x1: x1, x2: x2}];
-			end if;
-		end if;
-	end loop;
-	return p;
-end nobpos;
-
-function merge_ranges(rl [{x1 integer, x2 integer}]) [{x1 integer, x2 integer}] begin
-	var ml := [] as [{x1 integer, x2 integer}];
-	var merge_count := 0;
-	for r in rl loop
-		var merged := false;
-		for i in 0 .. last_index(ml) loop
-			var m := ml[i];
-			if r.x1 <= m.x2 and r.x2 >= m.x1 then
-				if r.x1 < m.x1 then
-					ml[i].x1 := r.x1;
-				end if;
-				if r.x2 > m.x2 then
-					ml[i].x2 := r.x2;
-				end if;
-				merged := true;
-				merge_count := merge_count + 1;
-				exit;
-			end if; 
 		end loop;
-		if not merged then
-			ml := ml || [r];
+		if rc > 0 then
+			var (x, y) := r[0];
+			return x * 4000000 + i;
 		end if;
 	end loop;
-	return case when merge_count > 0 then merge_ranges(ml) else ml end;
-end merge_ranges;
+	return 0;
+end find_frequency;
 
-var freq := 0;
-for i in 0 .. search_range loop
-	var n := merge_ranges(nobpos(i, search_range, sensors));
-	if length(n) > 1 then
-		var x := n[0].x2;
-		if n[1].x2 < x then
-			x := n[1].x2;
-		end if;
-		freq := (x + 1) * 4000000 + i;
-		exit;
-	end if;
-end loop;
+function solve(input text, search_range integer) integer begin
+	var begin_time := now();
+	var parsed := parse_input(input);
+	var frequency := find_frequency(parsed, search_range);
+	print('frequency ' || text(frequency) || ', elapsed ' || text(now() - begin_time) || ' ms');
+	return frequency;
+end solve;
 
-print(text(freq));
-
-if freq = 13171855019123 then
+if solve(input1, search_range1) = 56000011 then
 	print('Correct');
 else
 	print('Error');
 end if;
 
+if solve(input2, search_range2) = 13171855019123 then
+	print('Correct');
+else
+	print('Error');
+end if;
 

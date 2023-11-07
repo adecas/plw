@@ -1,4 +1,13 @@
-const input := '
+const input1 := '
+2-4,6-8
+2-3,4-5
+5-7,7-9
+2-8,3-7
+6-6,4-6
+2-6,4-8
+';
+
+const input2 := '
 11-73,29-73
 43-82,44-44
 13-85,12-36
@@ -1001,47 +1010,55 @@ const input := '
 38-76,37-76
 ';
 
-const nl := '
-';
-
-generator parse_input(input text) [integer] begin
-	var lines := split(input, nl);
-	for i in 0 .. length(lines) - 1 loop
-		var line := lines[i];
+function parse_input(input text) [(a integer, b integer, c integer, d integer)] begin
+	var lines := split(input, text(10 as char));
+	lines := lines[1 .. last_index(lines) - 1];
+	var result := [] as [(a integer, b integer, c integer, d integer)];
+	for line in lines loop
 		var ranges := split(line, ',');
 		if length(ranges) = 2 then
 			var range1 := split(ranges[0], '-');
 			var range2 := split(ranges[1], '-');
 			if length(range1) = 2 and length(range2) = 2 then
-				yield [
-					integer(range1[0]),
-					integer(range1[1]),
-					integer(range2[0]),
-					integer(range2[1]),
-				];
+				result := result || [(
+					integer(range1[0]), integer(range1[1]),
+					integer(range2[0]), integer(range2[1])
+				)];
 			end if;
 		end if;
 	end loop;
+	return result;
 end parse_input;
 
-var nboverlap := 0;
+function overlaps_count(input [(a integer, b integer, c integer, d integer)]) integer begin
+	var count := 0;
+	for i in input loop
+		var (a, b, c, d) := i;
+		if a <= d and b >= c then
+			count := count + 1;
+		end if;		
+	end loop;
+	return count;
+end overlaps_count;
 
-function overlaps(a integer, b integer, c integer, d integer) boolean begin
-	return a <= d and b >= c;
-end overlaps;
+function solve(input text) integer begin
+	var begin_time := now();
+	var parsed := parse_input(input);
+	var count := overlaps_count(parsed);
+	print('count ' || text(count) || ', elapsed ' || text(now() - begin_time) || ' ms');
+	return count;
+end solve;
 
-for r in parse_input(input) loop
-	if overlaps(r[0], r[1], r[2], r[3]) then
-		nboverlap := nboverlap + 1;
-	end if;		
-end loop;
-
-print(text(nboverlap));
-
-if nboverlap = 881 then
+if solve(input1) = 4 then
 	print('Correct');
 else
-	print('Error');
+	print('Wrong');
+end if;
+
+if solve(input2) = 881 then
+	print('Correct');
+else
+	print('Wrong');
 end if;
 
 

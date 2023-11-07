@@ -1577,14 +1577,15 @@ class Compiler {
 				this.scope.addVariable(expr.varNames[0], initValueType, expr.isConst);
 				return EVAL_RESULT_OK;
 			}
-			if (initValueType.tag !== "res-type-tuple") {
+			let initStructType = initValueType.structuralType();
+			if (initStructType.tag !== "res-type-tuple") {
 				return EvalError.wrongType(initValueType, "tuple").fromExpr(expr.valueExpr);
 			}					
-			if (expr.varNameCount !== initValueType.typeCount) {
-				return EvalError.tupleSizeMismatch(expr.varNameCount, initValueType.typeCount).fromExpr(expr.valueExpr);
+			if (expr.varNameCount !== initStructType.typeCount) {
+				return EvalError.tupleSizeMismatch(expr.varNameCount, initStructType.typeCount).fromExpr(expr.valueExpr);
 			}
 			for (let i = 0; i < expr.varNameCount; i++) {
-				this.scope.addVariable(expr.varNames[i], initValueType.types[i], expr.isConst);
+				this.scope.addVariable(expr.varNames[i], initStructType.types[i], expr.isConst);
 			}
 			return EVAL_RESULT_OK;
 		}
