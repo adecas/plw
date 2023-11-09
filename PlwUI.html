@@ -60,6 +60,7 @@ input[type="file"] {
 <script src="PlwParser.js"></script>
 <script src="PlwOpcodes.js"></script>
 <script src="PlwLangOpcodes.js"></script>
+<script src="PlwCodeBlock.js"></script>
 <script src="PlwCompiler.js"></script>
 <script src="PlwRefManager.js"></script>
 <script src="PlwStackMachine.js"></script>
@@ -474,18 +475,18 @@ end;</pre>
 
 <p id="snippet-tuple-in-variants-title" class="snippet">Tuple in variants</p>
 <pre id="snippet-tuple-in-variants">
-var v := 1 as integer|(a integer, b integer);
-v := (2, 3) as integer|(a integer, b integer);
+var v := 1 as integer|(a integer, b text);
+v := (2, '3') as integer|(a integer, b text);
 kindof v
   when integer i then print(text(i));
-  when (a integer, b integer) p then
+  when (a integer, b text) p then
     var (a, b) := p;
-    print(text(a) || ' ' || text(b));
+    print(text(a) || ' ' || b);
 end;
 print (
   kindof v
     when integer i then 'integer'
-    when (a integer, b integer) p then 'tuple'
+    when (a integer, b text) p then 'tuple'
   end
 );
 </pre>

@@ -20,12 +20,17 @@ class EvalResult {
 	
 }
 
+const SLOT_TYPE_I64   = 0;
+const SLOT_TYPE_F64   = 1;
+const SLOT_TYPE_REF   = 2;
+const SLOT_TYPE_COUNT = 3;
+
 class EvalResultType extends EvalResult {
-	constructor(tag, isRef) {
+	constructor(tag, slotTypes) {
 		super(tag);
-		this.isRef = isRef;
 		this.key = null;
 		this.globalId = 0;
+		this.slotTypes = slotTypes;
 	}
 	
 	typeKey() {
@@ -41,15 +46,18 @@ class EvalResultType extends EvalResult {
 	}
 	
 	slotCount() {
-		return 1;
+		return this.slotTypes.length;
 	}
-
+	
+	isRef() {
+		return this.slotTypes.length === 1 && this.slotTypes[0] === SLOT_TYPE_REF;
+	}
+	
 }
 
 class EvalTypeNull extends EvalResultType {
-
 	constructor() {
-		super("res-type-null", false);
+		super("res-type-null", []);
 	}
 	
 	typeKey() {
@@ -59,16 +67,11 @@ class EvalTypeNull extends EvalResultType {
 	toAst() {
 		return new AstNull();
 	}
-	
-	slotCount() {
-		return 0;
-	}
-
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
-	constructor(typeName, isRef) {
-		super("res-type-built-in", isRef);
+	constructor(typeName, slotType) {
+		super("res-type-built-in", [slotType]);
 		this.typeName = typeName;
 		this.key = typeName;
 	}
@@ -79,13 +82,13 @@ class EvalTypeBuiltIn extends EvalResultType {
 }
 
 const EVAL_TYPE_NULL = new EvalTypeNull();
-const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", true);
-const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
-const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
-const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
-const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
-const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
-const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
+const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", SLOT_TYPE_I64);
+const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", SLOT_TYPE_I64);
+const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", SLOT_TYPE_I64);
+const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", SLOT_TYPE_I64);
+const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", SLOT_TYPE_F64);
+const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", 1, SLOT_TYPE_I64);
+const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", 0, SLOT_TYPE_REF);
 
 class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
@@ -101,7 +104,7 @@ class EvalTypeRecordField {
 
 class EvalTypeRecord extends EvalResultType {
 	constructor(fieldCount, fields) {
-		super("res-type-record", true);
+		super("res-type-record", [SLOT_TYPE_REF]);
 		this.fieldCount = fieldCount;
 		this.fields = fields;
 		this.fieldSlotCount = 0;
@@ -140,13 +143,14 @@ class EvalTypeRecord extends EvalResultType {
 
 class EvalTypeTuple extends EvalResultType {
 	constructor(typeCount, types) {
-		super("res-type-tuple", false);
+		super("res-type-tuple", []);
 		this.typeCount = typeCount;
 		this.types = types;
 		this.key = EvalTypeTuple.makeTypeKey(typeCount, types);
-		this.totalSlotCount = 0;
 		for (let i = 0; i < this.typeCount; i++) {
-			this.totalSlotCount += this.types[i].slotCount();
+			for (let j = 0; j < this.types[i].slotCount(); j++) {
+				this.slotTypes[this.slotTypes.length] = this.types[i].slotTypes[j];
+			}
 		}
 	}
 
@@ -156,10 +160,6 @@ class EvalTypeTuple extends EvalResultType {
 			keys[i] = types[i].typeKey();
 		}
 		return "(" + keys.join(',') + ")";
-	}
-	
-	slotCount() {
-		return this.totalSlotCount;
 	}
 	
 	toAst() {
@@ -173,17 +173,35 @@ class EvalTypeTuple extends EvalResultType {
 
 class EvalTypeVariant extends EvalResultType {
 	constructor(typeCount, types) {
-		super("res-type-variant", true);
+		super("res-type-variant", []);
 		this.typeCount = typeCount;
 		this.types = types;
 		this.key = EvalTypeVariant.makeTypeKey(typeCount, types);
-		this.maxSlotCount = 0;
-		for (let i = 0; i < this.typeCount; i++) {
-			if (this.types[i].slotCount() > this.maxSlotCount) {
-				this.maxSlotCount = this.types[i].slotCount();
+		this._slotMap = [];
+		for (let i = 0; i < typeCount; i++) {
+			this._slotMap[i] = new Array(this.types[i].slotCount()).fill(-1);
+		}
+		// Map the original slots indexes to the final slots indexes for each types
+		for (let slotType = 0; slotType < SLOT_TYPE_COUNT; slotType++) {
+			let firstFinalIndex = this.slotTypes.length;
+			let maxFinalIndex = firstFinalIndex;
+			for (let typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+				let finalIndex = firstFinalIndex;
+				for (let slotIndex = 0; slotIndex < this.types[typeIndex].slotCount(); slotIndex++) {
+					if (this.types[typeIndex].slotTypes[slotIndex] === slotType) {
+						this._slotMap[typeIndex][slotIndex] = finalIndex;
+						finalIndex++;
+					}
+				}
+				if (finalIndex > maxFinalIndex) {
+					maxFinalIndex = finalIndex;
+				}
+			}
+			for (let slotIndex = firstFinalIndex; slotIndex < maxFinalIndex; slotIndex++) {
+				this.slotTypes[slotIndex] = slotType;
 			}
 		}
-		this.maxSlotCount++;
+		this.slotTypes[this.slotTypes.length] = SLOT_TYPE_I64;
 	}
 
 	static makeTypeKey(typeCount, types) {
@@ -194,10 +212,20 @@ class EvalTypeVariant extends EvalResultType {
 		return keys.join('|');
 	}
 	
-	slotCount() {
-		return this.maxSlotCount;
+	finalSlotIndex(typeIndex, originalSlotIndex) {
+		return this._slotMap[typeIndex][originalSlotIndex];
 	}
 	
+	findOriginalSlotIndex(typeIndex, finalSlotIndex) {
+		let slotMap = this._slotMap[typeIndex];
+		for (let i = 0; i < slotMap.length; i++) {
+			if (slotMap[i] === finalSlotIndex) {
+				return i;
+			}
+		}
+		return -1;
+	}
+		
 	contains(type) {
 		if (type.tag === "res-type-variant") {
 			for (let i = 0; i < type.typeCount; i++) {
@@ -227,7 +255,7 @@ class EvalTypeVariant extends EvalResultType {
 
 class EvalTypeArray extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-array", true);
+		super("res-type-array", [SLOT_TYPE_REF]);
 		this.underlyingType = underlyingType;
 		this.key = "[" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + "]";
 	}
@@ -239,7 +267,7 @@ class EvalTypeArray extends EvalResultType {
 
 class EvalTypeSequence extends EvalResultType {
 	constructor(underlyingType) {
-		super("res-type-sequence", true);
+		super("res-type-sequence", [SLOT_TYPE_REF]);
 		this.underlyingType = underlyingType;
 		this.key = "sequence(" + (this.underlyingType === null ? "" : this.underlyingType.typeKey()) + ")";
 	}
@@ -251,25 +279,20 @@ class EvalTypeSequence extends EvalResultType {
 
 class EvalTypeName extends EvalResultType {
 	constructor(typeName, underlyingType) {
-		super("res-type-name", underlyingType.isRef);
+		super("res-type-name", underlyingType.slotTypes);
 		this.typeName = typeName;
 		this.underlyingType = underlyingType;
 		this.key = typeName;
-		this.structType = this.underlyingType.structuralType();
+		this._structuralType = this.underlyingType.structuralType();
 	}
 	
 	structuralType() {
-		return this.structType;
+		return this._structuralType;
 	}
 	
 	toAst() {
 		return new AstTypeNamed(this.typeName);
 	}
-	
-	slotCount() {
-		return this.structType.slotCount();
-	}
-	
 }
 
 const EVAL_TYPE_CHAR = new EvalTypeName("char", EVAL_TYPE_INTEGER);
@@ -587,245 +610,6 @@ class EvalError extends EvalResult {
 		
 }
 
-class CodeBlock {
-
-	constructor(blockName) {
-		this.blockName = blockName;
-		this.codes = [];
-		this.codeSize = 0;
-		this.strConsts = [];
-		this.strConstSize = 0;
-		this.floatConsts = [];
-		this.floatConstSize = 0;
-	}
-	
-	currentLoc() {
-		return this.codeSize - 1;
-	}
-	
-	addStrConst(str) {
-		for (let i = 0; i < this.strConstSize; i++) {
-			if (this.strConsts[i] === str) {
-				return i;
-			}
-		}
-		let strId = this.strConstSize;
-		this.strConsts[strId] = str;
-		this.strConstSize++;
-		return strId;
-	}
-	
-	addFloatConst(f) {
-		for (let i = 0; i < this.floatConstSize; i++) {
-			if (this.floatConsts[i] === f) {
-				return i;
-			}
-		}
-		let floatId = this.floatConstSize;
-		this.floatConsts[floatId] = f;
-		this.floatConstSize++;
-		return floatId;
-	}
-
-	setLoc(offset) {
-		this.codes[offset] = this.codeSize;
-	}
-	
-	code1(inst) {
-		this.codes[this.codeSize] = PLW_OPCODE_NOARG;
-		this.codeSize++;
-		this.codes[this.codeSize] = inst;
-		this.codeSize++;
-	}
-	
-	code2(inst, arg) {
-		this.codes[this.codeSize] = inst;
-		this.codeSize++;
-		this.codes[this.codeSize] = arg;
-		this.codeSize++;
-	}
-	
-	codeSuspend() {
-		this.code1(PLW_OPCODE_SUSPEND);
-	}
-	
-	codePush(val) {
-		this.code2(PLW_OPCODE_PUSH, val);
-		return this.codeSize - 1;
-	}
-	
-	codePushf(val) {
-		this.code2(PLW_OPCODE_PUSHF, val);
-	}
-		
-	codePushGlobal(offset) {
-		this.code2(PLW_OPCODE_PUSH_GLOBAL, offset);
-	}
-	
-	codePushGlobalForMutate(offset) {
-		this.code2(PLW_OPCODE_PUSH_GLOBAL_FOR_MUTATE, offset);
-	}
-	
-	codePushLocal(offset) {
-		this.code2(PLW_OPCODE_PUSH_LOCAL, offset);
-	}
-	
-	codePushLocalMove(offset) {
-		this.code2(PLW_OPCODE_PUSH_LOCAL_MOVE, offset);
-	}	
-	
-	codePushLocalForMutate(offset) {
-		this.code2(PLW_OPCODE_PUSH_LOCAL_FOR_MUTATE, offset);
-	}	
-		
-	codePopGlobal(offset) {
-		this.code2(PLW_OPCODE_POP_GLOBAL, offset);
-	}
-	
-	codePopLocal(offset) {
-		this.code2(PLW_OPCODE_POP_LOCAL, offset);
-	}
-	
-	codePopVoid(count) {
-		this.code2(PLW_OPCODE_POP_VOID, count);
-	}
-	
-	codeAdd() {
-		this.code1(PLW_OPCODE_ADD);
-	}
-	
-	codeSub() {
-		this.code1(PLW_OPCODE_SUB);
-	}
-
-	codeDiv() {
-		this.code1(PLW_OPCODE_DIV);
-	}
-
-	codeRem() {
-		this.code1(PLW_OPCODE_REM);
-	}
-
-	codeMul() {
-		this.code1(PLW_OPCODE_MUL);
-	}
-	
-	codeNeg() {
-		this.code1(PLW_OPCODE_NEG);
-	}
-	
-	codeGt() {
-		this.code1(PLW_OPCODE_GT);
-	}
-
-	codeGte() {
-		this.code1(PLW_OPCODE_GTE);
-	}
-
-	codeLt() {
-		this.code1(PLW_OPCODE_LT);
-	}
-
-	codeLte() {
-		this.code1(PLW_OPCODE_LTE);
-	}
-	
-	// real
-
-	codeAddf() {
-		this.code1(PLW_OPCODE_ADDF);
-	}
-	
-	codeSubf() {
-		this.code1(PLW_OPCODE_SUBF);
-	}
-
-	codeDivf() {
-		this.code1(PLW_OPCODE_DIVF);
-	}
-
-	codeMulf() {
-		this.code1(PLW_OPCODE_MULF);
-	}
-	
-	codeNegf() {
-		this.code1(PLW_OPCODE_NEGF);
-	}
-	
-	codeGtf() {
-		this.code1(PLW_OPCODE_GTF);
-	}
-
-	codeGtef() {
-		this.code1(PLW_OPCODE_GTEF);
-	}
-
-	codeLtf() {
-		this.code1(PLW_OPCODE_LTF);
-	}
-
-	codeLtef() {
-		this.code1(PLW_OPCODE_LTEF);
-	}
-		
-	// real
-
-	codeAnd() {
-		this.code1(PLW_OPCODE_AND);
-	}
-	
-	codeOr() {
-		this.code1(PLW_OPCODE_OR);
-	}
-	
-	codeNot() {
-		this.code1(PLW_OPCODE_NOT);
-	}
-		
-	codeJz(offset) {
-		this.code2(PLW_OPCODE_JZ, offset);
-		return this.codeSize - 1;
-	}
-	
-	codeJnz(offset) {
-		this.code2(PLW_OPCODE_JNZ, offset);
-		return this.codeSize - 1;
-	}
-	
-	codeJmp(offset) {
-		this.code2(PLW_OPCODE_JMP, offset);
-		return this.codeSize - 1;
-	}
-				
-	codeCall(ptr) {
-		this.code2(PLW_OPCODE_CALL, ptr);
-	}
-		
-	codeCallNative(ptr) {
-		this.code2(PLW_OPCODE_CALL_NATIVE, ptr);
-	}
-	
-	codeEq(count) {
-		this.code2(PLW_OPCODE_EQ, count);
-	}
-	
-	codeRet(count) {
-		this.code2(PLW_OPCODE_RET, count);
-	}
-	
-	codeDup(count) {
-		this.code2(PLW_OPCODE_DUP, count);
-	}
-	
-	codeSwap(count) {
-		this.code2(PLW_OPCODE_SWAP, count);
-	}
-		
-	codeExt(extOpcode) {
-		this.code2(PLW_OPCODE_EXT, extOpcode);
-	}
-	
-}
 
 class CompilerContext {
 	
@@ -1131,7 +915,7 @@ class CompilerScope {
 	}
 	
 	addParameter(varName, varType) {
-		let newVar = new CompilerVariable(varName, varType, false, false, true, 0, varType.isRef);
+		let newVar = new CompilerVariable(varName, varType, false, false, true, 0, varType.isRef());
 		this.parameters[this.parameterCount] = newVar;
 		this.parameterCount++;
 		return newVar;
@@ -1146,7 +930,7 @@ class CompilerScope {
 	}
 
 	addVariable(varName, varType, isConst) {
-		let isWithStat = varType.isRef && this.parent !== null;
+		let isWithStat = varType.isRef() && this.parent !== null;
 		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableOffset, isWithStat);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
@@ -2512,7 +2296,7 @@ class Compiler {
 			}
 			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueType)) {
 				if (valueType.tag !== "res-type-variant") {
-					for (let i = 0; i < asType.structuralType().slotCount() - valueType.slotCount() - 1; i++) {
+					for (let i = 0; i < asType.slotCount() - valueType.slotCount() - 1; i++) {
 						this.codeBlock.codePush(0);
 					}
 					this.codeBlock.codePush(valueType.globalId);
