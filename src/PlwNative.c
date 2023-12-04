@@ -466,8 +466,45 @@ static void PlwNativeFunc_Subtext_Text_Integer(PlwStackMachine *sm, PlwError *er
 	sm->sp -= 2;
 }
 
-static void PlwNativeFunc_Trim_Integer(PlwStackMachine *sm, PlwError *error) {
-	PlwNativeError_NotImplemented(error, "PlwNativeFunc_Trim_Integer");
+static void PlwNativeFunc_Trim_Text(PlwStackMachine *sm, PlwError *error) {
+	PlwRefId refId;
+	PlwStringRef *ref;
+	char *ptr;
+	char *endPtr;
+	PlwInt resultLen;
+	char *resultPtr;
+	PlwRefId resultRefId;
+	refId = sm->stack[sm->sp - 2];
+	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwStringRefTagName, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	ptr = PlwStringRef_Ptr(ref);
+	endPtr = ptr + strlen(ptr) - 1;
+	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n') {
+		ptr++;
+	}
+	while (endPtr >= ptr && (*endPtr == ' ' || *endPtr == '\t' || *endPtr == '\r' || *endPtr == '\n')) {
+		endPtr--;
+	}
+	PlwRefManager_DecRefCount(sm->refMan, refId, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	resultLen = endPtr - ptr + 1;
+	resultPtr = PlwAlloc(resultLen + 1, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	memcpy(resultPtr, ptr, resultLen);
+	resultPtr[resultLen] = '\0';
+	resultRefId = PlwStringRef_Make(sm->refMan, resultPtr, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	sm->stack[sm->sp - 2] = resultRefId;
+	sm->stackMap[sm->sp - 2] = PlwTrue;
+	sm->sp -= 1;
 }
 
 static void PlwNativeFunc_CharCode_Text_Integer(PlwStackMachine *sm, PlwError *error) {
@@ -761,7 +798,7 @@ const PlwNativeFunction PlwNativeFunctions[] = {
 	PlwNativeFunc_Concat_Text_Text,
 	PlwNativeFunc_Subtext_Text_Integer_Integer,
 	PlwNativeFunc_Subtext_Text_Integer,
-	PlwNativeFunc_Trim_Integer,
+	PlwNativeFunc_Trim_Text,
 	PlwNativeFunc_CharCode_Text_Integer,
 	PlwNativeFunc_CharAt_Text_Integer,
 	PlwNativeFunc_IndexOf_Char_Text,

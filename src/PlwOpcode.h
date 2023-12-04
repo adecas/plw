@@ -1,6 +1,8 @@
 #ifndef PLWOPCODE_H_
 #define PLWOPCODE_H_
 
+/* One arg */
+
 #define PLW_OPCODE_NOARG									1
 #define PLW_OPCODE_JZ										2
 #define PLW_OPCODE_JNZ										3
@@ -24,7 +26,7 @@
 #define PLW_OPCODE_SWAP										21
 #define PLW_OPCODE_EXT										22
 			
-/* One arg */			
+/* No arg */			
 			
 #define PLW_OPCODE_SUSPEND									1
 #define PLW_OPCODE_ADD										2
@@ -51,5 +53,7 @@
 #define PLW_OPCODE_NOT										23
 
 extern const char * const PlwOpcodes[];
+
+extern const char * const PlwOpcodesNoarg[];
 
 #endif
