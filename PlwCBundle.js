@@ -4427,6 +4427,7 @@ class Compiler {
 				if (sequence.isError()) {
 					return sequence;
 				}
+				sequence = sequence.structuralType();
 				if (sequence.tag == "res-type-sequence") {
 					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 					this.codeBlock.codePushLocal(sequenceVar.offset);

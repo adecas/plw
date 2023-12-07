@@ -1,0 +1,68 @@
+var input1 := '
+Time:      7  15   30
+Distance:  9  40  200
+';
+
+var input2 := '
+Time:        56     97     78     75
+Distance:   546   1927   1131   1139
+';
+
+function parse_input(input text) (times [integer], distances [integer]) begin
+	var lines := split(input, text(10 as char));
+	var times := [] as [integer];
+	for t in split(subtext(lines[1], index_of(':', lines[2]) + 1), ' ') loop
+		if length(t) > 0 then
+			times := times || [integer(t)];
+		end if;
+	end loop;
+	var distances := [] as [integer];
+	for t in split(subtext(lines[2], index_of(':', lines[2]) + 1), ' ') loop
+		if length(t) > 0 then
+			distances := distances || [integer(t)];
+		end if;
+	end loop;
+	return (times, distances);
+end parse_input;
+
+function count_possibles(time integer, distance integer) integer begin
+	var c := 0;
+	for t in 1 .. time - 1 loop
+		var d := t * (time - t);
+		if d > distance then
+			c := c + 1;
+		end if;
+	end loop;
+	return c;
+end count_possibles;
+
+function count_possibles(times [integer], distances [integer]) integer begin
+	var sum := 1;
+	for i in 0 .. last_index(times) loop
+		sum := sum * count_possibles(times[i], distances[i]);
+	end loop;
+    return sum;
+end count_possibles;
+
+function solve(input text) integer begin
+	var begin_time := now();
+	var (times, distances) := parse_input(input);
+	var sum := count_possibles(times, distances);
+	print('sum ' || text(sum) || ', elapsed ' || text(now() - begin_time) || ' ms');
+	return sum;
+end solve;
+
+print('Day 6 part 1');
+
+if solve(input1) = 288 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+
+if solve(input2) = 251346198 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+
