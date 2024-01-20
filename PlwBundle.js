@@ -4427,6 +4427,7 @@ class Compiler {
 				if (sequence.isError()) {
 					return sequence;
 				}
+				sequence = sequence.structuralType();
 				if (sequence.tag == "res-type-sequence") {
 					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
 					this.codeBlock.codePushLocal(sequenceVar.offset);
@@ -5147,7 +5148,7 @@ class Compiler {
 				if (leftType.isError()) {
 					return leftType;
 				}
-				let rightType = this.eval(expr.right);
+				let rightType = this.eval(expr.right, leftType);
 				if (rightType.isError()) {
 					return rightType;
 				}

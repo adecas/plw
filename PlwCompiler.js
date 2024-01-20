@@ -2777,7 +2777,7 @@ class Compiler {
 				if (leftType.isError()) {
 					return leftType;
 				}
-				let rightType = this.eval(expr.right);
+				let rightType = this.eval(expr.right, leftType);
 				if (rightType.isError()) {
 					return rightType;
 				}
