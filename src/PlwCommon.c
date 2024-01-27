@@ -6,12 +6,16 @@
 const char *PlwErrorOutOfMem = "OutOfMem";
 
 void *PlwAlloc(size_t size, PlwError *error) {
-	void *m = malloc(size);
-	if (m == NULL) {
-		error->code = PlwErrorOutOfMem;
-		snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Can't alloc %ld bytes", size);
+	if (size == 0) {
+		return NULL;
+	} else {
+		void *m = malloc(size);
+		if (m == NULL) {
+			error->code = PlwErrorOutOfMem;
+			snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Can't alloc %ld bytes", size);
+		}
+		return m;
 	}
-	return m;
 }
 
 void PlwFree(void *ptr) {
@@ -21,13 +25,18 @@ void PlwFree(void *ptr) {
 }
 
 void *PlwRealloc(void *ptr, size_t size, PlwError *error) {
-	void *m = realloc(ptr, size);
-	if (m == NULL) {
-		error->code = PlwErrorOutOfMem;
-		snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Can't realloc %ld bytes", size);
-		return ptr;
+	if (size == 0) {
+		free(ptr);
+		return NULL;
+	} else {
+		void *m = realloc(ptr, size);
+		if (m == NULL) {
+			error->code = PlwErrorOutOfMem;
+			snprintf(error->message, PLW_ERROR_MESSAGE_MAX, "Can't realloc %ld bytes", size);
+			return ptr;
+		}
+		return m;
 	}
-	return m;
 }
 
 void *PlwDup(const void *ptr, size_t size, PlwError *error) {

@@ -5231,7 +5231,7 @@ class Compiler {
 			if (expr.indexTo === null) {
 				this.codeBlock.codePush(itemType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
-				return indexedType.underlyingType;	
+				return itemType;	
 			}
 			// indexTo is not null, we have a range index
 			let indexToType = this.eval(expr.indexTo);
