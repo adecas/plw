@@ -173,169 +173,131 @@ function parse_input(input text) [[integer]] begin
 	return result;
 end parse_input;
 
-const UP := 0;
-const RIGHT := 1;
-const DOWN := 2;
-const LEFT := 3;
+const HORIZONTAL := 0;
+const VERTICAL := 1;
 
 function min_heat_loss(map [[integer]]) integer begin
 	var width := length(map[0]);
 	var height := length(map);
-	var state := -1 ** width ** height ** 4;
-	var new_cells := [
-#		{x: 1, y: 0, dir: RIGHT, heat_loss: map[0][1], prev: [(0, 0)]},
-#		{x: 2, y: 0, dir: RIGHT, heat_loss: map[0][1] + map[0][2],  prev: [(0, 0)]},
-#		{x: 3, y: 0, dir: RIGHT, heat_loss: map[0][1] + map[0][2] + map[0][3],  prev: [(0, 0)]},
-#		{x: 0, y: 1, dir: DOWN, heat_loss: map[1][0],  prev: [(0, 0)]},
-#		{x: 0, y: 2, dir: DOWN, heat_loss: map[1][0] + map[2][0],  prev: [(0, 0)]},
-#		{x: 0, y: 3, dir: DOWN, heat_loss: map[1][0] + map[2][0] + map[3][0],  prev: [(0, 0)]},
-		{x: 1, y: 0, dir: RIGHT, heat_loss: map[0][1]},
-		{x: 2, y: 0, dir: RIGHT, heat_loss: map[0][1] + map[0][2]},
-		{x: 3, y: 0, dir: RIGHT, heat_loss: map[0][1] + map[0][2] + map[0][3]},
-		{x: 0, y: 1, dir: DOWN, heat_loss: map[1][0]},
-		{x: 0, y: 2, dir: DOWN, heat_loss: map[1][0] + map[2][0]},
-		{x: 0, y: 3, dir: DOWN, heat_loss: map[1][0] + map[2][0] + map[3][0]},
-	];
+	var state := -1 ** width ** height ** 2;
+
+	#
+	# Initialize new cells that are reachable from the top left corner
+	#
+	var new_cells := [] as [(x integer, y integer, dir integer, heat_loss integer)];
+	begin
+		var init_hloss := 0;
+		var init_vloss := 0;
+		for i in 1 .. 3 loop
+			init_hloss := init_hloss + map[0][i];
+			if i < width then
+				new_cells := new_cells || [(i, 0, HORIZONTAL, init_hloss)];
+				state[HORIZONTAL][0][i] := init_hloss;
+			end if;
+			init_vloss := init_vloss + map[i][0];
+			if i < height then
+				new_cells := new_cells || [(0, i, VERTICAL, init_vloss)];
+				state[VERTICAL][0][i] := init_vloss;
+			end if;
+		end loop;
+	end;
+	var new_cells_length := length(new_cells);
+
+	#
+	# Compute a naive initial heat loss 
+	#
 	var min_loss := 0;
-	# var path := [] as [(x integer, y integer)];
-	for x in 1 .. width - 1 loop
-		min_loss := min_loss + map[0][x];
-		if x % 3 = 0 then
-			min_loss := min_loss + map[0][x] + map[1][x];
-		end if;
-	end loop;
-	for y in 1 .. height - 1 loop
-		min_loss := min_loss + map[y][width - 1];
-		if y % 3 = 0 then
-			min_loss := min_loss + map[y][width - 1] + map[y][width - 2];
-		end if;
-	end loop;
-	while length(new_cells) > 0 loop
-#		var next_cells := [] as [{x integer, y integer, dir integer, heat_loss integer, prev [(x integer, y integer)]}];
-		var next_cells := [] as [{x integer, y integer, dir integer, heat_loss integer}];
-		for cell in new_cells loop
-			var x := cell.x;
-			var y := cell.y;
-			var dir := cell.dir;
-			var heat_loss := cell.heat_loss;
-#			var prev := cell.prev;
+	begin
+		var x := 0;
+		var y := 0;
+		while x <> width - 1 and y <> height - 1 loop
+			if x + 3 >= width - 1 then
+				while x < width - 1 loop
+					x := x + 1;
+					min_loss := min_loss + map[y][x];
+				end loop;
+			else
+				for i in 1 .. 3 loop
+					min_loss := min_loss + map[y][x + i];
+				end loop;
+				x := x + 3;
+			end if;
+			if y + 3 >= height - 1 then
+				while y < height - 1 loop
+					y := y + 1;
+					min_loss := min_loss + map[y][x];
+				end loop;
+			else
+				for i in 1 .. 3 loop
+					min_loss := min_loss + map[y + i][x];
+				end loop;
+				y := y + 3;
+			end if;
+		end loop;
+	end;
+	
+	while new_cells_length > 0 loop
+		var next_cells := (-1, -1, -1, -1) ** (new_cells_length * 6);
+		var next_cells_length := 0;
+		for cell_index in 0 .. new_cells_length - 1 loop
+			var (x, y, dir, heat_loss) := new_cells[cell_index];
 			if x = width - 1 and y = height - 1 then
 				if min_loss = -1 or heat_loss < min_loss then
 					min_loss := heat_loss;
-					# path := cell.prev || [(x, y)];
 				end if;
-			else
-				if heat_loss + (width - x - 1 + height - y - 1) < min_loss and
-				   (state[dir][y][x] = -1 or state[dir][y][x] > heat_loss)
-				then
-					state[dir][y][x] := heat_loss;
-					if dir <> LEFT and dir <> RIGHT then
-						var new_x := x - 1;
-						if new_x >= 0 then
-							var new_heat_loss := heat_loss + map[y][new_x];
-#							next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-							next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss}];
-							new_x := new_x - 1;
-							if new_x >= 0 then
-								new_heat_loss := new_heat_loss + map[y][new_x];
-#								next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-								next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss}];
-								new_x := new_x - 1;
-								if new_x >= 0 then
-									new_heat_loss := new_heat_loss + map[y][new_x];
-#									next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-									next_cells := next_cells || [{x: new_x, y: y, dir: LEFT, heat_loss: new_heat_loss}];
-								end if;
+			elsif heat_loss + (width - x - 1 + height - y - 1) < min_loss then
+				if dir = VERTICAL then
+					if x + 1 < width then
+						var new_heat_loss := heat_loss;
+						for new_x in x + 1 .. case when x + 3 < width then x + 3 else width - 1 end loop
+							new_heat_loss := new_heat_loss + map[y][new_x];
+			   				if state[HORIZONTAL][y][new_x] = -1 or state[HORIZONTAL][y][new_x] > new_heat_loss then
+								state[HORIZONTAL][y][new_x] := new_heat_loss;
+								next_cells[next_cells_length] := (new_x, y, HORIZONTAL, new_heat_loss);
+								next_cells_length := next_cells_length + 1;
 							end if;
-						end if;
-						new_x := x + 1;
-						if new_x < width then
-							var new_heat_loss := heat_loss + map[y][new_x];
-#							next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-							next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss}];
-							new_x := new_x + 1;
-							if new_x < width then
-								new_heat_loss := new_heat_loss + map[y][new_x];
-#								next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-								next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss}];
-								new_x := new_x + 1;
-								if new_x < width then
-									new_heat_loss := new_heat_loss + map[y][new_x];
-#									next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-									next_cells := next_cells || [{x: new_x, y: y, dir: RIGHT, heat_loss: new_heat_loss}];
-								end if;
+						end loop; 
+					end if;
+					if x - 1 >= 0 then
+						var new_heat_loss := heat_loss;
+						for new_x in reverse case when x - 3 >= 0 then x - 3 else 0 end .. x - 1 loop
+							new_heat_loss := new_heat_loss + map[y][new_x];
+			   				if state[HORIZONTAL][y][new_x] = -1 or state[HORIZONTAL][y][new_x] > new_heat_loss then
+								state[HORIZONTAL][y][new_x] := new_heat_loss;
+								next_cells[next_cells_length] := (new_x, y, HORIZONTAL, new_heat_loss);
+								next_cells_length := next_cells_length + 1;
 							end if;
-						end if;
-					end if;					
-					if dir <> UP and dir <> DOWN then
-						var new_y := y - 1;
-						if new_y >= 0 then
-							var new_heat_loss := heat_loss + map[new_y][x];
-#							next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-							next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss}];
-							new_y := new_y - 1;
-							if new_y >= 0 then
-								new_heat_loss := new_heat_loss + map[new_y][x];
-#								next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-								next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss}];
-								new_y := new_y - 1;
-								if new_y >= 0 then
-									new_heat_loss := new_heat_loss + map[new_y][x];
-#									next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-									next_cells := next_cells || [{x: x, y: new_y, dir: UP, heat_loss: new_heat_loss}];
-								end if;
+						end loop; 
+					end if;
+				else
+					if y + 1 < height then
+						var new_heat_loss := heat_loss;
+						for new_y in y + 1 .. case when y + 3 < height then y + 3 else height - 1 end loop
+							new_heat_loss := new_heat_loss + map[new_y][x];
+			   				if state[VERTICAL][new_y][x] = -1 or state[VERTICAL][new_y][x] > new_heat_loss then
+								state[VERTICAL][new_y][x] := new_heat_loss;
+								next_cells[next_cells_length] := (x, new_y, VERTICAL, new_heat_loss);
+								next_cells_length := next_cells_length + 1;
 							end if;
-						end if;
-						new_y := y + 1;
-						if new_y < width then
-							var new_heat_loss := heat_loss + map[new_y][x];
-#							next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-							next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss}];
-							new_y := new_y + 1;
-							if new_y < width then
-								new_heat_loss := new_heat_loss + map[new_y][x];
-#								next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-								next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss}];
-								new_y := new_y + 1;
-								if new_y < width then
-									new_heat_loss := new_heat_loss + map[new_y][x];
-#									next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss, prev: prev || [(x, y)]}];
-									next_cells := next_cells || [{x: x, y: new_y, dir: DOWN, heat_loss: new_heat_loss}];
-								end if;
+						end loop; 
+					end if;
+					if y - 1 >= 0 then
+						var new_heat_loss := heat_loss;
+						for new_y in reverse case when y - 3 >= 0 then y - 3 else 0 end .. y - 1 loop
+							new_heat_loss := new_heat_loss + map[new_y][x];
+			   				if state[VERTICAL][new_y][x] = -1 or state[VERTICAL][new_y][x] > new_heat_loss then
+								state[VERTICAL][new_y][x] := new_heat_loss;
+								next_cells[next_cells_length] := (x, new_y, VERTICAL, new_heat_loss);
+								next_cells_length := next_cells_length + 1;
 							end if;
-						end if;
-					end if;					
+						end loop; 
+					end if;
 				end if;
 			end if;
 		end loop;
 		new_cells := next_cells;
+		new_cells_length := next_cells_length;
 	end loop;
-#	var scr := '0' as char ** width ** height;
-#	for y in 0 .. height - 1 loop
-#		for x in 0 .. width - 1 loop
-#			scr[y][x] := char_at(text(map[y][x]), 0);
-#		end loop;
-#	end loop;
-#	var last_x := 0;
-#	var last_y := 0;
-#	var total_loss := 0;
-#	print('0 0 ' || text(map[last_y][last_x]) || ' 0');
-#	for i in 1 .. last_index(path) loop
-#		var (x, y) := path[i];
-#		var dx := case when x > last_x then 1 when x < last_x then -1 else 0 end;
-#		var dy := case when y > last_y then 1 when y < last_y then -1 else 0 end;
-#		while true loop
-#			last_x := last_x + dx;
-#			last_y := last_y + dy;
-#			total_loss := total_loss + map[last_y][last_x];
-#			print(text(last_x) || ' ' || text(last_y) || ' ' || text(map[last_y][last_x]) || ' ' || text(total_loss));
-#			scr[last_y][last_x] := '#';
-#			exit when x = last_x and y = last_y;#
-#		end loop;
-#	end loop;
-#	for y in 0 .. height - 1 loop
-#		print(text(scr[y]));
-#	end loop;	
 	return min_loss;
 end min_heat_loss;
 
@@ -355,7 +317,7 @@ else
 	print('Wrong');
 end if;
 
-if solve(input2) = 102 then
+if solve(input2) = 942 then
 	print('Correct');
 else
 	print('Wrong');
