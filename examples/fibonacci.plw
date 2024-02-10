@@ -28,9 +28,9 @@ function fibonacci_recursive(n integer) integer begin
 end fibonacci_recursive;
 
 for i in benchmark() loop
-  print(text(fibonacci_iterative(42)));
+  print(text(fibonacci_iterative(38)));
 end loop;
 
 for i in benchmark() loop
-  print(text(fibonacci_recursive(42)));
+  print(text(fibonacci_recursive(38)));
 end loop;
