@@ -74,6 +74,7 @@ const TOK_TERM = "tok-term";
 const TOK_EOF = "tok-eof";
 const TOK_UNKOWN = "tok-unknown";
 const TOK_DIRECTIVE = "tok-directive";
+const TOK_TEMPLATE = "tok-template";
 
 class Token {
 	constructor(tag, text, line, col) {
@@ -92,6 +93,8 @@ class TokenReader {
 		this.line = line;
 		this.col = col;
 		this.allowSignedInteger = true;
+		this.templateLevel = 0;
+		this.aggLevel = 0;
 	}
 	
 	static isAlphaChar(c) {
@@ -145,6 +148,64 @@ class TokenReader {
 			this.pos++;
 		}
 		return new Token(TOK_STRING, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("''", "'"), line, col);
+	}
+	
+	readTemplateToken(templateQuote) {
+		if (this.pos === this.exprStr.length) {
+			return new Token(TOK_EOF, "", this.line, this.col);
+		}
+		let c = this.exprStr.charAt(this.pos);
+		if (c === "{") {
+			this.pos++;
+			this.col++;
+			return new Token(TOK_BEGIN_AGG, "{", this.line, this.col - 1);
+		}
+		if (c === templateQuote) {
+			this.pos++;
+			this.col++;
+			return new Token(TOK_TEMPLATE, c, this.line, this.col - 1);
+		}
+		return this.readTemplateString(templateQuote);
+	}
+	
+	readTemplateString(templateQuote) {
+		let line = this.line;
+		let col = this.col;
+		let result = "";
+		while (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (c === "\\") {
+				if (this.pos + 1 < this.exprStr.length) {
+					let c2 = this.exprStr.charAt(this.pos + 1);
+					if (c2 === "r") {
+						result += "\r";
+					} else if (c2 === "n") {
+						result += "\n";
+					} else if (c2 === "t") {
+						result += "\t";
+					} else {
+						result += c2;
+					}
+					this.pos += 2;
+					this.col += 2;
+				} else {
+					result += "\\";
+					this.pos++;
+					this.col++;
+				}
+			} else if (c === templateQuote || c === "{") {
+				break;
+			} else {
+				result += c;
+				this.col++;
+				if (c === "\n") {
+					this.line++;
+					this.col = 1;
+				}
+				this.pos++;
+			}
+		}
+		return new Token(TOK_STRING, result, line, col);
 	}
 	
 	readDirective() {
@@ -365,7 +426,7 @@ class TokenReader {
 		if (c === "'") {
 			return this.readString();
 		}
-		
+				
 		if (c === '@') {
 			return this.readDirective();
 		}
@@ -431,6 +492,9 @@ class TokenReader {
 		this.pos += 1;
 		this.col += 1;
 		
+		if (c === "\"" || c === "`") {
+			return new Token(TOK_TEMPLATE, c, line, col);
+		}		
 		if (c === "+") {
 			return new Token(TOK_ADD, "+", line, col);
 		}
@@ -955,6 +1019,14 @@ class AstNull extends AstNode {
 	}
 }
 
+class AstTemplate extends AstNode {
+	constructor(exprCount, exprs) {
+		super("ast-template");
+		this.exprCount = exprCount;
+		this.exprs = exprs;
+	}
+}
+
 "use strict";
 
 /******************************************************************************************************************************************
@@ -997,6 +1069,12 @@ class Parser {
 	readToken() {
 		let token = this.nextToken;
 		this.nextToken = this.tokenReader.readToken();
+		return token;
+	}
+	
+	readTemplateToken(templateQuote = null) {
+		let token = this.nextToken;
+		this.nextToken = this.tokenReader.readTemplateToken(templateQuote === null ? token.text : templateQuote);
 		return token;
 	}
 	
@@ -1297,6 +1375,10 @@ class Parser {
 		if (this.peekToken() === TOK_KINDOF) {
 			return this.readKindof();
 		}
+		
+		if (this.peekToken() === TOK_TEMPLATE) {
+			return this.readTemplate();
+		}
 					
 		let token = this.readToken();
 
@@ -1380,7 +1462,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstCase(caseExpr, whenIndex, whens, elseExpr);
+		return new AstCase(caseExpr, whenIndex, whens, elseExpr).fromToken(caseToken);
 	}
 	
 	readWhen() {
@@ -1400,7 +1482,7 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstWhen(whenExpr, thenExpr);
+		return new AstWhen(whenExpr, thenExpr).fromToken(whenToken);
 	}
 	
 	readKindof() {
@@ -1434,7 +1516,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindof(caseExpr, whenIndex, whens, elseExpr);
+		return new AstKindof(caseExpr, whenIndex, whens, elseExpr).fromToken(kindofToken);
 	}
 	
 	readKindofWhen() {
@@ -1458,7 +1540,7 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstKindofWhen(type, varName.text, thenExpr);
+		return new AstKindofWhen(type, varName.text, thenExpr).fromToken(whenToken);
 	}
 	
 	readKindofStmt() {
@@ -1491,7 +1573,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock);
+		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock).fromToken(kindofToken);
 	}
 
 	readKindofWhenStmt() {
@@ -1512,6 +1594,44 @@ class Parser {
 			return thenBlock;
 		}
 		return new AstKindofWhenStmt(type, varName.text, thenBlock);
+	}
+	
+	readTemplate() {
+		let openToken = this.readTemplateToken();
+		if (openToken.tag !== TOK_TEMPLATE) {
+			return ParserError.unexpectedToken(openToken, [TOK_TEMPLATE]);			
+		}
+		let exprs = [];
+		let exprIndex = 0;
+		while (this.peekToken() !== TOK_TEMPLATE) {
+			if (this.peekToken() === TOK_STRING) {
+				let strToken = this.readTemplateToken(openToken.text);
+				exprs[exprIndex] = new AstValueText(strToken.text).fromToken(strToken);
+				exprIndex++;
+			} else if (this.peekToken() === TOK_BEGIN_AGG) {
+				let beginAggToken = this.readToken();
+				let expr = this.readExpression();
+				if (Parser.isError(expr)) {
+					return expr;
+				}
+				exprs[exprIndex] = expr;
+				exprIndex++;
+				let endAggToken = this.readTemplateToken(openToken.text);
+				if (endAggToken.tag != TOK_END_AGG) {
+					return ParserError.unexpectedToken(endToken, [TOK_END_AGG]);
+				}
+			} else {
+				let wrongToken = this.readToken();
+				return ParserError.unexpectedToken(wrongToken, [TOK_STRING, TOK_BEGIN_AGG, TOK_TEMPLATE]);
+			}
+		}
+		this.readToken();
+		if (exprIndex === 0) {
+			return new AstValueText("").fromToken(openToken);
+		} else if (exprIndex === 1 && exprs[0].tag === "ast-value-text") {
+			return exprs[0];
+		}
+		return new AstTemplate(exprIndex, exprs).fromToken(openToken);
 	}
 
 	readExprGroup() {
@@ -1629,8 +1749,9 @@ class Parser {
 		}
 		let types = [type];
 		let typeCount = 1;
+		let sepToken = null;
 		while (this.peekToken() === TOK_TYPE_SEP) {
-			this.readToken();
+			sepToken = this.readToken();
 			let type = this.readTypeNoVariant();
 			if (Parser.isError(type)) {
 				return type;
@@ -1638,7 +1759,7 @@ class Parser {
 			types[typeCount] = type;
 			typeCount++;
 		}
-		return new AstTypeVariant(typeCount, types);
+		return new AstTypeVariant(typeCount, types).fromToken(sepToken);
 	}
 	
 	readTypeNoVariant() {
@@ -4983,6 +5104,28 @@ class Compiler {
 			this.codeBlock.codePush(recordType.fieldSlotCount);
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
 			return recordType;
+		}
+		if (expr.tag === "ast-template") {
+			for (let i = 0; i < expr.exprCount; i++) {
+				let exprType = this.eval(expr.exprs[i]);
+				if (exprType.isError()) {
+					return exprType;
+				}
+				if (exprType !== EVAL_TYPE_TEXT) {
+					let convType = this.generateFunctionCall("text", 1, [exprType], EVAL_TYPE_TEXT);
+					if (convType.isError()) {
+						return convType;
+					}
+					if (convType !== EVAL_TYPE_TEXT) {
+						return EvalError.wrongType(exprType, "text").fromExpr(expr.exprs[i]);
+					}
+				}
+			}
+			if (expr.exprCount > 0) {
+				this.codeBlock.codePush(expr.exprCount);
+				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);				
+			}
+			return EVAL_TYPE_TEXT;
 		}
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;

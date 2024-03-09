@@ -460,3 +460,11 @@ class AstNull extends AstNode {
 	}
 }
 
+class AstTemplate extends AstNode {
+	constructor(exprCount, exprs) {
+		super("ast-template");
+		this.exprCount = exprCount;
+		this.exprs = exprs;
+	}
+}
+

@@ -2364,6 +2364,28 @@ class Compiler {
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
 			return recordType;
 		}
+		if (expr.tag === "ast-template") {
+			for (let i = 0; i < expr.exprCount; i++) {
+				let exprType = this.eval(expr.exprs[i]);
+				if (exprType.isError()) {
+					return exprType;
+				}
+				if (exprType !== EVAL_TYPE_TEXT) {
+					let convType = this.generateFunctionCall("text", 1, [exprType], EVAL_TYPE_TEXT);
+					if (convType.isError()) {
+						return convType;
+					}
+					if (convType !== EVAL_TYPE_TEXT) {
+						return EvalError.wrongType(exprType, "text").fromExpr(expr.exprs[i]);
+					}
+				}
+			}
+			if (expr.exprCount > 0) {
+				this.codeBlock.codePush(expr.exprCount);
+				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);				
+			}
+			return EVAL_TYPE_TEXT;
+		}
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
 			for (let i = 0; i < expr.itemCount; i++) {

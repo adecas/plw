@@ -655,7 +655,7 @@ const LEFT := 3;
 
 function parse_input(input text) [{dir integer, steps integer}] begin
 	var result := [] as [{dir integer, steps integer}];
-	var lines := split(input, text(10 as char));
+	var lines := split(input, "\n");
 	lines := lines[1 .. last_index(lines) - 1];
 	for line in lines loop
 		var color := split(line, ' ')[2];
@@ -790,7 +790,7 @@ function solve(input text) integer begin
 	var begin_time := now();
 	var plan := parse_input(input);
 	var sum := capacity(plan);
-	print('sum ' || text(sum) || ', elapsed ' || text(now() - begin_time) || ' ms');
+	print("sum {sum}, elapsed {now() - begin_time} ms");
 	return sum;
 end solve;
 

@@ -74,6 +74,7 @@ const TOK_TERM = "tok-term";
 const TOK_EOF = "tok-eof";
 const TOK_UNKOWN = "tok-unknown";
 const TOK_DIRECTIVE = "tok-directive";
+const TOK_TEMPLATE = "tok-template";
 
 class Token {
 	constructor(tag, text, line, col) {
@@ -92,6 +93,8 @@ class TokenReader {
 		this.line = line;
 		this.col = col;
 		this.allowSignedInteger = true;
+		this.templateLevel = 0;
+		this.aggLevel = 0;
 	}
 	
 	static isAlphaChar(c) {
@@ -145,6 +148,64 @@ class TokenReader {
 			this.pos++;
 		}
 		return new Token(TOK_STRING, this.exprStr.substr(beginPos + 1, this.pos - beginPos - 2).replace("''", "'"), line, col);
+	}
+	
+	readTemplateToken(templateQuote) {
+		if (this.pos === this.exprStr.length) {
+			return new Token(TOK_EOF, "", this.line, this.col);
+		}
+		let c = this.exprStr.charAt(this.pos);
+		if (c === "{") {
+			this.pos++;
+			this.col++;
+			return new Token(TOK_BEGIN_AGG, "{", this.line, this.col - 1);
+		}
+		if (c === templateQuote) {
+			this.pos++;
+			this.col++;
+			return new Token(TOK_TEMPLATE, c, this.line, this.col - 1);
+		}
+		return this.readTemplateString(templateQuote);
+	}
+	
+	readTemplateString(templateQuote) {
+		let line = this.line;
+		let col = this.col;
+		let result = "";
+		while (this.pos < this.exprStr.length) {
+			let c = this.exprStr.charAt(this.pos);
+			if (c === "\\") {
+				if (this.pos + 1 < this.exprStr.length) {
+					let c2 = this.exprStr.charAt(this.pos + 1);
+					if (c2 === "r") {
+						result += "\r";
+					} else if (c2 === "n") {
+						result += "\n";
+					} else if (c2 === "t") {
+						result += "\t";
+					} else {
+						result += c2;
+					}
+					this.pos += 2;
+					this.col += 2;
+				} else {
+					result += "\\";
+					this.pos++;
+					this.col++;
+				}
+			} else if (c === templateQuote || c === "{") {
+				break;
+			} else {
+				result += c;
+				this.col++;
+				if (c === "\n") {
+					this.line++;
+					this.col = 1;
+				}
+				this.pos++;
+			}
+		}
+		return new Token(TOK_STRING, result, line, col);
 	}
 	
 	readDirective() {
@@ -365,7 +426,7 @@ class TokenReader {
 		if (c === "'") {
 			return this.readString();
 		}
-		
+				
 		if (c === '@') {
 			return this.readDirective();
 		}
@@ -431,6 +492,9 @@ class TokenReader {
 		this.pos += 1;
 		this.col += 1;
 		
+		if (c === "\"" || c === "`") {
+			return new Token(TOK_TEMPLATE, c, line, col);
+		}		
 		if (c === "+") {
 			return new Token(TOK_ADD, "+", line, col);
 		}

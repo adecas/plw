@@ -43,6 +43,12 @@ class Parser {
 		return token;
 	}
 	
+	readTemplateToken(templateQuote = null) {
+		let token = this.nextToken;
+		this.nextToken = this.tokenReader.readTemplateToken(templateQuote === null ? token.text : templateQuote);
+		return token;
+	}
+	
 	static isError(astNode) {
 		return astNode.tag === "ast-parser-error";
 	}
@@ -340,6 +346,10 @@ class Parser {
 		if (this.peekToken() === TOK_KINDOF) {
 			return this.readKindof();
 		}
+		
+		if (this.peekToken() === TOK_TEMPLATE) {
+			return this.readTemplate();
+		}
 					
 		let token = this.readToken();
 
@@ -423,7 +433,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstCase(caseExpr, whenIndex, whens, elseExpr);
+		return new AstCase(caseExpr, whenIndex, whens, elseExpr).fromToken(caseToken);
 	}
 	
 	readWhen() {
@@ -443,7 +453,7 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstWhen(whenExpr, thenExpr);
+		return new AstWhen(whenExpr, thenExpr).fromToken(whenToken);
 	}
 	
 	readKindof() {
@@ -477,7 +487,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindof(caseExpr, whenIndex, whens, elseExpr);
+		return new AstKindof(caseExpr, whenIndex, whens, elseExpr).fromToken(kindofToken);
 	}
 	
 	readKindofWhen() {
@@ -501,7 +511,7 @@ class Parser {
 		if (Parser.isError(thenExpr)) {
 			return thenExpr;
 		}
-		return new AstKindofWhen(type, varName.text, thenExpr);
+		return new AstKindofWhen(type, varName.text, thenExpr).fromToken(whenToken);
 	}
 	
 	readKindofStmt() {
@@ -534,7 +544,7 @@ class Parser {
 		if (endToken.tag !== TOK_END) {
 			return ParserError.unexpectedToken(endToken, [TOK_END]);
 		}
-		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock);
+		return new AstKindofStmt(caseExpr, whenIndex, whens, elseBlock).fromToken(kindofToken);
 	}
 
 	readKindofWhenStmt() {
@@ -555,6 +565,44 @@ class Parser {
 			return thenBlock;
 		}
 		return new AstKindofWhenStmt(type, varName.text, thenBlock);
+	}
+	
+	readTemplate() {
+		let openToken = this.readTemplateToken();
+		if (openToken.tag !== TOK_TEMPLATE) {
+			return ParserError.unexpectedToken(openToken, [TOK_TEMPLATE]);			
+		}
+		let exprs = [];
+		let exprIndex = 0;
+		while (this.peekToken() !== TOK_TEMPLATE) {
+			if (this.peekToken() === TOK_STRING) {
+				let strToken = this.readTemplateToken(openToken.text);
+				exprs[exprIndex] = new AstValueText(strToken.text).fromToken(strToken);
+				exprIndex++;
+			} else if (this.peekToken() === TOK_BEGIN_AGG) {
+				let beginAggToken = this.readToken();
+				let expr = this.readExpression();
+				if (Parser.isError(expr)) {
+					return expr;
+				}
+				exprs[exprIndex] = expr;
+				exprIndex++;
+				let endAggToken = this.readTemplateToken(openToken.text);
+				if (endAggToken.tag != TOK_END_AGG) {
+					return ParserError.unexpectedToken(endToken, [TOK_END_AGG]);
+				}
+			} else {
+				let wrongToken = this.readToken();
+				return ParserError.unexpectedToken(wrongToken, [TOK_STRING, TOK_BEGIN_AGG, TOK_TEMPLATE]);
+			}
+		}
+		this.readToken();
+		if (exprIndex === 0) {
+			return new AstValueText("").fromToken(openToken);
+		} else if (exprIndex === 1 && exprs[0].tag === "ast-value-text") {
+			return exprs[0];
+		}
+		return new AstTemplate(exprIndex, exprs).fromToken(openToken);
 	}
 
 	readExprGroup() {
@@ -672,8 +720,9 @@ class Parser {
 		}
 		let types = [type];
 		let typeCount = 1;
+		let sepToken = null;
 		while (this.peekToken() === TOK_TYPE_SEP) {
-			this.readToken();
+			sepToken = this.readToken();
 			let type = this.readTypeNoVariant();
 			if (Parser.isError(type)) {
 				return type;
@@ -681,7 +730,7 @@ class Parser {
 			types[typeCount] = type;
 			typeCount++;
 		}
-		return new AstTypeVariant(typeCount, types);
+		return new AstTypeVariant(typeCount, types).fromToken(sepToken);
 	}
 	
 	readTypeNoVariant() {
