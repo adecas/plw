@@ -348,11 +348,8 @@ class NativeFunctionManager {
 				if (sm.hasRefManError()) {
 					return sm.errorFromRefMan();
 				}
-				if (beginIndex < 0) {
+				if (beginIndex < 0 || length < 0) {
 					return StackMachineError.refAccessOutOfBound();
-				}
-				if (length < 0) {
-					length = 0;
 				}
 				if (beginIndex + length > ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();

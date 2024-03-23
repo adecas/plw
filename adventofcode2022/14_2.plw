@@ -236,13 +236,13 @@ end print_map;
 # print_map(map);
 
 var round := 0;
-while true loop
+loop
 	var x := 500 - min_x;
 	var y := 0;
 	if map[y][x] then
 		exit;
 	end if;
-	while true loop
+	loop
 	    if not map[y + 1][x] then
 			y := y + 1;
 		elsif not map[y + 1][x - 1] then

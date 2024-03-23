@@ -9,17 +9,18 @@
 #define PLW_LOPCODE_READ_BLOB                             3
 #define PLW_LOPCODE_WRITE_BLOB                            4
 #define PLW_LOPCODE_CONCAT_BLOB                           5
-#define PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET				  6
-#define PLW_LOPCODE_GET_BLOB_SIZE                         7
-#define PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM          	  8
-#define PLW_LOPCODE_SLICE_BLOB							  9
-#define PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM				  10
-#define PLW_LOPCODE_CREATE_EXCEPTION_HANDLER			  11
-#define PLW_LOPCODE_RAISE_EXCEPTION						  12
-#define PLW_LOPCODE_CREATE_GENERATOR					  13
-#define PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				  14
-#define PLW_LOPCODE_HAS_GENERATOR_ENDED					  15
-#define PLW_LOPCODE_YIELD_GENERATOR_ITEM				  16
+#define PLW_LOPCODE_APPEND_BLOB_ITEM                      6     
+#define PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET				  7
+#define PLW_LOPCODE_GET_BLOB_SIZE                         8
+#define PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM          	  9
+#define PLW_LOPCODE_SLICE_BLOB							  10
+#define PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM				  11
+#define PLW_LOPCODE_CREATE_EXCEPTION_HANDLER			  12
+#define PLW_LOPCODE_RAISE_EXCEPTION						  13
+#define PLW_LOPCODE_CREATE_GENERATOR					  14
+#define PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				  15
+#define PLW_LOPCODE_HAS_GENERATOR_ENDED					  16
+#define PLW_LOPCODE_YIELD_GENERATOR_ITEM				  17
 
 extern const char *PlwLangOpcodes[];
 

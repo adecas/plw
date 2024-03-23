@@ -819,6 +819,13 @@ class AstWhile extends AstNode {
 	}
 }
 
+class AstLoop extends AstNode {
+	constructor(statement) {
+		super("ast-loop");
+		this.statement = statement;
+	}
+}
+
 class AstFor extends AstNode {
 	constructor(index, isReverse, sequence, statement) {
 		super("ast-for");
@@ -1092,6 +1099,8 @@ class Parser {
 			stmt = this.readKindofStmt();
 		} else if (this.peekToken() === TOK_WHILE) {
 			stmt = this.readWhile();
+		} else if (this.peekToken() === TOK_LOOP) {
+			stmt = this.readLoop();
 		} else if (this.peekToken() === TOK_FUNCTION || this.peekToken() === TOK_GENERATOR) {
 			stmt = this.readFunctionDeclaration();
 		} else if (this.peekToken() === TOK_PROCEDURE) {
@@ -1618,7 +1627,7 @@ class Parser {
 				exprIndex++;
 				let endAggToken = this.readTemplateToken(openToken.text);
 				if (endAggToken.tag != TOK_END_AGG) {
-					return ParserError.unexpectedToken(endToken, [TOK_END_AGG]);
+					return ParserError.unexpectedToken(endAggToken, [TOK_END_AGG]);
 				}
 			} else {
 				let wrongToken = this.readToken();
@@ -2139,6 +2148,14 @@ class Parser {
 		return new AstWhile(condition, statement).fromToken(whileToken);
 	}
 	
+	readLoop() {
+		let statement = this.readLoopBlock();
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstLoop(statement);		
+	}
+	
 	readParameter(isGenerator) {
 		let parameterName = this.readToken();
 		if (parameterName.tag !== TOK_IDENTIFIER) {
@@ -2458,17 +2475,18 @@ const PLW_LOPCODE_CREATE_BLOB                           = 2;
 const PLW_LOPCODE_READ_BLOB                             = 3;
 const PLW_LOPCODE_WRITE_BLOB                            = 4;
 const PLW_LOPCODE_CONCAT_BLOB                           = 5;
-const PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET				= 6;
-const PLW_LOPCODE_GET_BLOB_SIZE                         = 7;
-const PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM          		= 8;
-const PLW_LOPCODE_SLICE_BLOB							= 9;
-const PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM				= 10;
-const PLW_LOPCODE_CREATE_EXCEPTION_HANDLER				= 11;
-const PLW_LOPCODE_RAISE_EXCEPTION						= 12;
-const PLW_LOPCODE_CREATE_GENERATOR						= 13;
-const PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				= 14;
-const PLW_LOPCODE_HAS_GENERATOR_ENDED					= 15;
-const PLW_LOPCODE_YIELD_GENERATOR_ITEM					= 16;
+const PLW_LOPCODE_APPEND_BLOB_ITEM                      = 6;
+const PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET				= 7;
+const PLW_LOPCODE_GET_BLOB_SIZE                         = 8;
+const PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM          		= 9;
+const PLW_LOPCODE_SLICE_BLOB							= 10;
+const PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM				= 11;
+const PLW_LOPCODE_CREATE_EXCEPTION_HANDLER				= 12;
+const PLW_LOPCODE_RAISE_EXCEPTION						= 13;
+const PLW_LOPCODE_CREATE_GENERATOR						= 14;
+const PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				= 15;
+const PLW_LOPCODE_HAS_GENERATOR_ENDED					= 16;
+const PLW_LOPCODE_YIELD_GENERATOR_ITEM					= 17;
 
 const PLW_LOPCODES = [
 	"CREATE_STRING",
@@ -2477,6 +2495,7 @@ const PLW_LOPCODES = [
 	"READ_BLOB",
 	"WRITE_BLOB",
 	"CONCAT_BLOB",
+	"APPEND_BLOB_ITEM",
 	"GET_BLOB_MUTABLE_OFFSET",
 	"GET_BLOB_SIZE",
 	"GET_BLOB_INDEX_OF_ITEM",
@@ -4499,6 +4518,22 @@ class Compiler {
 			this.popScope();
 			return EVAL_RESULT_OK;
 		}
+		if (expr.tag === "ast-loop") {
+			this.pushScopeLoop();
+			let beginLoc = this.codeBlock.codeSize;
+			this.scope.clearVarStatTmp();
+			let stmtRet = this.evalStatement(expr.statement);
+			if (stmtRet.isError()) {
+				return stmtRet;
+			}
+			this.scope.clearVarStatTmp();
+			this.codeBlock.codeJmp(beginLoc);
+			for (let i = 0; i < this.scope.exitLocCount; i++) {
+				this.codeBlock.setLoc(this.scope.exitLocs[i]);
+			}
+			this.popScope();
+			return EVAL_RESULT_OK;
+		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
 				this.pushScopeLoop();
@@ -5130,6 +5165,37 @@ class Compiler {
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
 			for (let i = 0; i < expr.itemCount; i++) {
+				{ // Optim: if the last item is an arrayValue, we use APPEND_BLOB instead of CONCAT_BLOB
+					if (
+						i == expr.itemCount - 1                                 &&
+						firstItemType !== null                                  &&
+						firstItemType.structuralType().tag === "res-type-array" &&
+						expr.items[i].tag === "ast-value-array"
+					) {
+						// first, concat if necessary the items up to the last one
+						if (expr.itemCount > 2) {
+							this.codeBlock.codePush(expr.itemCount - 1);
+							this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_BLOB);
+						}
+						// eval all the items of the arrayValue
+						let arrayValue = expr.items[i];
+						let expectedArrayItemType = firstItemType.structuralType().underlyingType;
+						for (let j = 0; j < arrayValue.itemCount; j++) {
+							let arrayItemType = this.eval(arrayValue.items[j]);
+							if (arrayItemType.isError()) {
+								return arrayItemType;
+							}
+							if (arrayItemType !== expectedArrayItemType) {
+								return EvalError.wrongType(arrayItemType, expectedArrayItemType.typeKey()).fromExpr(arrayValue.items[j]);
+							}
+						}
+						if (arrayValue.itemCount > 0) {
+							this.codeBlock.codePush(expectedArrayItemType.slotCount() * arrayValue.itemCount);
+							this.codeBlock.codeExt(PLW_LOPCODE_APPEND_BLOB_ITEM);
+						}
+						return firstItemType;
+					}
+				}
 				let itemType = this.eval(expr.items[i]);
 				if (itemType.isError()) {
 					return itemType;
@@ -6918,6 +6984,52 @@ PLW_LOPS[PLW_LOPCODE_CONCAT_BLOB] = function(sm) {
 	return null;
 }
 
+/* append_blob_item(blob Blob, val ...integer, size integer)
+ */
+PLW_LOPS[PLW_LOPCODE_APPEND_BLOB_ITEM] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let size = sm.stack[sm.sp - 1];
+	if (size < 0 || sm.sp < 2 + size) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 2 - size];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (ref.refCount === 1) {
+		for (let i = 0; i < size; i++) {
+			ref.ptr[ref.blobSize + i] = sm.stack[sm.sp - 1 - size + i];
+			ref.mapPtr[ref.blobSize + i] = sm.stackMap[sm.sp - 1 - size + i];
+		}
+		ref.blobSize += size;
+		sm.sp -= size + 1;
+		return null;
+	}
+	let ptr = ref.ptr.concat(sm.stack.slice(sm.sp - 1 - size, sm.sp - 1));
+	let mapPtr = ref.mapPtr.concat(sm.stackMap.slice(sm.sp - 1 - size, sm.sp - 1));
+	let blobSize = ref.blobSize + size;
+	for(let i = 0; i < ref.blobSize; i++) {
+		if (mapPtr[i] === true) {
+			sm.refMan.incRefCount(ptr[i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	let resultRefId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	sm.stack[sm.sp - 2 - size] = resultRefId;
+	sm.stackMap[sm.sp - 2 - size] = true;
+	sm.sp -= 1 + size;
+	return null;
+}
+
 /* get_blob_mutable_offset(refId Blob, offset integer)
  */
 PLW_LOPS[PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET] = function(sm) {
@@ -7677,11 +7789,8 @@ class NativeFunctionManager {
 				if (sm.hasRefManError()) {
 					return sm.errorFromRefMan();
 				}
-				if (beginIndex < 0) {
+				if (beginIndex < 0 || length < 0) {
 					return StackMachineError.refAccessOutOfBound();
-				}
-				if (length < 0) {
-					length = 0;
 				}
 				if (beginIndex + length > ref.str.length) {
 					return StackMachineError.refAccessOutOfBound();

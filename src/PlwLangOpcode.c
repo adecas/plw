@@ -314,6 +314,82 @@ static void PlwLangOp_ConcatBlob(PlwStackMachine *sm, PlwError *error) {
 	sm->sp -= itemCount;
 }
 
+/* append_blob_item(blob Blob, val ...integer, size integer)
+ */
+static void PlwLangOp_AppendBlobItem(PlwStackMachine *sm, PlwError *error) {
+	PlwInt size;
+	PlwRefId refId;
+	PlwBlobRef *ref;
+	PlwInt blobSize;
+	PlwInt *ptr;
+	PlwBoolean *mapPtr;
+	PlwInt *resultPtr;
+	PlwBoolean *resultMapPtr;
+	PlwInt i;
+	PlwRefId resultRefId;
+	if (sm->sp < 2) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	size = sm->stack[sm->sp - 1];
+	if (size < 0 || sm->sp < 2 + size) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	refId = sm->stack[sm->sp - 2 - size];
+	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwBlobRefTagName, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	blobSize = PlwBlobRef_Size(ref);
+	if (AsPlwAbstractRef(ref)->refCount == 1) {
+		PlwBlobRef_Resize(ref, blobSize + size, error);
+		if (PlwIsError(error)) {
+			return;
+		}
+		ptr = PlwBlobRef_Ptr(ref);
+		mapPtr = PlwBlobRef_MapPtr(ref);	
+		memcpy(ptr + blobSize, sm->stack + sm->sp - 1 - size, size * sizeof(PlwInt));
+		memcpy(mapPtr + blobSize, sm->stackMap + sm->sp - 1 - size, size * sizeof(PlwBoolean));
+		sm->sp -= size + 1;
+		return;
+	}
+	resultPtr = PlwAlloc((blobSize + size) * sizeof(PlwInt), error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	resultMapPtr = PlwAlloc((blobSize + size) * sizeof(PlwBoolean), error);
+	if (PlwIsError(error)) {
+		PlwFree(resultPtr);
+		return;
+	}
+	ptr = PlwBlobRef_Ptr(ref);
+	mapPtr = PlwBlobRef_MapPtr(ref);	
+	memcpy(resultPtr, ptr, blobSize * sizeof(PlwInt));	
+	memcpy(resultPtr + blobSize, sm->stack + sm->sp - 1 - size, size * sizeof(PlwBoolean));
+	memcpy(resultMapPtr, mapPtr, blobSize * sizeof(PlwInt));	
+	memcpy(resultMapPtr + blobSize, sm->stackMap + sm->sp - 1 - size, size * sizeof(PlwBoolean));
+	resultRefId = PlwBlobRef_Make(sm->refMan, blobSize + size, resultPtr, resultMapPtr, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	for (i = 0; i < blobSize; i++) {
+		if (mapPtr[i]) {
+			PlwRefManager_IncRefCount(sm->refMan, ptr[i], error);
+			if (PlwIsError(error)) {
+				return;
+			}
+		}
+	}
+	PlwRefManager_DecRefCount(sm->refMan, refId, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	sm->stack[sm->sp - 2 - size] = resultRefId;
+	sm->stackMap[sm->sp - 2 - size] = PlwTrue;
+	sm->sp -= 1 + size;
+}
+
 /* get_blob_mutable_offset(refId Blob, offset integer)
  */
 static void PlwLangOp_GetBlobMutableOffset(PlwStackMachine *sm, PlwError *error) {
@@ -546,7 +622,8 @@ static void PlwLangOp_CreateBlobRepeatItem(PlwStackMachine *sm, PlwError *error)
 	}
 	itemCount = sm->stack[sm->sp - 2];
 	if (itemCount < 0) {
-		itemCount = 0;
+		PlwStackMachineError_RefAccessOutOfBound(error);
+		return;
 	}
 	blobSize = itemCount * itemSize;
 	ptr = PlwAlloc(blobSize * sizeof(PlwInt), error);
@@ -559,19 +636,32 @@ static void PlwLangOp_CreateBlobRepeatItem(PlwStackMachine *sm, PlwError *error)
 		return;
 	}
 	baseOffset = sm->sp - 2 - itemSize;
-	for (i = 0; i < itemSize; i++) {
-		ptr[i] = sm->stack[baseOffset + i];
-		mapPtr[i] = sm->stackMap[baseOffset + i];
-	}
-	for (i = itemSize; i < blobSize; i++) {
-		ptr[i] = sm->stack[baseOffset + i % itemSize];
-		mapPtr[i] = sm->stackMap[baseOffset + i % itemSize];
-		if (mapPtr[i]) {
-			PlwRefManager_IncRefCount(sm->refMan, ptr[i], error);
-			if (PlwIsError(error)) {
-				PlwFree(mapPtr);
-				PlwFree(ptr);
-				return;
+	if (itemCount == 0) {
+		for (i = 0; i < itemSize; i++) {
+			if (sm->stackMap[baseOffset + i]) {
+				PlwRefManager_DecRefCount(sm->refMan, sm->stack[baseOffset + i], error);
+				if (PlwIsError(error)) {
+					PlwFree(mapPtr);
+					PlwFree(ptr);
+					return;
+				}
+			}
+		}
+	} else {
+		for (i = 0; i < itemSize; i++) {
+			ptr[i] = sm->stack[baseOffset + i];
+			mapPtr[i] = sm->stackMap[baseOffset + i];
+		}
+		for (i = itemSize; i < blobSize; i++) {
+			ptr[i] = sm->stack[baseOffset + i % itemSize];
+			mapPtr[i] = sm->stackMap[baseOffset + i % itemSize];
+			if (mapPtr[i]) {
+				PlwRefManager_IncRefCount(sm->refMan, ptr[i], error);
+				if (PlwIsError(error)) {
+					PlwFree(mapPtr);
+					PlwFree(ptr);
+					return;
+				}
 			}
 		}
 	}
@@ -874,6 +964,7 @@ const PlwNativeFunction PlwLangOps[] = {
 	PlwLangOp_ReadBlob,
 	PlwLangOp_WriteBlob,
 	PlwLangOp_ConcatBlob,
+	PlwLangOp_AppendBlobItem,
 	PlwLangOp_GetBlobMutableOffset,
 	PlwLangOp_GetBlobSize,
 	PlwLangOp_GetBlobIndexOfItem,

@@ -821,7 +821,7 @@ function find_exit_without_cycle(m map) integer begin
 	var dir_count := length(m.directions);
 	var reached := -1 ** length(m.nodes);
 	var nodes := m.nodes;
-	while true loop
+	loop
 		var dir := m.directions[step % dir_count];
 		step := step + 1;
 		for n in 0 .. cnli loop
@@ -856,7 +856,7 @@ function find_cycles(m map) [integer] begin
 	var cycles_confirmed := false ** length(current_node);
 	var no_cycle := false;
 	var nodes := m.nodes;
-	while true loop
+	loop
 		var dir := m.directions[step % dir_count];
 		step := step + 1;
 		for n in 0 .. cnli loop

@@ -63,6 +63,8 @@ class Parser {
 			stmt = this.readKindofStmt();
 		} else if (this.peekToken() === TOK_WHILE) {
 			stmt = this.readWhile();
+		} else if (this.peekToken() === TOK_LOOP) {
+			stmt = this.readLoop();
 		} else if (this.peekToken() === TOK_FUNCTION || this.peekToken() === TOK_GENERATOR) {
 			stmt = this.readFunctionDeclaration();
 		} else if (this.peekToken() === TOK_PROCEDURE) {
@@ -589,7 +591,7 @@ class Parser {
 				exprIndex++;
 				let endAggToken = this.readTemplateToken(openToken.text);
 				if (endAggToken.tag != TOK_END_AGG) {
-					return ParserError.unexpectedToken(endToken, [TOK_END_AGG]);
+					return ParserError.unexpectedToken(endAggToken, [TOK_END_AGG]);
 				}
 			} else {
 				let wrongToken = this.readToken();
@@ -1108,6 +1110,14 @@ class Parser {
 			return statement;
 		}
 		return new AstWhile(condition, statement).fromToken(whileToken);
+	}
+	
+	readLoop() {
+		let statement = this.readLoopBlock();
+		if (Parser.isError(statement)) {
+			return statement;
+		}
+		return new AstLoop(statement);		
 	}
 	
 	readParameter(isGenerator) {

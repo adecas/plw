@@ -232,7 +232,14 @@ end loop;
 while i <= 100 loop
   print('Error: alternate reality');
 end loop;
-print('Done while'); 
+print('Done while');
+var j := 0;
+loop
+  i := i - 10;
+  exit when i = 0;
+  j := j + 1;
+end loop;
+print("End loop whith j = {j}");
 </pre>
 
 <p id="snippet-for-loop-title" class="snippet">For loop</p>

@@ -60,7 +60,7 @@ else
 	print('Wrong');
 end if;
 
-if solve(input2) = 251346198 then
+if solve(input2) = 1624896 then
 	print('Correct');
 else
 	print('Wrong');

@@ -1,0 +1,217 @@
+var input1 := '
+broadcaster -> a, b, c
+%a -> b
+%b -> c
+%c -> inv
+&inv -> a
+';
+
+var input2 := '
+broadcaster -> a
+%a -> inv, con
+&inv -> b
+%b -> con
+&con -> output
+';
+
+var input3 := '
+&kv -> qb
+%px -> qz, tk
+%xk -> sv, zv
+%rj -> lx, qz
+%ks -> fc
+%dx -> gt, dr
+%lz -> qz, df
+%dz -> fr
+broadcaster -> cn, xk, rj, gf
+%ct -> ks
+%hq -> bz
+%qv -> cx
+&qz -> vk, qm, rj, kv, hq, tk
+&jg -> qb
+%cf -> sv, tz
+&dr -> cn, jz, tq, ks, mr, ct
+%mx -> bn
+%bv -> sk, kf
+%cn -> dr, mq
+%vk -> lz
+%jd -> qz
+&qb -> rx
+%tp -> sv, lm
+%jz -> ct
+%tq -> tj
+%bn -> sv, cf
+%br -> sk, hc
+%gt -> dr, nd
+%nd -> dr, nk
+&rz -> qb
+%lx -> qm, qz
+&sk -> qv, kf, rd, qh, jg, gf
+%mq -> jz, dr
+%rl -> bv, sk
+%tz -> sv, ng
+%df -> qz, jd
+%tk -> hq
+&mr -> qb
+%gf -> rl, sk
+%qm -> nt
+&sv -> xk, rz, zv, dz, mx
+%hc -> sk, nf
+%xp -> br, sk
+%bc -> sv, tp
+%fc -> dr, tq
+%nf -> sk
+%cx -> sk, qh
+%bz -> vk, qz
+%zv -> dz
+%kf -> rd
+%tj -> dr, dx
+%fr -> mx, sv
+%ng -> bc, sv
+%lm -> sv
+%nk -> dr
+%nt -> qz, px
+%qh -> xp
+%rd -> qv
+';
+
+const BROADCAST := 0;
+const FLIPFLOP := 1;
+const CONJONCTION := 2;
+
+type module {typ integer, dests [integer]};
+
+function parse_input(input text) (modules [module], broadcast_id integer) begin
+	var lines := split(input, "\n");
+	lines := lines[1 .. last_index(lines) - 1];
+	var module_names := [] as [text];
+	for line in lines loop
+		var words := split(line, ' -> ');
+		if words[0] = 'broadcaster' then
+			module_names := module_names || ['broadcaster'];
+		else
+			module_names := module_names || [subtext(words[0], 1)];
+		end if;
+	end loop;
+	var modules := [] as [module];
+	for line in lines loop
+		var typ := case subtext(line, 0, 1)
+			when '%' then FLIPFLOP
+			when '&' then CONJONCTION
+			else BROADCAST
+		end;
+		var dests := [] as [integer];
+		for word in split(split(line, ' -> ')[1], ', ') loop
+			dests := dests || [index_of(word, module_names)];
+		end loop;
+		modules := modules || [{typ: typ, dests: dests} as module];
+	end loop;
+	return (modules, index_of('broadcaster', module_names));
+end parse_input;
+
+function init_states(modules [module])
+	(state_ids [integer], flipflop_states [boolean], conjonction_origins [[integer]], conjonction_states [[boolean]])
+begin
+	var flipflop_count := 0;
+	var conjonction_count := 0;
+	var state_ids := -1 ** length(modules);
+	for i in 0 .. last_index(modules) loop
+		var module := modules[i];
+		if module.typ = FLIPFLOP then
+			state_ids[i] := flipflop_count;
+			flipflop_count := flipflop_count + 1;
+		elsif module.typ = CONJONCTION then
+			state_ids[i] := conjonction_count;
+			conjonction_count := conjonction_count + 1;
+		end if;
+	end loop;
+	var flipflop_states := false ** flipflop_count;
+	var conjonction_origins := ([] as [integer]) ** conjonction_count;
+	var conjonction_states := ([] as [boolean]) ** conjonction_count;
+	for i in 0 .. last_index(modules) loop
+		var module := modules[i];
+		for destid in module.dests loop
+			if destid <> -1 then
+				if modules[destid].typ = CONJONCTION then
+					if index_of(i, conjonction_origins[state_ids[destid]]) = -1 then
+						conjonction_origins[state_ids[destid]] := conjonction_origins[state_ids[destid]] || [i];
+						conjonction_states[state_ids[destid]] := conjonction_states[state_ids[destid]] || [false];
+					end if;
+				end if;
+			end if;
+		end loop;
+	end loop;
+	return (state_ids, flipflop_states, conjonction_origins, conjonction_states);
+end init_states;
+
+
+function count_signals(modules [module], broadcast_id integer) integer begin
+	var (state_ids, flipflop_states, conjonction_origins, conjonction_states) := init_states(modules);
+	var high_count := 0;
+	var low_count := 0;
+	for pushbtn in 1 .. 1000 loop
+		var signals := [{from: -1, high: false, dests: [broadcast_id]}];
+		while length(signals) > 0 loop
+			var new_signals := [] as [{from integer, high boolean, dests [integer]}];
+			for signal in signals loop
+				if signal.high then
+					high_count := high_count + length(signal.dests);
+				else
+					low_count := low_count + length(signal.dests);
+				end if;
+				for destid in signal.dests loop
+					if destid <> -1 then
+						var module := modules[destid];
+						if module.typ = BROADCAST then
+							new_signals := new_signals || [{from: destid, high: signal.high, dests: module.dests}];
+						elsif module.typ = FLIPFLOP then
+							if not signal.high then
+								flipflop_states[state_ids[destid]] := not flipflop_states[state_ids[destid]];
+								new_signals := new_signals || [{from: destid, high: flipflop_states[state_ids[destid]], dests: module.dests}];
+							end if;
+						else
+							var sid := state_ids[destid];
+							var oid := index_of(signal.from, conjonction_origins[sid]);
+							conjonction_states[sid][oid] := signal.high;
+							new_signals := new_signals || [{from: destid, high: false in conjonction_states[sid], dests: module.dests}];
+						end if;	
+					end if;
+				end loop;
+			end loop;
+			signals := new_signals;
+		end loop;
+	end loop;
+	return high_count * low_count;		
+end count_signals;
+
+function solve(input text) integer begin
+	var begin_time := now();
+	var (modules, broadcast_id) := parse_input(input);
+	for i in 0 .. last_index(modules) loop
+		var module := modules[i];
+	end loop;
+	var sum := count_signals(modules, broadcast_id);
+	print("sum {sum}, elapsed {now() - begin_time} ms");
+	return sum;
+end solve;
+
+print('Day 20 part 1');
+
+if solve(input1) = 32000000 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+
+if solve(input2) = 11687500 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+
+if solve(input3) = 898557000 then
+	print('Correct');
+else
+	print('Wrong');
+end if;
+

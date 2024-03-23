@@ -404,7 +404,7 @@ end solve;
 
 print('Day 5 part 2');
 
-if solve(input1) = 35 then
+if solve(input1) = 46 then
 	print('Correct');
 else
 	print('Wrong');

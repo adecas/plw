@@ -260,6 +260,13 @@ class AstWhile extends AstNode {
 	}
 }
 
+class AstLoop extends AstNode {
+	constructor(statement) {
+		super("ast-loop");
+		this.statement = statement;
+	}
+}
+
 class AstFor extends AstNode {
 	constructor(index, isReverse, sequence, statement) {
 		super("ast-for");

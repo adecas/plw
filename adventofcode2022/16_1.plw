@@ -89,7 +89,7 @@ begin
 			nodes[i].cost[ni] := 1;
 		end loop;
 	end loop;
-	while true loop
+	loop
 		var updated := false;
 		for i in 0 .. last_index(nodes) loop
 			for j in 0 .. last_index(nodes[i].cost) loop

@@ -191,6 +191,52 @@ PLW_LOPS[PLW_LOPCODE_CONCAT_BLOB] = function(sm) {
 	return null;
 }
 
+/* append_blob_item(blob Blob, val ...integer, size integer)
+ */
+PLW_LOPS[PLW_LOPCODE_APPEND_BLOB_ITEM] = function(sm) {
+	if (sm.sp < 2) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let size = sm.stack[sm.sp - 1];
+	if (size < 0 || sm.sp < 2 + size) {
+		return StackMachineError.stackAccessOutOfBound().fromCode(sm.codeBlockId, sm.ip);
+	}
+	let refId = sm.stack[sm.sp - 2 - size];
+	let ref = sm.refMan.getRefOfType(refId, PLW_TAG_REF_BLOB, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	if (ref.refCount === 1) {
+		for (let i = 0; i < size; i++) {
+			ref.ptr[ref.blobSize + i] = sm.stack[sm.sp - 1 - size + i];
+			ref.mapPtr[ref.blobSize + i] = sm.stackMap[sm.sp - 1 - size + i];
+		}
+		ref.blobSize += size;
+		sm.sp -= size + 1;
+		return null;
+	}
+	let ptr = ref.ptr.concat(sm.stack.slice(sm.sp - 1 - size, sm.sp - 1));
+	let mapPtr = ref.mapPtr.concat(sm.stackMap.slice(sm.sp - 1 - size, sm.sp - 1));
+	let blobSize = ref.blobSize + size;
+	for(let i = 0; i < ref.blobSize; i++) {
+		if (mapPtr[i] === true) {
+			sm.refMan.incRefCount(ptr[i], sm.refManError);
+			if (sm.hasRefManError()) {
+				return sm.errorFromRefMan();
+			}
+		}
+	}
+	sm.refMan.decRefCount(refId, sm.refManError);
+	if (sm.hasRefManError()) {
+		return sm.errorFromRefMan();
+	}
+	let resultRefId = PlwBlobRef.make(sm.refMan, blobSize, ptr, mapPtr);
+	sm.stack[sm.sp - 2 - size] = resultRefId;
+	sm.stackMap[sm.sp - 2 - size] = true;
+	sm.sp -= 1 + size;
+	return null;
+}
+
 /* get_blob_mutable_offset(refId Blob, offset integer)
  */
 PLW_LOPS[PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET] = function(sm) {

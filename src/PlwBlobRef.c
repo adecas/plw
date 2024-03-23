@@ -6,6 +6,7 @@
 struct PlwBlobRef {
 	PlwAbstractRef super;
 	PlwInt size;
+	PlwInt capacity;
 	PlwInt *ptr;
 	PlwBoolean *mapPtr;
 };
@@ -32,6 +33,7 @@ PlwRefId PlwBlobRef_Make(PlwRefManager *refMan, PlwInt size, PlwInt *ptr, PlwBoo
 	ref->super.tag = &PlwBlobRefTag;
 	ref->super.refCount = 1;
 	ref->size = size;
+	ref->capacity = size;
 	ref->ptr = ptr;
 	ref->mapPtr = mapPtr;
 	refId = PlwRefManager_AddRef(refMan, ref, error);
@@ -45,15 +47,21 @@ PlwRefId PlwBlobRef_Make(PlwRefManager *refMan, PlwInt size, PlwInt *ptr, PlwBoo
 }
 
 void PlwBlobRef_Resize(PlwBlobRef *ref, PlwInt newSize, PlwError *error) {
-	if (newSize > ref->size) {
-		ref->ptr = PlwRealloc(ref->ptr, newSize * sizeof(PlwInt), error);
+	PlwInt newCapacity;
+	if (newSize > ref->capacity) {
+		newCapacity = ref->capacity * 2;
+		if (newCapacity < newSize) {
+			newCapacity = newSize;
+		}
+		ref->ptr = PlwRealloc(ref->ptr, newCapacity * sizeof(PlwInt), error);
 		if (PlwIsError(error)) {
 			return;
 		}
-		ref->mapPtr = PlwRealloc(ref->mapPtr, newSize * sizeof(PlwBoolean), error);
+		ref->mapPtr = PlwRealloc(ref->mapPtr, newCapacity * sizeof(PlwBoolean), error);
 		if (PlwIsError(error)) {
 			return;
-		}		
+		}
+		ref->capacity = newCapacity;		
 		memset(ref->ptr + ref->size, 0, (newSize - ref->size) * sizeof(PlwInt));
 		memset(ref->mapPtr + ref->size, 0, (newSize - ref->size) * sizeof(PlwBoolean));
 	}

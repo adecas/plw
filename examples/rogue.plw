@@ -1183,7 +1183,7 @@ function choose_target_position(screen [[screen_cell]], entities [entity], map m
 begin
 	kindof entities[player_id].position when point pos then
 		var target_pos := pos;
-		while true loop
+		loop
 			screen := render(screen, entities, map);
 			screen[target_pos.y][target_pos.x].bg_color := ANSI_BG_CYAN;
 			display(screen, map.depth, entities[player_id], messages);
@@ -1228,7 +1228,7 @@ end choose_target_position;
 function choose_inventory_item(entities [entity], player_id integer)
 	(entities [entity], item_id integer)
 begin
-	while true loop
+	loop
 		var equipment := find_equipment(entities, player_id);
 		print(ANSI_HIDE_CURSOR || ANSI_CLEAR_TERMINAL || 'Backpack (' || text(length(equipment.backpack_items)) || ' items):' || ANSI_CR);			
 		for i in 0 .. last_index(equipment.backpack_items) loop

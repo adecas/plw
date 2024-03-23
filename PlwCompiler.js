@@ -1758,6 +1758,22 @@ class Compiler {
 			this.popScope();
 			return EVAL_RESULT_OK;
 		}
+		if (expr.tag === "ast-loop") {
+			this.pushScopeLoop();
+			let beginLoc = this.codeBlock.codeSize;
+			this.scope.clearVarStatTmp();
+			let stmtRet = this.evalStatement(expr.statement);
+			if (stmtRet.isError()) {
+				return stmtRet;
+			}
+			this.scope.clearVarStatTmp();
+			this.codeBlock.codeJmp(beginLoc);
+			for (let i = 0; i < this.scope.exitLocCount; i++) {
+				this.codeBlock.setLoc(this.scope.exitLocs[i]);
+			}
+			this.popScope();
+			return EVAL_RESULT_OK;
+		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
 				this.pushScopeLoop();
@@ -2389,6 +2405,37 @@ class Compiler {
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
 			for (let i = 0; i < expr.itemCount; i++) {
+				{ // Optim: if the last item is an arrayValue, we use APPEND_BLOB instead of CONCAT_BLOB
+					if (
+						i == expr.itemCount - 1                                 &&
+						firstItemType !== null                                  &&
+						firstItemType.structuralType().tag === "res-type-array" &&
+						expr.items[i].tag === "ast-value-array"
+					) {
+						// first, concat if necessary the items up to the last one
+						if (expr.itemCount > 2) {
+							this.codeBlock.codePush(expr.itemCount - 1);
+							this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_BLOB);
+						}
+						// eval all the items of the arrayValue
+						let arrayValue = expr.items[i];
+						let expectedArrayItemType = firstItemType.structuralType().underlyingType;
+						for (let j = 0; j < arrayValue.itemCount; j++) {
+							let arrayItemType = this.eval(arrayValue.items[j]);
+							if (arrayItemType.isError()) {
+								return arrayItemType;
+							}
+							if (arrayItemType !== expectedArrayItemType) {
+								return EvalError.wrongType(arrayItemType, expectedArrayItemType.typeKey()).fromExpr(arrayValue.items[j]);
+							}
+						}
+						if (arrayValue.itemCount > 0) {
+							this.codeBlock.codePush(expectedArrayItemType.slotCount() * arrayValue.itemCount);
+							this.codeBlock.codeExt(PLW_LOPCODE_APPEND_BLOB_ITEM);
+						}
+						return firstItemType;
+					}
+				}
 				let itemType = this.eval(expr.items[i]);
 				if (itemType.isError()) {
 					return itemType;

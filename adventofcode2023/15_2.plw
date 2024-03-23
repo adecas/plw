@@ -107,7 +107,7 @@ else
 	print('Wrong');
 end if;
 
-if solve(input2) = 103333 then
+if solve(input2) = 233537 then
 	print('Correct');
 else
 	print('Wrong');

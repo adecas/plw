@@ -394,14 +394,13 @@ static void PlwNativeFunc_Subtext_Text_Integer_Integer(PlwStackMachine *sm, PlwE
 	len = strlen(ptr);
 	index = sm->stack[sm->sp - 3];
 	sublen = sm->stack[sm->sp - 2];
-	if (index < 0) {
-		index = 0;
-	}
-	if (sublen < 0) {
-		sublen = 0;
+	if (index < 0 || sublen < 0) {
+		PlwStackMachineError_RefAccessOutOfBound(error);
+		return;
 	}
 	if (index + sublen > len) {
-		sublen = len - index;
+		PlwStackMachineError_RefAccessOutOfBound(error);
+		return;
 	}
 	resultPtr = PlwAlloc(sublen + 1, error);
 	if (PlwIsError(error)) {
