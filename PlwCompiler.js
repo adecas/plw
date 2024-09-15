@@ -20,12 +20,23 @@ class EvalResult {
 	
 }
 
+class EvalResultIR extends EvalResult {
+
+	constructor(resultType, ir) {
+		super("res-ir");
+		this.resultType = resultType;
+		this.ir = ir;
+	}
+	
+}
+
 class EvalResultType extends EvalResult {
 	constructor(tag, isRef) {
 		super(tag);
 		this.isRef = isRef;
 		this.key = null;
 		this.globalId = 0;
+		this.irTypes = [];
 	}
 	
 	typeKey() {
@@ -67,10 +78,12 @@ class EvalTypeNull extends EvalResultType {
 }
 
 class EvalTypeBuiltIn extends EvalResultType {
-	constructor(typeName, isRef) {
+	constructor(typeName, isRef, irTypes) {
 		super("res-type-built-in", isRef);
 		this.typeName = typeName;
 		this.key = typeName;
+		this.irTypes = irTypes;
+		
 	}
 	
 	toAst() {
@@ -79,13 +92,13 @@ class EvalTypeBuiltIn extends EvalResultType {
 }
 
 const EVAL_TYPE_NULL = new EvalTypeNull();
-const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", true);
-const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false);
-const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false);
-const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false);
-const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false);
-const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false);
-const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true);
+const EVAL_TYPE_EXCEPTION_HANDLER = new EvalTypeBuiltIn("_exception_handler", true, null);
+const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false, null);
+const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false, null);
+const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false, [PLW_IR_TYPE_I64]);
+const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false, [PLW_IR_TYPE_F64]);
+const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", [PLW_IR_TYPE_I64]);
+const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true, [PLW_IR_TYPE_PTR]);
 
 class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
@@ -597,6 +610,7 @@ class CompilerContext {
 		this.macroFunctions = {};
 		this.macroProcedures = {};
 		this.codeBlocks = [];
+		this.irFuncs = [];
 		this.globalTypeIdSeq = 0;
 		this.addType(EVAL_TYPE_INFER);
 		this.addType(EVAL_TYPE_ANY);
@@ -606,7 +620,7 @@ class CompilerContext {
 		this.addType(EVAL_TYPE_TEXT);
 		this.addType(EVAL_TYPE_CHAR);
 	}
-	
+		
 	nextGlobalTypeId() {
 		this.globalTypeIdSeq++;
 		return this.globalTypeIdSeq;
@@ -791,6 +805,8 @@ class CompilerVariable {
 		} else {
 			this.stat = null;
 		}
+		this.isMoved = false;
+		this.irIndex = 0;
 	}		
 }
 
@@ -831,6 +847,15 @@ class CompilerScope {
 		this.offset = parent === null || isFrame ? 0 : (parent.offset + parent.variableOffset);
 		this.exitLocs = [];
 		this.exitLocCount = 0;
+		this.irVarTypes = parent === null || isFrame ? [] : parent.irVarTypes;
+	}
+	
+	addIrVarTypes(irTypes) {
+		let firstIndex = this.irVarTypes.length;
+		for (let i = 0; i < irTypes.length; i++) {
+			this.irVarTypes[firstIndex + i] = irTypes[i];
+		}
+		return firstIndex;
 	}
 	
 	findFrame() {
@@ -908,6 +933,7 @@ class CompilerScope {
 	addVariable(varName, varType, isConst) {
 		let isWithStat = varType.isRef && this.parent !== null;
 		let newVar = new CompilerVariable(varName, varType, isConst, this.isGlobal, false, this.offset + this.variableOffset, isWithStat);
+		newVar.irIndex = this.addIrVarTypes(varType.irTypes);
 		this.variables[this.variableCount] = newVar;
 		this.variableCount++;
 		this.variableOffset += varType.slotCount();
@@ -943,6 +969,31 @@ class Compiler {
 	
 	pushScopeProcedure() {
 		this.scope = CompilerScope.makeProcedure(this.scope);
+	}
+	
+	sequenceArray(start, length) {
+		let a = [];
+		for (let i = 0; i < length; i++) {
+			a[i] = start + i;
+		}
+		return a;
+	}
+	
+	irPopScope() {
+		let ir = [];
+		for (let i = 0; i < this.scope.variableCount; i++) {
+			let variable = this.scope.variables[i];
+			if (variable.varType.isRef === true && variable.isMoved === false) {
+				ir.push(
+					PlwIR.iff(
+						PlwIR.binOp(PLW_IR_OP_I32_EQ,
+							PlwIR.decRefCount(PlwIR.variable(variable.isGlobal, variable.irIndex)),
+							PlwIR.i32(0)),
+						PlwIR.destroyRef(PlwIR.variable(variable.isGlobal, variable.irIndex)),
+						null));
+			}
+		}
+		return PlwIR.block(ir);
 	}
 	
 	popScope() {
@@ -1061,7 +1112,7 @@ class Compiler {
 		return func;
 	}
 	
-	generateFunctionCall(functionName, argCount, argTypes, expectedType = null) {
+	generateFunctionCall(functionName, argCount, argTypes, expectedType = null, irExprs = null) {
 		let funcKey = EvalResultFunction.makeKey(functionName, argCount, argTypes);
 		let func = this.context.getFunction(funcKey);
 		if (func === null) {
@@ -1096,9 +1147,11 @@ class Compiler {
 		for (let i = 0; i < argCount; i++) {
 			argSlotCount += argTypes[i].slotCount();
 		}
+		let ir = null;
 		if (func.nativeIndex !== -1) {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCallNative(func.nativeIndex);
+			ir = PlwIR.callExtern(funcKey, irExprs);
 		} else if (func.internalIndex !== -1) {
 			this.codeBlock.codeExt(func.internalIndex);
 		} else if (func.isGenerator === true) {
@@ -1108,8 +1161,9 @@ class Compiler {
 		} else {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCall(func.codeBlockIndex);
+			ir = PlwIR.callExtern(func.functionName, irExprs);
 		}
-		return func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType;
+		return new EvalResultIR(func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType, ir);
 	}
 			
 	generateFunctionFromMacro(functionName, argTypes, macroFunc) {
@@ -1321,7 +1375,7 @@ class Compiler {
 			}
 			let namedType = new EvalTypeName(expr.typeName, underlyingType);
 			this.addType(namedType);
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-variable-declaration") {
 			for (let i = 0; i < expr.varNameCount; i++) {
@@ -1329,17 +1383,26 @@ class Compiler {
 					return EvalError.variableAlreadyExists(expr.varNames[i]).fromExpr(expr);
 				}
 			}
-			let initValueType = this.eval(expr.valueExpr);
-			if (initValueType.isError()) {
-				return initValueType;
+			let initValueResult = this.eval(expr.valueExpr);
+			if (initValueResult.isError()) {
+				return initValueResult;
 			}
 			if (expr.varNameCount === 1) {
-				this.scope.addVariable(expr.varNames[0], initValueType, expr.isConst);
-				return EVAL_RESULT_OK;
+				let newVar = this.scope.addVariable(expr.varNames[0], initValueResult.resultType, expr.isConst);
+				if (newVar.isGlobal) {
+					return new EvalResultIR(
+						EVAL_RESULT_OK,
+						PlwIR.setGlobal(
+							this.sequenceArray(newVar.irIndex, initValueResult.resultType.irTypes.length),
+							initValueResult.ir
+						)
+					);
+				}
+				return new EvalResultIR(EVAL_RESULT_OK, initValueResult.ir);
 			}
-			let initStructType = initValueType.structuralType();
+			let initStructType = initValueResult.resultType.structuralType();
 			if (initStructType.tag !== "res-type-tuple") {
-				return EvalError.wrongType(initValueType, "tuple").fromExpr(expr.valueExpr);
+				return EvalError.wrongType(initValueResult.resultType, "tuple").fromExpr(expr.valueExpr);
 			}					
 			if (expr.varNameCount !== initStructType.typeCount) {
 				return EvalError.tupleSizeMismatch(expr.varNameCount, initStructType.typeCount).fromExpr(expr.valueExpr);
@@ -1347,7 +1410,7 @@ class Compiler {
 			for (let i = 0; i < expr.varNameCount; i++) {
 				this.scope.addVariable(expr.varNames[i], initStructType.types[i], expr.isConst);
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, initValueResult.ir);
 		}
 		if (expr.tag === "ast-assign") {
 			if (expr.left.tag === "ast-variable") {
@@ -1360,27 +1423,27 @@ class Compiler {
 					return EvalError.cantMutateConst(expr.left.varName).fromExpr(expr.left);
 				}
 				// evaluate the value
-				let valueType = this.eval(expr.right, variable.varType);
-				if (valueType.isError()) {
-					return valueType;
+				let valueResult = this.eval(expr.right, variable.varType);
+				if (valueResult.isError()) {
+					return valueResult;
 				}
-				if (valueType !== variable.varType) {
-					return EvalError.wrongType(valueType, variable.varType.typeKey()).fromExpr(expr.right);					
+				if (valueResult.resultType !== variable.varType) {
+					return EvalError.wrongType(valueResult.resultType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
 				if (variable.isGlobal) {
-					for (let i = valueType.slotCount() - 1; i >= 0; i--) { 
+					for (let i = valueResult.resultType.slotCount() - 1; i >= 0; i--) { 
 						this.codeBlock.codePopGlobal(variable.offset + i);
 					}
 				} else {
-					for (let i = valueType.slotCount() - 1; i >= 0; i--) { 
+					for (let i = valueResult.resultType.slotCount() - 1; i >= 0; i--) { 
 						this.codeBlock.codePopLocal(variable.offset + i);
 					}
 				}
 				if (variable.stat !== null) {
 					variable.stat.addReset();
 				}
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, valueResult.ir);
 			}
 			if (expr.left.tag === "ast-value-tuple") {
 				let tupleExpr = expr.left;
@@ -1403,12 +1466,12 @@ class Compiler {
 				}
 				let tupleType = this.addType(new EvalTypeTuple(tupleExpr.itemCount, variableTypes));
 				// evaluate the value
-				let valueType = this.eval(expr.right, tupleType);
-				if (valueType.isError()) {
-					return valueType;
+				let valueResult = this.eval(expr.right, tupleType);
+				if (valueResult.isError()) {
+					return valueResult;
 				}
-				if (valueType !== tupleType) {
-					return EvalError.wrongType(valueType.types[i], variables[i].varType.typeKey()).fromExpr(expr.right);					
+				if (valueResult.resultType !== tupleType) {
+					return EvalError.wrongType(valueResult.resultType.types[i], variables[i].varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
 				for (let i = tupleExpr.itemCount - 1; i >= 0; i--) {
@@ -1421,27 +1484,27 @@ class Compiler {
 						variables[i].stat.addReset();
 					}
 				}
-				return EVAL_RESULT_OK;				
+				return new EvalResultIR(EVAL_RESULT_OK, valueResult.ir);				
 			}
 			if (expr.left.tag === "ast-index") {
 				let indexExpr = expr.left;
 				// Evaluate the indexed ptr
-				let indexedType = this.evalForMutate(indexExpr.indexed);
-				if (indexedType.isError()) {
-					return indexedType;
+				let indexedResult = this.evalForMutate(indexExpr.indexed);
+				if (indexedResult.isError()) {
+					return indexedResult;
 				}
-				let structType = indexedType.structuralType();
+				let structType = indexedResult.resultType.structuralType();
 				if (structType.tag !== "res-type-array") {
 					return EvalError.wrongType(indexedType, "array").fromExpr(indexExpr.indexed);
 				}
 				let itemType = structType.underlyingType;
 				// Evaluate the index
-				let indexType = this.eval(indexExpr.index);
-				if (indexType.isError()) {
-					return indexType;
+				let indexResult = this.eval(indexExpr.index);
+				if (indexResult.isError()) {
+					return indexResult;
 				}
-				if (indexType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(indexType, "integer").fromExpr(indexExpr.index);
+				if (indexResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(indexResult.resultType, "integer").fromExpr(indexExpr.index);
 				}
 				if (indexExpr.indexTo !== null) {
 					return EvalError.unassignable(indexExpr.tag).fromExpr(indexExpr);
@@ -1451,28 +1514,28 @@ class Compiler {
 					this.codeBlock.codeMul();
 				}
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right, itemType);
-				if (valueType.isError()) {
-					return valueType;
+				let valueResult = this.eval(expr.right, itemType);
+				if (valueResult.isError()) {
+					return valueResult;
 				}
-				if (valueType !== itemType) {
-					return EvalError.wrongType(valueType, itemType.typeKey()).fromExpr(expr.right);
+				if (valueResult.resultType !== itemType) {
+					return EvalError.wrongType(valueResult.resultType, itemType.typeKey()).fromExpr(expr.right);
 				}
 				// Assign the value
 				this.codeBlock.codePush(itemType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_WRITE_BLOB);
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, valueResult.ir);
 			}
 			if (expr.left.tag === "ast-field") {
 				let fieldExpr = expr.left;
 				// evaluate the record
-				let recordType = this.evalForMutate(fieldExpr.expr);
-				if (recordType.isError()) {
-					return recordType;
+				let recordResult = this.evalForMutate(fieldExpr.expr);
+				if (recordResult.isError()) {
+					return recordResult;
 				}
-				let structType = recordType.structuralType();
+				let structType = recordResult.resultType.structuralType();
 				if (structType.tag != "res-type-record") {
-					return EvalError.wrongType(recordType, "record").fromExpr(fieldExpr.expr);
+					return EvalError.wrongType(recordResult.resultType, "record").fromExpr(fieldExpr.expr);
 				}
 				// push the offset of the field
 				let field = structType.getField(fieldExpr.fieldName);
@@ -1481,22 +1544,23 @@ class Compiler {
 				}
 				this.codeBlock.codePush(field.offset);
 				// Evaluate the value to assign
-				let valueType = this.eval(expr.right, field.fieldType);
-				if (valueType.isError()) {
-					return valueType;
+				let valueResult = this.eval(expr.right, field.fieldType);
+				if (valueResult.isError()) {
+					return valueResult;
 				}
-				if (valueType !== field.fieldType) {
-					return EvalError.wrongType(valueType, field.fieldType.typeKey()).fromExpr(expr.right);
+				if (valueResult.resultType !== field.fieldType) {
+					return EvalError.wrongType(valueResult.resultType, field.fieldType.typeKey()).fromExpr(expr.right);
 				}
 				// Assigne the value
 				this.codeBlock.codePush(field.fieldType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_WRITE_BLOB);
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, valueResult.ir);
 			}
 			return EvalError.unassignable(expr.left.tag).fromExpr(expr.left);
 		}
 		if (expr.tag == "ast-block") {
 			let ret = EVAL_RESULT_OK;
+			let irStmts = [];
 			let exceptionLoc = -1;
 			this.pushScopeBlock();
 			if (expr.exception !== null) {
@@ -1509,19 +1573,22 @@ class Compiler {
 				if (ret !== EVAL_RESULT_OK) {
 					return EvalError.unreachableCode().fromExpr(expr.statements[i]);
 				}
-				ret = this.evalStatement(expr.statements[i]);
-				if (ret.isError()) {
-					return ret;
+				let stmtResult = this.evalStatement(expr.statements[i]);
+				if (stmtResult.isError()) {
+					return stmtResult;
 				}
+				ret = stmtResult.resultType;
+				irStmts[i] = stmtResult.ir;
 			}
 			if (ret === EVAL_RESULT_OK) {
 				if (this.scope.variableOffset > 0) {
 					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 			}
+			irStmts.push(this.irPopScope());
 			this.popScope();
 			if (expr.exception === null) {
-				return ret;
+				return new EvalResultIR(ret, PlwIR.block(irStmts));
 			}
 			let endLoc = -1;
 			if (ret === EVAL_RESULT_OK) {
@@ -1529,21 +1596,21 @@ class Compiler {
 			}
 			this.codeBlock.setLoc(exceptionLoc);
 			this.scope.clearVarStatTmp();
-			let exRet = this.evalStatement(expr.exception);
-			if (exRet.isError()) {
-				return exRet;
+			let exResult = this.evalStatement(expr.exception);
+			if (exResult.isError()) {
+				return exResult;
 			}
 			this.scope.clearVarStatTmp();
 			if (endLoc !== -1) {
 				this.codeBlock.setLoc(endLoc);
 			}
 			if (ret === EVAL_RESULT_RAISE) {
-				return exRet;
+				return new EvalResultIR(exResult.resultType, PlwIR.block(irStmts));
 			}
-			if (ret === EVAL_RESULT_RETURN && exRet !== EVAL_RESULT_OK) {
-				return ret;
+			if (ret === EVAL_RESULT_RETURN && exResult.resultType !== EVAL_RESULT_OK) {
+				return new EvalResultIR(ret, PlwIR.block(ir));
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.block(irStmts));
 		}
 		if (expr.tag === "ast-exception") {
 			this.pushScopeBlock();
@@ -1557,28 +1624,28 @@ class Compiler {
 					return EvalError.unknownType(whenStmt.tag).fromExpr(expr);
 				}
 				this.codeBlock.codePushLocal(exceptionVar.offset);
-				let whenType = this.eval(whenStmt.whenExpr);
-				if (whenType.isError()) {
-					return whenType;
+				let whenResult = this.eval(whenStmt.whenExpr);
+				if (whenResult.isError()) {
+					return whenResult;
 				}
-				if (whenType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(whenType, "integer").fromExpr(whenStmt.whenExpr);	
+				if (whenResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(whenResult.resultType, "integer").fromExpr(whenStmt.whenExpr);	
 				}
-				this.codeBlock.codeEq(whenType.slotCount());
+				this.codeBlock.codeEq(whenResult.resultType.slotCount());
 				let nextLoc = this.codeBlock.codeJz(0);
 				this.scope.clearVarStatTmp();
-				let stmtRes = this.evalStatement(whenStmt.statement);
-				if (stmtRes.isError()) {
-					return stmtRes;
+				let stmtResult = this.evalStatement(whenStmt.statement);
+				if (stmtResult.isError()) {
+					return stmtResult;
 				}
 				this.scope.clearVarStatTmp();
 				if (
-					(ret === null || stmtRes === EVAL_RESULT_OK) ||
-					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
+					(ret === null || stmtResult.resultType === EVAL_RESULT_OK) ||
+					(stmtResult.resultType === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
 				) {
-					ret = stmtRes;
+					ret = stmtResult.resultType;
 				}
-				if (stmtRes == EVAL_RESULT_OK) {
+				if (stmtResult.resultType == EVAL_RESULT_OK) {
 					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 					endLocCount++;
 				}
@@ -1591,16 +1658,16 @@ class Compiler {
 				this.codeBlock.codeExt(PLW_LOPCODE_RAISE_EXCEPTION);
 			} else {
 				this.scope.clearVarStatTmp();
-				let stmtRes = this.evalStatement(expr.defaultStmt);
-				if (stmtRes.isError()) {
-					return stmtRes;
+				let stmtResult = this.evalStatement(expr.defaultStmt);
+				if (stmtResult.isError()) {
+					return stmtResult;
 				}
 				this.scope.clearVarStatTmp();
 				if (
-					(ret === null || stmtRes === EVAL_RESULT_OK) ||
-					(stmtRes === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
+					(ret === null || stmtResult.resultType === EVAL_RESULT_OK) ||
+					(stmtResult.resultType === EVAL_RESULT_RETURN && ret === EVAL_RESULT_RAISE)
 				) {
-					ret = stmtRes;
+					ret = stmtResult.resultType;
 				}
 			}
 			for (let i = 0; i < endLocCount; i++) {
@@ -1615,56 +1682,56 @@ class Compiler {
 				}
 			}
 			this.popScope();			
-			return ret;
+			return new EvalResultIR(ret, null);
 		}
 		if (expr.tag === "ast-if") {
-			let condType = this.eval(expr.condition);
-			if (condType.isError()) {
-				return condType;
+			let condResult = this.eval(expr.condition);
+			if (condResult.isError()) {
+				return condResult;
 			}
-			if (condType !== EVAL_TYPE_BOOLEAN) {
-				return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
+			if (condResult.resultType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(condResult.resultType, "boolean").fromExpr(expr.condition);	
 			}
 			let falseLoc = this.codeBlock.codeJz(0);
 			this.scope.clearVarStatTmp();
-			let trueRet =  this.evalStatement(expr.trueStatement);
-			if (trueRet.isError()) {
-				return trueRet;
+			let trueResult =  this.evalStatement(expr.trueStatement);
+			if (trueResult.isError()) {
+				return trueResult;
 			}
 			this.scope.clearVarStatTmp();
 			let endLoc = expr.falseStatement === null ? -1 : this.codeBlock.codeJmp(0);
 			this.codeBlock.setLoc(falseLoc);
 			if (expr.falseStatement === null) {
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, null);
 			}
-			let falseRet = this.evalStatement(expr.falseStatement);
-			if (falseRet.isError()) {
-				return falseRet;
+			let falseResult = this.evalStatement(expr.falseStatement);
+			if (falseResult.isError()) {
+				return falseResult;
 			}
 			this.scope.clearVarStatTmp();
 			this.codeBlock.setLoc(endLoc);
-			if (trueRet === EVAL_RESULT_RAISE && falseRet === EVAL_RESULT_RAISE) {
-				return EVAL_RESULT_RAISE; 
+			if (trueResult.resultType === EVAL_RESULT_RAISE && falseResult.resultType === EVAL_RESULT_RAISE) {
+				return new EvalResultIR(EVAL_RESULT_RAISE, null); 
 			}
 			if (
-				(trueRet === EVAL_RESULT_RETURN && falseRet !== EVAL_RESULT_OK) ||
-				(falseRet === EVAL_RESULT_RETURN && trueRet !== EVAL_RESULT_OK)
+				(trueResult.resultType === EVAL_RESULT_RETURN && falseResult.resultType !== EVAL_RESULT_OK) ||
+				(falseResult.resultType === EVAL_RESULT_RETURN && trueResult.resultType !== EVAL_RESULT_OK)
 			) {
-				return EVAL_RESULT_RETURN;
+				return new EvalResultIR(EVAL_RESULT_RETURN, null);
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-kindof-stmt") {
-			let caseType = this.eval(expr.caseExpr);
-			if (caseType.isError()) {
-				return caseType;
+			let caseResult = this.eval(expr.caseExpr);
+			if (caseResult.isError()) {
+				return caseResult;
 			}
-			if (caseType.structuralType().tag !== "res-type-variant") {
-				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
+			if (caseResult.resultType.structuralType().tag !== "res-type-variant") {
+				return EvalError.wrongType(caseResult.resultType, "variant").fromExpr(expr.caseExpr);
 			}
 			let kindHasWhen = [];
 			let returnCount = 0;
-			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
+			for (let i = 0; i < caseResult.resultType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
 			let endLocs = [];
@@ -1676,7 +1743,7 @@ class Compiler {
 				if (whenType.isError()) {
 					return whenType;
 				}
-				let typeIndex = caseType.structuralType().types.indexOf(whenType);
+				let typeIndex = caseResult.resultType.structuralType().types.indexOf(whenType);
 				if (typeIndex === -1) {
 					return EvalError.unknownVariantKind(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
@@ -1690,16 +1757,16 @@ class Compiler {
 				// If false, loop						
 				let nextLoc = this.codeBlock.codeJz(0);
 				// If true, resize the variant to the actual type size to make the when var
-				this.codeBlock.codePopVoid(caseType.slotCount() - whenType.slotCount());
+				this.codeBlock.codePopVoid(caseResult.resultType.slotCount() - whenType.slotCount());
 				this.pushScopeBlock();
 				this.scope.addVariable(expr.whens[i].varName, whenType, false);
 				this.scope.clearVarStatTmp();
-				let thenRet = this.evalStatement(expr.whens[i].thenBlock);
-				if (thenRet.isError()) {
-					return thenRet;
+				let thenResult = this.evalStatement(expr.whens[i].thenBlock);
+				if (thenResult.isError()) {
+					return thenResult;
 				}
 				this.scope.clearVarStatTmp();
-				if (thenRet === EVAL_RESULT_RETURN) {
+				if (thenResult.resultType === EVAL_RESULT_RETURN) {
 					returnCount++;
 				}
 				// Pop the when var
@@ -1711,16 +1778,16 @@ class Compiler {
 				this.codeBlock.setLoc(nextLoc);
 			}
 			// No match, we still have the case var on the stack, we pop it
-			this.codeBlock.codePopVoid(caseType.slotCount());
+			this.codeBlock.codePopVoid(caseResult.resultType.slotCount());
 			// Execute the else statement if there is one
 			if (expr.elseBlock !== null) {
 				this.scope.clearVarStatTmp();
-				let elseRet = this.evalStatement(expr.elseBlock);
-				if (elseRet.isError()) {
-					return elseRet;
+				let elseResult = this.evalStatement(expr.elseBlock);
+				if (elseResult.isError()) {
+					return elseResult;
 				}
 				this.scope.clearVarStatTmp();
-				if (elseRet === EVAL_RESULT_RETURN) {
+				if (elseResult.resultType === EVAL_RESULT_RETURN) {
 					for (let i = 0; i < kindHasWhen.length; i++) {
 						if (kindHasWhen[i] === false) {
 							returnCount++;
@@ -1731,23 +1798,23 @@ class Compiler {
 			for (let i = 0; i < endLocCount; i++) {
 				this.codeBlock.setLoc(endLocs[i]);
 			}
-			return returnCount === kindHasWhen.length ? EVAL_RESULT_RETURN : EVAL_RESULT_OK;
+			return new EvalResultIR(returnCount === kindHasWhen.length ? EVAL_RESULT_RETURN : EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-while") {
 			this.pushScopeLoop();
 			let testLoc = this.codeBlock.codeSize;
-			let conditionType = this.eval(expr.condition);
-			if (conditionType.isError()) {
-				return conditionType;
+			let conditionResult = this.eval(expr.condition);
+			if (conditionResult.isError()) {
+				return conditionResult;
 			}
-			if (conditionType !== EVAL_TYPE_BOOLEAN) {
-				return EvalError.wrongType(conditionType, "boolean").fromExpr(expr.condition);	
+			if (conditionResult.resultType !== EVAL_TYPE_BOOLEAN) {
+				return EvalError.wrongType(conditionResult.resultType, "boolean").fromExpr(expr.condition);	
 			}
 			let endLoc = this.codeBlock.codeJz(0);
 			this.scope.clearVarStatTmp();
-			let stmtRet = this.evalStatement(expr.statement);
-			if (stmtRet.isError()) {
-				return stmtRet;
+			let stmtResult = this.evalStatement(expr.statement);
+			if (stmtResult.isError()) {
+				return stmtResult;
 			}
 			this.scope.clearVarStatTmp();
 			this.codeBlock.codeJmp(testLoc);
@@ -1756,15 +1823,15 @@ class Compiler {
 				this.codeBlock.setLoc(this.scope.exitLocs[i]);
 			}
 			this.popScope();
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-loop") {
 			this.pushScopeLoop();
 			let beginLoc = this.codeBlock.codeSize;
 			this.scope.clearVarStatTmp();
-			let stmtRet = this.evalStatement(expr.statement);
-			if (stmtRet.isError()) {
-				return stmtRet;
+			let stmtResult = this.evalStatement(expr.statement);
+			if (stmtResult.isError()) {
+				return stmtResult;
 			}
 			this.scope.clearVarStatTmp();
 			this.codeBlock.codeJmp(beginLoc);
@@ -1772,27 +1839,27 @@ class Compiler {
 				this.codeBlock.setLoc(this.scope.exitLocs[i]);
 			}
 			this.popScope();
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
 				this.pushScopeLoop();
 				let startBoundExpr = expr.isReverse ? expr.sequence.upperBound : expr.sequence.lowerBound;
 				let endBoundExpr = expr.isReverse ? expr.sequence.lowerBound : expr.sequence.upperBound;				
-				let endBoundType = this.eval(endBoundExpr);
-				if (endBoundType.isError()) {
-					return endBoundType;
+				let endBoundResult = this.eval(endBoundExpr);
+				if (endBoundResult.isError()) {
+					return endBoundResult;
 				}
-				if (endBoundType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(endBoundType, "integer").fromExpr(endBoundExpr);
+				if (endBoundResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(endBoundResult.resultType, "integer").fromExpr(endBoundExpr);
 				}
 				let endBoundVar = this.scope.addVariable("_for_range_end_bound", EVAL_TYPE_INTEGER, false);
-				let startBoundType = this.eval(startBoundExpr);
-				if (startBoundType.isError()) {
-					return startBoundType;
+				let startBoundResult = this.eval(startBoundExpr);
+				if (startBoundResult.isError()) {
+					return startBoundResult;
 				}
-				if (startBoundType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(startBoundType, "integer").fromExpr(startBoundExpr);
+				if (startBoundResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(startBoundResult.result, "integer").fromExpr(startBoundExpr);
 				}
 				let indexVar = this.scope.addVariable(expr.index, EVAL_TYPE_INTEGER, false);
 				let testLoc = this.codeBlock.codeSize;
@@ -1805,9 +1872,9 @@ class Compiler {
 				}
 				let endLoc = this.codeBlock.codeJz(0);
 				this.scope.clearVarStatTmp();
-				let stmtRet = this.evalStatement(expr.statement);
-				if (stmtRet.isError()) {
-					return stmtRet;
+				let stmtResult = this.evalStatement(expr.statement);
+				if (stmtResult.isError()) {
+					return stmtResult;
 				}
 				this.scope.clearVarStatTmp();
 				this.codeBlock.codePush(1);
@@ -1825,42 +1892,42 @@ class Compiler {
 					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 				this.popScope();
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, null);
 			} else {
 				this.pushScopeLoop();
-				let sequence = this.eval(expr.sequence);
-				if (sequence.isError()) {
-					return sequence;
+				let sequenceResult = this.eval(expr.sequence);
+				if (sequenceResult.isError()) {
+					return sequenceResult;
 				}
-				sequence = sequence.structuralType();
-				if (sequence.tag == "res-type-sequence") {
-					let sequenceVar = this.scope.addVariable("_for_sequence", sequence, false);
+				let sequenceType = sequenceResult.resultType.structuralType();
+				if (sequenceType.tag == "res-type-sequence") {
+					let sequenceVar = this.scope.addVariable("_for_sequence", sequenceType, false);
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeExt(PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM);
-					let indexVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					let indexVar = this.scope.addVariable(expr.index, sequenceType.underlyingType, false);
 					let testLoc = this.codeBlock.codeSize;
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeExt(PLW_LOPCODE_HAS_GENERATOR_ENDED);
 					let endLoc = this.codeBlock.codeJnz(0);
 					this.scope.clearVarStatTmp();
-					let stmtRet = this.evalStatement(expr.statement);
-					if (stmtRet.isError()) {
-						return stmtRet;
+					let stmtResult = this.evalStatement(expr.statement);
+					if (stmtResult.isError()) {
+						return stmtResult;
 					}
 					this.scope.clearVarStatTmp();
 					this.codeBlock.codePushLocal(sequenceVar.offset);
 					this.codeBlock.codeExt(PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM);
-					for (let i = 0; i < sequence.underlyingType.slotCount(); i++) {
-						this.codeBlock.codePopLocal(indexVar.offset + sequence.underlyingType.slotCount() - 1 - i);
+					for (let i = 0; i < sequenceType.underlyingType.slotCount(); i++) {
+						this.codeBlock.codePopLocal(indexVar.offset + sequenceType.underlyingType.slotCount() - 1 - i);
 					}
 					this.codeBlock.codeJmp(testLoc);
 					this.codeBlock.setLoc(endLoc);
-				} else if (sequence.tag === "res-type-array") {
-					let arrayVar = this.scope.addVariable("_for_array", sequence, false);
-					let itemType = sequence.underlyingType;
+				} else if (sequenceType.tag === "res-type-array") {
+					let arrayVar = this.scope.addVariable("_for_array", sequenceType, false);
+					let itemType = sequenceType.underlyingType;
 					// Get the last_index of the array, multiply it by the itemSize
 					this.codeBlock.codeDup(1);
-					let lengthType = this.generateFunctionCall("last_index", 1, [sequence], EVAL_TYPE_INTEGER);
+					let lengthType = this.generateFunctionCall("last_index", 1, [sequenceType], EVAL_TYPE_INTEGER);
 					if (lengthType.isError()) {
 						return lengthType.fromExpr(expr);
 					}
@@ -1876,7 +1943,7 @@ class Compiler {
 					for (let i = 0; i < itemType.slotCount(); i++) {
 						this.codeBlock.codePush(0);
 					}
-					let itemVar = this.scope.addVariable(expr.index, sequence.underlyingType, false);
+					let itemVar = this.scope.addVariable(expr.index, sequenceType.underlyingType, false);
 					// Initialize the counter, 0 or last_index * itemSize if reverse
 					if (expr.isReverse === true) {
 						this.codeBlock.codePushLocal(lastIndexVar.offset);
@@ -1900,7 +1967,7 @@ class Compiler {
 					// Get the item in the array at the counter index
 					this.codeBlock.codePushLocal(arrayVar.offset);
 					this.codeBlock.codePushLocal(indexVar.offset);
-					this.codeBlock.codePush(sequence.underlyingType.slotCount());
+					this.codeBlock.codePush(sequenceType.underlyingType.slotCount());
 					this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
 					// Set the item variable
 					for (let i = 0; i < itemType.slotCount(); i++) {
@@ -1908,9 +1975,9 @@ class Compiler {
 					}
 					// Evaluate the loop statement
 					this.scope.clearVarStatTmp();
-					let stmtRet = this.evalStatement(expr.statement);
-					if (stmtRet.isError()) {
-						return stmtRet;
+					let stmtResult = this.evalStatement(expr.statement);
+					if (stmtResult.isError()) {
+						return stmtResult;
 					}
 					this.scope.clearVarStatTmp();
 					// Increment the counter, decrement if reverse
@@ -1934,7 +2001,7 @@ class Compiler {
 					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 				this.popScope();
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, null);
 			}
 			return EvalError.unknownType(expr.sequence.tag).fromExpr(expr.sequence);
 		}
@@ -1955,12 +2022,12 @@ class Compiler {
 				currentScope.exitLocs[currentScope.exitLocCount] = this.codeBlock.codeJmp(0);
 				currentScope.exitLocCount++;
 			} else {
-				let condType = this.eval(expr.condition);
-				if (condType.isError()) {
-					return condType;
+				let condResult = this.eval(expr.condition);
+				if (condResult.isError()) {
+					return condResult;
 				}
-				if (condType !== EVAL_TYPE_BOOLEAN) {
-					return EvalError.wrongType(condType, "boolean").fromExpr(expr.condition);	
+				if (condResult.resultType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(condResult.resultType, "boolean").fromExpr(expr.condition);	
 				}
 				let falseLoc = this.codeBlock.codeJz(0);
 				if (variableOffset > 0) {
@@ -1970,27 +2037,28 @@ class Compiler {
 				currentScope.exitLocCount++;
 				this.codeBlock.setLoc(falseLoc);
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-raise") {
-			let raiseType = this.eval(expr.expr);
-			if (raiseType.isError()) {
-				return raiseType;
+			let raiseResult = this.eval(expr.expr);
+			if (raiseResult.isError()) {
+				return raiseResult;
 			}
-			if (raiseType !== EVAL_TYPE_INTEGER) {
-				return EvalError.wrongType(raiseType, "integer").fromExpr(expr.expr);
+			if (raiseResult.resultType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(raiseResult.resultType, "integer").fromExpr(expr.expr);
 			}
 			this.codeBlock.codeExt(PLW_LOPCODE_RAISE_EXCEPTION);
-			return EVAL_RESULT_RAISE;
+			return new EvalResultIR(EVAL_RESULT_RAISE, null);
 		}
 		if (expr.tag === "ast-return") {
 			// Eval the returned expression
 			let retType = null;
 			if (expr.expr !== null) {
-				retType = this.eval(expr.expr);
-				if (retType.isError()) {
-					return retType;
+				let retResult = this.eval(expr.expr);
+				if (retResult.isError()) {
+					return retResult;
 				}
+				retType = retResult.resultType;
 			}
 			// Find frame scope
 			let frameScope = this.scope.findFrame();
@@ -2010,7 +2078,7 @@ class Compiler {
 				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
 			this.codeBlock.codeRet(retType === null ? 0 : retType.slotCount());
-			return EVAL_RESULT_RETURN;
+			return new EvalResultIR(EVAL_RESULT_RETURN, null);
 		}
 		if (expr.tag === "ast-yield") {
 			// Check that the frame is a generator
@@ -2019,17 +2087,17 @@ class Compiler {
 				return EvalError.unexpectedYield().fromExpr(expr);
 			}
 			// Eval the returned expression
-			let retType = this.eval(expr.expr);
-			if (retType.isError()) {
-				return retType;
+			let retResult = this.eval(expr.expr);
+			if (retResult.isError()) {
+				return retResult;
 			}
 			// Check the return type
-			if (retType !== frameScope.returnType) {
-				return EvalError.wrongType(retType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
+			if (retResult.resultType !== frameScope.returnType) {
+				return EvalError.wrongType(retResult.resultType, frameScope.returnType.typeKey()).fromExpr(expr.expr);
 			}
-			this.codeBlock.codePush(retType.slotCount());
+			this.codeBlock.codePush(retResult.resultType.slotCount());
 			this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-function-declaration") {
 			let parameterList = this.evalParameterList(expr.parameterList);
@@ -2046,7 +2114,7 @@ class Compiler {
 					return EvalError.functionAlreadyExists(macroFunc.functionKey()).fromExpr(expr);
 				}
 				this.context.addMacroFunction(macroFunc);
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, null);
 			}
 			let evalFunc = new EvalResultFunction(expr.functionName, parameterList, returnType, expr.isGenerator);
 			if (this.context.getFunction(evalFunc.functionKey()) !== null) {
@@ -2075,10 +2143,10 @@ class Compiler {
 					}
 					this.scope.endAddParameter();
 				}
-				let ret = this.evalStatement(expr.statement);
-				if (ret.isError()) {
+				let stmtResult = this.evalStatement(expr.statement);
+				if (stmtResult.isError()) {
 					this.context.removeFunction(evalFunc.functionKey());
-					return ret;
+					return stmtResult;
 				}
 				if (evalFunc.isGenerator === true) {
 					for (let i = 0; i < returnType.slotCount(); i++) {
@@ -2086,7 +2154,7 @@ class Compiler {
 					}
 					this.codeBlock.codePush(returnType.slotCount());
 					this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
-				} else if (ret !== EVAL_RESULT_RETURN) {
+				} else if (stmtResult.resultType !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
 				}
@@ -2096,7 +2164,7 @@ class Compiler {
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile function
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-procedure-declaration") {
 			let parameterList = this.evalParameterList(expr.parameterList);
@@ -2109,7 +2177,7 @@ class Compiler {
 					return EvalError.procedureAlreadyExists(macroProc.procedureKey()).fromExpr(expr);
 				}
 				this.context.addMacroProcedure(macroProc);
-				return EVAL_RESULT_OK;
+				return new EvalResultIR(EVAL_RESULT_OK, null);
 			}			
 			let evalProc = new EvalResultProcedure(expr.procedureName, parameterList);
 			if (this.context.getProcedure(evalProc.procedureKey()) !== null) {
@@ -2128,27 +2196,29 @@ class Compiler {
 						parameterList.parameters[i].parameterType);
 				}
 				this.scope.endAddParameter();
-				let ret = this.evalStatement(expr.statement);
-				if (ret.isError()) {
+				let stmtResult = this.evalStatement(expr.statement);
+				if (stmtResult.isError()) {
 					this.context.removeProcedure(evalProc.procedureKey());
-					return ret;
+					return stmtResult;
 				}
 				this.codeBlock.codeRet(0);
 				this.popScope();
 				this.codeBlock = oldCodeBlock;
 			} // End Compile procedure
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		if (expr.tag === "ast-procedure") {
 			let argTypes = [];
+			let irArgs = [];
 			let argSlotCount = 0;
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				let argType = this.eval(expr.argList.args[i]);
-				if (argType.isError()) {
-					return argType;
+				let argResult = this.eval(expr.argList.args[i]);
+				if (argResult.isError()) {
+					return argResult;
 				}
-				argTypes[i] = argType;
-				argSlotCount += argType.slotCount();
+				argTypes[i] = argResult.resultType;
+				irArgs[i] = argResult.ir;
+				argSlotCount += argResult.resultType.slotCount();
 			}
 			let procKey = expr.procedureName + "(";
 			for (let i = 0; i < expr.argList.argCount; i++) {
@@ -2190,13 +2260,13 @@ class Compiler {
 			} else {
 				this.codeBlock.codeCall(proc.codeBlockIndex);
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.callExtern(proc.procedureKey(), irArgs));
 		}
 		if (expr.tag === "ast-directive") {
 			if (expr.text === "suspend") {
 				this.codeBlock.codeSuspend();
 			}
-			return EVAL_RESULT_OK;
+			return new EvalResultIR(EVAL_RESULT_OK, null);
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
@@ -2218,55 +2288,55 @@ class Compiler {
 			if (v.stat !== null) {
 				v.stat.addReadLoc(this.codeBlock.currentLoc() - 1, expr);
 			}
-			return v.varType;
+			return new EvalResultIR(v.varType, null);
 		}
 		if (expr.tag === "ast-index") {
 			// evaluate the array ref
-			let indexedType = this.evalForMutate(expr.indexed);
-			if (indexedType.isError()) {
-				return indexedType;
+			let indexedResult = this.evalForMutate(expr.indexed);
+			if (indexedResult.isError()) {
+				return indexedResult;
 			}
-			let structType = indexedType.structuralType();
+			let structType = indexedResult.resultType.structuralType();
 			if (structType.tag !== "res-type-array") {
-				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
+				return EvalError.wrongType(indexedResut.resultType, "array").fromExpr(expr.indexed);
 			}
 			if (structType.underlyingType.slotCount() > 1) {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			// evaluate the index
-			let indexType = this.eval(expr.index);
-			if (indexType.isError()) {
-				return indexType;
+			let indexResult = this.eval(expr.index);
+			if (indexResult.isError()) {
+				return indexResult;
 			}
-			if (indexType !== EVAL_TYPE_INTEGER) {
-				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
+			if (indexResult.resultType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexResult.resultType, "integer").fromExpr(expr.index);
 			}
 			if (expr.indexTo !== null) {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			// push the result on the stack
 			this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET);
-			return structType.underlyingType;
+			return new EvalResultIR(structType.underlyingType, null);
 		}
 		if (expr.tag === "ast-field") {
-			let recordType = this.evalForMutate(expr.expr);
-			if (recordType.isError()) {
-				return recordType;
+			let recordResult = this.evalForMutate(expr.expr);
+			if (recordResult.isError()) {
+				return recordResult;
 			}
-			let structType = recordType.structuralType();
+			let structType = recordResult.resultType.structuralType();
 			if (structType.tag != "res-type-record") {
-				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
+				return EvalError.wrongType(recordResult.resultType, "record").fromExpr(expr.expr);
 			}
 			let field = structType.getField(expr.fieldName);
 			if (field === null) {
-				return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+				return EvalError.unknownField(expr.fieldName, recordResult.resultType.typeKey()).fromExpr(expr);
 			}
 			if (field.fieldType.slotCount() > 1) {
 				return EvalError.unassignable(expr.tag).fromExpr(expr);
 			}
 			this.codeBlock.codePush(field.offset);
 			this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_MUTABLE_OFFSET);
-			return field.fieldType;
+			return new EvalResultIR(field.fieldType, null);
 		}
 		return EvalError.unassignable(expr.tag).fromExpr(expr);
 	}
@@ -2280,60 +2350,79 @@ class Compiler {
 			if (asType === EVAL_TYPE_ANY) {
 				return EvalError.wrongType(asType, "not any").fromExpr(expr.exprType);				
 			}
-			let valueType = this.eval(expr.expr, asType);
-			if (valueType.isError()) {
-				return valueType;
+			let valueResult = this.eval(expr.expr, asType);
+			if (valueResult.isError()) {
+				return valueResult;
 			}
-			if (valueType === asType || valueType.structuralType() === asType.structuralType()) {
-				return asType;
+			if (valueResult.resultType === asType || valueResult.resultType.structuralType() === asType.structuralType()) {
+				return new EvalResultIR(asType, null);
 			}
-			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueType)) {
-				if (valueType.tag !== "res-type-variant") {
-					for (let i = 0; i < asType.structuralType().slotCount() - valueType.slotCount() - 1; i++) {
+			if (asType.structuralType().tag === "res-type-variant" && asType.structuralType().contains(valueResult.resultType)) {
+				if (valueResult.resultType.tag !== "res-type-variant") {
+					for (let i = 0; i < asType.structuralType().slotCount() - valueResult.resultType.slotCount() - 1; i++) {
 						this.codeBlock.codePush(0);
 					}
-					this.codeBlock.codePush(valueType.globalId);
+					this.codeBlock.codePush(valueResult.resultType.globalId);
 				}
-				return asType;
+				return new EvalResultIR(asType, null);
 			}
-			return EvalError.wrongType(valueType, asType.typeKey()).fromExpr(expr.expr);				
+			return EvalError.wrongType(valueResult.resultType, asType.typeKey()).fromExpr(expr.expr);				
 		}
 		if (expr.tag === "ast-value-boolean") {
 			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
-			return EVAL_TYPE_BOOLEAN;
+			return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 		}
 		if (expr.tag === "ast-null") {
-			return EVAL_TYPE_NULL;
+			return new EvalResultIR(EVAL_TYPE_NULL, null);
 		}
 		if (expr.tag === "ast-value-integer") {
 			this.codeBlock.codePush(expr.intValue);
-			return EVAL_TYPE_INTEGER;
+			return new EvalResultIR(EVAL_TYPE_INTEGER, PlwIR.i64(expr.intValue));
 		}
 		if (expr.tag === "ast-value-real") {
 			let floatId = this.codeBlock.addFloatConst(expr.realValue);
 			this.codeBlock.codePushf(floatId);
-			return EVAL_TYPE_REAL;
+			return new EvalResultIR(EVAL_TYPE_REAL, null);
 		}
 		if (expr.tag === "ast-value-text") {
 			if (expectedType === EVAL_TYPE_CHAR && expr.textValue.length === 1) {
 				this.codeBlock.codePush(expr.textValue.charCodeAt(0));
-				return EVAL_TYPE_CHAR;
+				return new EvalResultIR(EVAL_TYPE_CHAR, null);
 			}
 			let strId = this.codeBlock.addStrConst(expr.textValue);
 			this.codeBlock.codePush(strId);
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_STRING);
-			return EVAL_TYPE_TEXT;
+			// IR
+			let tmpVar = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
+			let ir = [
+				PlwIR.setVariable(tmpVar.isGlobal, [tmpVar.irIndex], PlwIR.createRef(PlwIR.i32((expr.textValue.length + 1) * 8))),
+				PlwIR.storeI32(
+					PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex),
+					PlwIR.i32(0),
+					PlwIR.i32(expr.textValue.length)
+				)
+			];
+			for (let i = 0; i < expr.textValue.length; i++) {
+				ir.push(PlwIR.storeI32(
+					PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex),
+					PlwIR.i32((i + 1) * 4),
+					PlwIR.i32(expr.textValue.charCodeAt(i))
+				));
+			}
+			ir.push(PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex));
+			tmpVar.isMoved = true;
+			return new EvalResultIR(EVAL_TYPE_TEXT, PlwIR.block(ir));
 		}
 		if (expr.tag === "ast-value-tuple") {
 			let itemTypes = [];
 			for (let i = 0; i < expr.itemCount; i++) {
-				let itemType = this.eval(expr.items[i]);
-				if (itemType.isError()) {
-					return itemType;
+				let itemResult = this.eval(expr.items[i]);
+				if (itemResult.isError()) {
+					return itemResult;
 				}
-				itemTypes[i] = itemType;
+				itemTypes[i] = itemResult.resultType;
 			}
-			return this.addType(new EvalTypeTuple(expr.itemCount, itemTypes));
+			return new EvalResultIR(this.addType(new EvalTypeTuple(expr.itemCount, itemTypes)), null);
 		}
 		if (expr.tag === "ast-value-array") {
 			if (expr.itemCount === 0) {
@@ -2345,49 +2434,49 @@ class Compiler {
 					}
 					this.codeBlock.codePush(0);
 					this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
-					return expectedType;
+					return new EvalResultIR(expectedType, null);
 				}
 			}
 			let itemType = null;
 			// Evalute the next items
 			for (let i = 0; i < expr.itemCount; i++) {
-				let currentItemType = this.eval(expr.items[i]);
-				if (currentItemType.isError()) {
-					return currentItemType;
+				let currentItemResult = this.eval(expr.items[i]);
+				if (currentItemResult.isError()) {
+					return currentItemResult;
 				}
 				if (itemType === null) {
-					itemType = currentItemType;
-				} else if (currentItemType !== itemType) {
-					return EvalError.wrongType(currentItemType, itemType.typeKey()).fromExpr(expr.items[i]);
+					itemType = currentItemResult.resultType;
+				} else if (currentItemResult.resultType !== itemType) {
+					return EvalError.wrongType(currentItemResult.resultType, itemType.typeKey()).fromExpr(expr.items[i]);
 				}
 			}
 			// Allocate the array
 			this.codeBlock.codePush(expr.itemCount * itemType.slotCount());
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
-			return this.addType(new EvalTypeArray(itemType));
+			return new EvalResultIR(this.addType(new EvalTypeArray(itemType)), null);
 		}
 		if (expr.tag === "ast-value-record") {
 			let fields = [];
 			for (let i = 0; i < expr.fieldCount; i++) {
-				let fieldValueType = this.eval(expr.fields[i].valueExpr);
-				if (fieldValueType.isError()) {
-					return fieldValueType;
+				let fieldValueResult = this.eval(expr.fields[i].valueExpr);
+				if (fieldValueResult.isError()) {
+					return fieldValueResult;
 				}
-				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueType);
+				fields[i] = new EvalTypeRecordField(expr.fields[i].fieldName, fieldValueResult.resultType);
 			}
 			let recordType = this.addType(new EvalTypeRecord(expr.fieldCount, fields));
 			this.codeBlock.codePush(recordType.fieldSlotCount);
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB);
-			return recordType;
+			return new EvalResultIR(recordType, null);
 		}
 		if (expr.tag === "ast-template") {
 			for (let i = 0; i < expr.exprCount; i++) {
-				let exprType = this.eval(expr.exprs[i]);
-				if (exprType.isError()) {
-					return exprType;
+				let exprResult = this.eval(expr.exprs[i]);
+				if (exprResult.isError()) {
+					return exprResult;
 				}
-				if (exprType !== EVAL_TYPE_TEXT) {
-					let convType = this.generateFunctionCall("text", 1, [exprType], EVAL_TYPE_TEXT);
+				if (exprResult.resultType !== EVAL_TYPE_TEXT) {
+					let convType = this.generateFunctionCall("text", 1, [exprResult.resultType], EVAL_TYPE_TEXT);
 					if (convType.isError()) {
 						return convType;
 					}
@@ -2400,119 +2489,122 @@ class Compiler {
 				this.codeBlock.codePush(expr.exprCount);
 				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);				
 			}
-			return EVAL_TYPE_TEXT;
+			return new EvalResultIR(EVAL_TYPE_TEXT, null);
 		}
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
+			let ir = [];
+			let tmpVars = [];
 			for (let i = 0; i < expr.itemCount; i++) {
-				{ // Optim: if the last item is an arrayValue, we use APPEND_BLOB instead of CONCAT_BLOB
-					if (
-						i == expr.itemCount - 1                                 &&
-						firstItemType !== null                                  &&
-						firstItemType.structuralType().tag === "res-type-array" &&
-						expr.items[i].tag === "ast-value-array"
-					) {
-						// first, concat if necessary the items up to the last one
-						if (expr.itemCount > 2) {
-							this.codeBlock.codePush(expr.itemCount - 1);
-							this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_BLOB);
-						}
-						// eval all the items of the arrayValue
-						let arrayValue = expr.items[i];
-						let expectedArrayItemType = firstItemType.structuralType().underlyingType;
-						for (let j = 0; j < arrayValue.itemCount; j++) {
-							let arrayItemType = this.eval(arrayValue.items[j]);
-							if (arrayItemType.isError()) {
-								return arrayItemType;
-							}
-							if (arrayItemType !== expectedArrayItemType) {
-								return EvalError.wrongType(arrayItemType, expectedArrayItemType.typeKey()).fromExpr(arrayValue.items[j]);
-							}
-						}
-						if (arrayValue.itemCount > 0) {
-							this.codeBlock.codePush(expectedArrayItemType.slotCount() * arrayValue.itemCount);
-							this.codeBlock.codeExt(PLW_LOPCODE_APPEND_BLOB_ITEM);
-						}
-						return firstItemType;
-					}
+				tmpVars[i] = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
+				tmpVars[i].isMoved = true;
+			}
+			let tmpSizeVars = [];
+			for (let i = 0; i < expr.itemCount; i++) {
+				tmpSizeVars[i] = this.scope.addVariable(null, EVAL_TYPE_INTEGER, false);
+			}
+			for (let i = 0; i < expr.itemCount; i++) {
+				let itemResult = this.eval(expr.items[i]);
+				if (itemResult.isError()) {
+					return itemResult;
 				}
-				let itemType = this.eval(expr.items[i]);
-				if (itemType.isError()) {
-					return itemType;
-				}
-				if (itemType.structuralType() !== EVAL_TYPE_TEXT && itemType.structuralType().tag !== "res-type-array") {
-					return EvalError.wrongType(itemType, "text or array").fromExpr(expr.items[i]);
+				if (itemResult.resultType.structuralType() !== EVAL_TYPE_TEXT &&
+					itemResult.resultType.structuralType().tag !== "res-type-array"
+				) {
+					return EvalError.wrongType(itemResult.resultType, "text or array").fromExpr(expr.items[i]);
 				}
 				if (i === 0) {
-					firstItemType = itemType;
-				} else if (firstItemType !== itemType) {
-					return EvalError.wrongType(itemType, firstItemType.typeKey()).fromExpr(expr.items[i]);
+					firstItemType = itemResult.resultType;
+				} else if (firstItemType !== itemResult.resultType) {
+					return EvalError.wrongType(itemResult.resultType, firstItemType.typeKey()).fromExpr(expr.items[i]);
 				}
+				ir.push(PlwIR.setVariable(tmpVars[i].isGlobal, tmpVars[i].irIndex, ir));
+				ir.push(PlwIR.setVariable(
+					tmpSizeVars[i].isGlobal, tmpSizeVars[i].irIndex,
+					PlwIR.loadI32(PlwIR.variable(tmpVars[i].isGlobal, tmpVars[i].irIndex))));
 			}
+			let irTotalSize = PlwIR.i32(0);
+			for (let i = 0; i < expr.itemCount; i++) {
+				irTotalSize = PlwIR.binOp(PLW_IR_OP_I32_ADD,
+					irTotalSize, PlwIR.variable(tmpSizeVars[i].isGlobal, tmpSizeVars[i].irIndex));
+			}
+			let tmpResultVar = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
+			tmpVars[i].isMoved = true;
+			for (let i = 0; i < expr.itemCount; i++) {
+				ir.push(PlwIR.setVariable(tmpResultVar.isGlobal, tmpResultVar.irIndex,
+					PlwIR.createRef(irTotalSize)));
+			}
+			let tmpOffsetVar = this.scope.addVariable(null, EVAL_TYPE_INTEGER, false);
+			ir.push(PlwIR.setVariable(tmpOffsetVar.isGlobal, tmpOffsetVar.irIndex, PlwIR.i32(4)));
+			for (let i = 0; i < expr.itemCount; i++) {
+				ir.push(PlwIR.memcopy(PlwIR., tmpResultVar.irIndex,
+					PlwIR.createRef(irTotalSize)));
+			}
+
 			this.codeBlock.codePush(expr.itemCount);
 			if (firstItemType.structuralType() === EVAL_TYPE_TEXT) {
 				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);
 			} else {
 				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_BLOB);
 			}
-			return firstItemType;
+			return new EvalResultIR(firstItemType, ir);
 		}
 		if (expr.tag === "ast-operator-binary") {
 			if (expr.operator === TOK_AND || expr.operator === TOK_OR) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				if (leftType !== EVAL_TYPE_BOOLEAN) {
-					return EvalError.wrongType(leftType, "boolean").fromExpr(expr.left);
+				if (leftResult.resultType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(leftResult.resultType, "boolean").fromExpr(expr.left);
 				}
 				let skipLoc = expr.operator === TOK_AND ? this.codeBlock.codeJz(0) : this.codeBlock.codeJnz(0);
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType !== EVAL_TYPE_BOOLEAN) {
-					return EvalError.wrongType(rightType, "boolean").fromExpr(expr.right);
+				if (rightResult.resultType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(rightResult.resultType, "boolean").fromExpr(expr.right);
 				}
 				let endLoc = this.codeBlock.codeJmp(0);
 				this.codeBlock.setLoc(skipLoc);
 				this.codeBlock.codePush(expr.operator === TOK_AND ? 0 : 1);
 				this.codeBlock.setLoc(endLoc);
-				return EVAL_TYPE_BOOLEAN;
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 			}
 			if (expr.operator === TOK_TIMES) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(right, "integer").fromExpr(expr.right);
+				if (rightResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(rightResult.resultType, "integer").fromExpr(expr.right);
 				}
-				this.codeBlock.codePush(leftType.slotCount());
+				this.codeBlock.codePush(leftResult.resultType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_CREATE_BLOB_REPEAT_ITEM);
-				return this.addType(new EvalTypeArray(leftType));
+				return new EvalResultIR(this.addType(new EvalTypeArray(leftResult.resultType)), null);
 			}
 			if (expr.operator === TOK_REM) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				if (leftType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(leftType, "integer").fromExpr(expr.left);
+				if (leftResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(leftResult.resultType, "integer").fromExpr(expr.left);
 				}
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType !== EVAL_TYPE_INTEGER) {
-					return EvalError.wrongType(rightType, "integer").fromExpr(expr.right);
+				if (rightResult.resultType !== EVAL_TYPE_INTEGER) {
+					return EvalError.wrongType(rightResult.resultType, "integer").fromExpr(expr.right);
 				}
 				this.codeBlock.codeRem();
-				return EVAL_TYPE_INTEGER;
+				return new EvalResultIR(EVAL_TYPE_INTEGER, null);
 			}
 			if (
 				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
@@ -2520,37 +2612,46 @@ class Compiler {
 				expr.operator === TOK_GT || expr.operator === TOK_LT ||
 				expr.operator === TOK_GTE || expr.operator === TOK_LTE
 			) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				if (leftType !== EVAL_TYPE_INTEGER && leftType !== EVAL_TYPE_REAL) {
-					return EvalError.wrongType(leftType, "integer or real").fromExpr(expr.left);
+				if (leftResult.resultType !== EVAL_TYPE_INTEGER && leftResult.resultType !== EVAL_TYPE_REAL) {
+					return EvalError.wrongType(leftResult.resultType, "integer or real").fromExpr(expr.left);
 				}
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType !== leftType) {
-					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
+				if (rightResult.resultType !== leftResult.resultType) {
+					return EvalError.wrongType(rightResult.resultType, leftResult.resultType.typeKey()).fromExpr(expr.right);
 				}
-				if (leftType === EVAL_TYPE_INTEGER) {
+				let irOp = -1;
+				if (leftResult.resultType === EVAL_TYPE_INTEGER) {
 					if (expr.operator === TOK_ADD) {
 						this.codeBlock.codeAdd();
+						irOp = PLW_IR_OP_I64_ADD;
 					} else if (expr.operator === TOK_SUB) {
 						this.codeBlock.codeSub();
+						irOp = PLW_IR_OP_I64_SUB;
 					} else if (expr.operator === TOK_DIV) {
 						this.codeBlock.codeDiv();
+						irOp = PLW_IR_OP_I64_DIV;
 					} else if (expr.operator === TOK_MUL) {
 						this.codeBlock.codeMul();
+						irOp = PLW_IR_OP_I64_MUL;
 					} else if (expr.operator === TOK_GT) {
 						this.codeBlock.codeGt();
+						irOp = PLW_IR_OP_I64_GT;
 					} else if (expr.operator === TOK_LT) {
 						this.codeBlock.codeLt();
+						irOp = PLW_IR_OP_I64_LT;
 					} else if (expr.operator === TOK_GTE) {
 						this.codeBlock.codeGte();
+						irOp = PLW_IR_OP_I64_GTE;
 					} else {
 						this.codeBlock.codeLte();
+						irOp = PLW_IR_OP_I64_LTE;
 					}
 				} else {
 					if (expr.operator === TOK_ADD) {
@@ -2575,74 +2676,75 @@ class Compiler {
 					expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
 					expr.operator === TOK_DIV || expr.operator === TOK_MUL
 				) {
-					return leftType;
+					return new EvalResultIR(leftResult.resultType, PlwIR.binOp(irOp, leftResult.ir, rightResult.ir));
 				}
-				return EVAL_TYPE_BOOLEAN;
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, PlwIR.binOp(irOp, leftResult.ir, rightResult.ir));
 			}
 			if (expr.operator === TOK_IN) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				let rightType = this.eval(expr.right);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType.structuralType().tag !== "res-type-array") {
-					return EvalError.wrongType(rightType, "array").fromExpr(expr.right);
+				if (rightResult.resultType.structuralType().tag !== "res-type-array") {
+					return EvalError.wrongType(rightResult.resultType, "array").fromExpr(expr.right);
 				}
-				if (leftType !== rightType.structuralType().underlyingType) {
-					return EvalError.wrongType(leftType, rightType.structuralType().underlyingType.typeKey()).fromExpr(expr.left);
+				if (leftResult.resultType !== rightResult.resultType.structuralType().underlyingType) {
+					return EvalError.wrongType(leftResult.resultType,
+						rightResult.resultType.structuralType().underlyingType.typeKey()).fromExpr(expr.left);
 				}
-				this.codeBlock.codePush(leftType.slotCount());
+				this.codeBlock.codePush(leftResult.resultType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_GET_BLOB_INDEX_OF_ITEM);
 				this.codeBlock.codePush(-1);
 				this.codeBlock.codeEq(1);
 				this.codeBlock.codeNot();				
-				return EVAL_TYPE_BOOLEAN;
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 			}
 			if (expr.operator === TOK_EQ || expr.operator === TOK_NE) {
-				let leftType = this.eval(expr.left);
-				if (leftType.isError()) {
-					return leftType;
+				let leftResult = this.eval(expr.left);
+				if (leftResult.isError()) {
+					return leftResult;
 				}
-				let rightType = this.eval(expr.right, leftType);
-				if (rightType.isError()) {
-					return rightType;
+				let rightResult = this.eval(expr.right, leftResult.resultType);
+				if (rightResult.isError()) {
+					return rightResult;
 				}
-				if (rightType !== leftType) {
-					return EvalError.wrongType(rightType, leftType.typeKey()).fromExpr(expr.right);
+				if (rightResult.resultType !== leftResult.resultType) {
+					return EvalError.wrongType(rightResult.resultType, leftResult.resultType.typeKey()).fromExpr(expr.right);
 				}
-				this.codeBlock.codeEq(leftType.slotCount());				
+				this.codeBlock.codeEq(leftResult.resultType.slotCount());				
 				if (expr.operator === TOK_NE) {
 					this.codeBlock.codeNot();
 				}
-				return EVAL_TYPE_BOOLEAN;
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 			}
 			return EvalError.unknownBinaryOperator(expr.operator).fromExpr(expr);
 		}
 		if (expr.tag === "ast-operator-unary") {
-			let operandType = this.eval(expr.operand);
-			if (operandType.isError()) {
-				return operandType;
+			let operandResult = this.eval(expr.operand);
+			if (operandResult.isError()) {
+				return operandResult;
 			}
 			if (expr.operator === TOK_NOT) {
-				if (operandType !== EVAL_TYPE_BOOLEAN) {
-					return EvalError.wrongType(operandType, "boolean").fromExpr(expr.operand);
+				if (operandResult.resultType !== EVAL_TYPE_BOOLEAN) {
+					return EvalError.wrongType(operandResult.resultType, "boolean").fromExpr(expr.operand);
 				}
 				this.codeBlock.codeNot();
-				return EVAL_TYPE_BOOLEAN;
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 			}
 			if (expr.operator === TOK_SUB) {
-				if (operandType !== EVAL_TYPE_INTEGER && operandType !== EVAL_TYPE_REAL) {
-					return EvalError.wrongType(operandType, "integer or real").fromExpr(expr.operand);
+				if (operandResult.resultType !== EVAL_TYPE_INTEGER && operandResult.resultType !== EVAL_TYPE_REAL) {
+					return EvalError.wrongType(operandResult.resultType, "integer or real").fromExpr(expr.operand);
 				}
-				if (operandType === EVAL_TYPE_INTEGER) {
+				if (operandResult.resultType === EVAL_TYPE_INTEGER) {
 					this.codeBlock.codeNeg();
 				} else {
 					this.codeBlock.codeNegf();
 				}
-				return operandType;
+				return new EvalResultIR(operandResult.resultType, null);
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
 		}
@@ -2661,26 +2763,33 @@ class Compiler {
 			if (v.stat !== null) {
 				v.stat.addReadLoc(this.codeBlock.currentLoc() - 1, expr);
 			}
-			return v.varType;
+			let ir = [];
+			for (let i = 0; i < v.varType.irTypes.length; i++) {
+				ir[i] = PlwIR.variable(v.isGlobal, v.irIndex + i);
+				if (v.varType.isRef === true) {
+					ir[i] = PlwIR.incRefCount(ir[i]);
+				}
+			}
+			return new EvalResultIR(v.varType, PlwIR.block(ir));
 		}
 		if (expr.tag === "ast-index") {
 			// evaluate the array ref
-			let indexedType = this.eval(expr.indexed);
-			if (indexedType.isError()) {
-				return indexedType;
+			let indexedResult = this.eval(expr.indexed);
+			if (indexedResult.isError()) {
+				return indexedResult;
 			}
-			let structType = indexedType.structuralType();
+			let structType = indexedResult.resultType.structuralType();
 			if (structType.tag !== "res-type-array") {
-				return EvalError.wrongType(indexedType, "array").fromExpr(expr.indexed);
+				return EvalError.wrongType(indexedResult.resultType, "array").fromExpr(expr.indexed);
 			}
 			let itemType = structType.underlyingType;
 			// evaluate the index
-			let indexType = this.eval(expr.index);
-			if (indexType.isError()) {
-				return indexType;
+			let indexResult = this.eval(expr.index);
+			if (indexResult.isError()) {
+				return indexResult;
 			}
-			if (indexType !== EVAL_TYPE_INTEGER) {
-				return EvalError.wrongType(indexType, "integer").fromExpr(expr.index);
+			if (indexResult.resultType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexResult.resultType, "integer").fromExpr(expr.index);
 			}
 			if (itemType.slotCount() > 1) {
 				this.codeBlock.codePush(itemType.slotCount());
@@ -2689,15 +2798,15 @@ class Compiler {
 			if (expr.indexTo === null) {
 				this.codeBlock.codePush(itemType.slotCount());
 				this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
-				return itemType;	
+				return new EvalResultIR(itemType, null);	
 			}
 			// indexTo is not null, we have a range index
-			let indexToType = this.eval(expr.indexTo);
-			if (indexToType.isError()) {
-				return indexToType;
+			let indexToResult = this.eval(expr.indexTo);
+			if (indexToResult.isError()) {
+				return indexToResult;
 			}
-			if (indexToType !== EVAL_TYPE_INTEGER) {
-				return EvalError.wrongType(indexToType, "integer").fromExpr(expr.indexTo);
+			if (indexToResult.resultType !== EVAL_TYPE_INTEGER) {
+				return EvalError.wrongType(indexToResult.resultType, "integer").fromExpr(expr.indexTo);
 			}
 			this.codeBlock.codePush(1);
 			this.codeBlock.codeAdd();
@@ -2706,48 +2815,51 @@ class Compiler {
 				this.codeBlock.codeMul();
 			}
 			this.codeBlock.codeExt(PLW_LOPCODE_SLICE_BLOB);
-			return indexedType;
+			return new EvalResultIR(indexedResult.resultType, null);
 		}		
 		if (expr.tag === "ast-field") {
-			let recordType = this.eval(expr.expr);
-			if (recordType.isError()) {
-				return recordType;
+			let recordResult = this.eval(expr.expr);
+			if (recordResult.isError()) {
+				return recordResult;
 			}
-			let structType = recordType.structuralType();
+			let structType = recordResult.resultType.structuralType();
 			if (structType.tag != "res-type-record") {
-				return EvalError.wrongType(recordType, "record").fromExpr(expr.expr);
+				return EvalError.wrongType(recordResult.resultType, "record").fromExpr(expr.expr);
 			}
 			let field = structType.getField(expr.fieldName);
 			if (field === null) {
-				return EvalError.unknownField(expr.fieldName, recordType.typeKey()).fromExpr(expr);
+				return EvalError.unknownField(expr.fieldName, recordResult.resultType.typeKey()).fromExpr(expr);
 			}
 			this.codeBlock.codePush(field.offset);
 			this.codeBlock.codePush(field.fieldType.slotCount());
 			this.codeBlock.codeExt(PLW_LOPCODE_READ_BLOB);
-			return field.fieldType;
+			return new EvalResultIR(field.fieldType, null);
 		}
 		if (expr.tag === "ast-function") {
 			let argTypes = [];
+			let irArgs = [];
 			for (let i = 0; i < expr.argList.argCount; i++) {
-				let argType = this.eval(expr.argList.args[i]);
-				if (argType.isError()) {
-					return argType;
+				let argResult = this.eval(expr.argList.args[i]);
+				if (argResult.isError()) {
+					return argResult;
 				}
-				argTypes[i] = argType;
+				argTypes[i] = argResult.resultType;
+				irArgs[i] = argResult.ir;
 			}
-			let resultType = this.generateFunctionCall(expr.functionName, expr.argList.argCount, argTypes, expectedType);
-			if (resultType.isError()) {
-				return resultType.fromExpr(expr);
+			let result = this.generateFunctionCall(expr.functionName, expr.argList.argCount, argTypes, expectedType, irArgs);
+			if (result.isError()) {
+				return result.fromExpr(expr);
 			}
-			return resultType;
+			return result;
 		}
 		if (expr.tag === "ast-case") {
 			let caseType = null;
 			if (expr.caseExpr !== null) {
-				caseType = this.eval(expr.caseExpr);
-				if (caseType.isError()) {
-					return caseType;
+				let caseResult = this.eval(expr.caseExpr);
+				if (caseResult.isError()) {
+					return caseResult;
 				}
+				caseType = caseResult.resultType;
 			}
 			let endLocs = [];
 			let endLocCount = 0;
@@ -2755,45 +2867,45 @@ class Compiler {
 			for (let i = 0; i < expr.whenCount; i++) {
 				if (caseType !== null) {
 					this.codeBlock.codeDup(caseType.slotCount());
-					let whenType = this.eval(expr.whens[i].whenExpr);
-					if (whenType.isError()) {
-						return whenType;
+					let whenResult = this.eval(expr.whens[i].whenExpr);
+					if (whenResult.isError()) {
+						return whenResult;
 					}
-					if (whenType !== caseType) {
-						return EvalError.wrongType(whenType, caseType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+					if (whenResult.resultType !== caseType) {
+						return EvalError.wrongType(whenResult.resultType, caseType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 					}
 					this.codeBlock.codeEq(caseType.slotCount());
 					let nextLoc = this.codeBlock.codeJz(0);
 					this.codeBlock.codePopVoid(caseType.slotCount());
-					let thenType = this.eval(expr.whens[i].thenExpr);
-					if (thenType.isError()) {
-						return thenType;
+					let thenResult = this.eval(expr.whens[i].thenExpr);
+					if (thenResult.isError()) {
+						return thenResult;
 					}
 					if (resultType === null) {
-						resultType = thenType;
-					} else if (thenType !== resultType) {
-						return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+						resultType = thenResult.resultType;
+					} else if (thenResult.resultType !== resultType) {
+						return EvalError.wrongType(thenResult.resultType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 					}
 					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 					endLocCount++;
 					this.codeBlock.setLoc(nextLoc);
 				} else {
-					let whenType = this.eval(expr.whens[i].whenExpr);
-					if (whenType.isError()) {
-						return whenType;
+					let whenResult = this.eval(expr.whens[i].whenExpr);
+					if (whenResult.isError()) {
+						return whenResult;
 					}
-					if (whenType !== EVAL_TYPE_BOOLEAN) {
-						return EvalError.wrongType(whenType, "boolean").fromExpr(expr.whens[i].whenExpr);
+					if (whenResult.resultType !== EVAL_TYPE_BOOLEAN) {
+						return EvalError.wrongType(whenResult.resultType, "boolean").fromExpr(expr.whens[i].whenExpr);
 					}
 					let nextLoc = this.codeBlock.codeJz(0);
-					let thenType = this.eval(expr.whens[i].thenExpr);
-					if (thenType.isError()) {
-						return thenType;
+					let thenResult = this.eval(expr.whens[i].thenExpr);
+					if (thenResult.isError()) {
+						return thenResult;
 					}
 					if (resultType === null) {
-						resultType = thenType;
-					} else if (thenType !== resultType) {
-						return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+						resultType = thenResult.resultType;
+					} else if (thenResult.resultType !== resultType) {
+						return EvalError.wrongType(thenResult.resultType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 					}
 					endLocs[endLocCount] = this.codeBlock.codeJmp(0);
 					endLocCount++;
@@ -2803,33 +2915,33 @@ class Compiler {
 			if (caseType !== null) {
 				this.codeBlock.codePopVoid(caseType.slotCount());
 			}
-			let elseType = this.eval(expr.elseExpr);
-			if (elseType.isError()) {
-				return elseType;
+			let elseResult = this.eval(expr.elseExpr);
+			if (elseResult.isError()) {
+				return elseResult;
 			}
 			if (resultType === null) {
-				resultType = elseType;
-			} else if (elseType !== resultType) {
-				return EvalError.wrongType(elseType, resultType.typeKey()).fromExpr(expr.elseExpr);
+				resultType = elseResult.resultType;
+			} else if (elseResult.resultType !== resultType) {
+				return EvalError.wrongType(elseResult.resultType, resultType.typeKey()).fromExpr(expr.elseExpr);
 			}
 			for (let i = 0; i < endLocCount; i++) {
 				this.codeBlock.setLoc(endLocs[i]);
 			}
-			return resultType;
+			return new EvalResultIR(resultType, null);
 		}
 		if (expr.tag === "ast-kindof") {
-			let caseType = this.eval(expr.caseExpr);
-			if (caseType.isError()) {
-				return caseType;
+			let caseResult = this.eval(expr.caseExpr);
+			if (caseResult.isError()) {
+				return caseResult;
 			}
-			if (caseType.structuralType().tag !== "res-type-variant") {
-				return EvalError.wrongType(caseType, "variant").fromExpr(expr.caseExpr);
+			if (caseResult.resultType.structuralType().tag !== "res-type-variant") {
+				return EvalError.wrongType(caseResult.resultType, "variant").fromExpr(expr.caseExpr);
 			}
 			let endLocs = [];
 			let endLocCount = 0;
 			let resultType = null;
 			let kindHasWhen = [];
-			for (let i = 0; i < caseType.structuralType().typeCount; i++) {
+			for (let i = 0; i < caseResult.resultType.structuralType().typeCount; i++) {
 				kindHasWhen[i] = false;
 			}
 			for (let i = 0; i < expr.whenCount; i++) {
@@ -2839,7 +2951,7 @@ class Compiler {
 				if (whenType.isError()) {
 					return whenType;
 				}
-				let typeIndex = caseType.structuralType().types.indexOf(whenType);
+				let typeIndex = caseResult.resultType.structuralType().types.indexOf(whenType);
 				if (typeIndex === -1) {
 					return EvalError.unknownVariantKind(whenType.typeKey()).fromExpr(expr.whens[i]);
 				}
@@ -2853,23 +2965,23 @@ class Compiler {
 				// If false, loop
 				let nextLoc = this.codeBlock.codeJz(0);
 				// If true, resize the variant type to the actual type size
-				this.codeBlock.codePopVoid(caseType.slotCount() - whenType.slotCount());
+				this.codeBlock.codePopVoid(caseResult.resultType.slotCount() - whenType.slotCount());
 				this.pushScopeBlock();
 				this.scope.addVariable(expr.whens[i].varName, whenType, true);
-				let thenType = this.eval(expr.whens[i].thenExpr);
-				if (thenType.isError()) {
-					return thenType;
+				let thenResult = this.eval(expr.whens[i].thenExpr);
+				if (thenResult.isError()) {
+					return thenResult;
 				}
 				if (resultType === null) {
-					resultType = thenType;
-				} else if (thenType !== resultType) {
-					return EvalError.wrongType(thenType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
+					resultType = thenResult.resultType;
+				} else if (thenResult.resultType !== resultType) {
+					return EvalError.wrongType(thenResult.resultType, resultType.typeKey()).fromExpr(expr.whens[i].whenExpr);
 				}
 				// Replace the when var with the then value, and pop the when var
-				this.codeBlock.codeSwap(whenType.slotCount() + thenType.slotCount());
+				this.codeBlock.codeSwap(whenType.slotCount() + thenResult.resultType.slotCount());
 				this.codeBlock.codePopVoid(whenType.slotCount());
-				if (thenType.slotCount() > 1) {
-					this.codeBlock.codeSwap(thenType.slotCount());
+				if (thenResult.resultType.slotCount() > 1) {
+					this.codeBlock.codeSwap(thenResult.resultType.slotCount());
 				}
 				this.popScope();
 				// We are done, goto end
@@ -2878,30 +2990,30 @@ class Compiler {
 				this.codeBlock.setLoc(nextLoc);
 			}
 			// No match, we still have the case var on the stack, we pop it
-			this.codeBlock.codePopVoid(caseType.slotCount());
+			this.codeBlock.codePopVoid(caseResult.resultType.slotCount());
 			// If there is no else expression, we check that all the kind where managed
 			// Otherwise we evaluate the else expression
 			if (expr.elseExpr === null) {
-				for (let i = 0; i < caseType.structuralType().typeCount; i++) {
+				for (let i = 0; i < caseResult.resultType.structuralType().typeCount; i++) {
 					if (kindHasWhen[i] === false) {
-						return EvalError.variantKindNotManaged(caseType.structuralType().types[i].typeKey()).fromExpr(expr);
+						return EvalError.variantKindNotManaged(caseResult.resultType.structuralType().types[i].typeKey()).fromExpr(expr);
 					}
 				}
 			} else {
-				let elseType = this.eval(expr.elseExpr);
-				if (elseType.isError()) {
-					return elseType;
+				let elseResult = this.eval(expr.elseExpr);
+				if (elseResult.isError()) {
+					return elseResult;
 				}
 				if (resultType === null) {
-					resultType = elseType;
-				} else if (elseType !== resultType) {
-					return EvalError.wrongType(elseType, resultType.typeKey()).fromExpr(expr.elseExpr);
+					resultType = elseResult;
+				} else if (elseResult.resultType !== resultType) {
+					return EvalError.wrongType(elseResult.resultType, resultType.typeKey()).fromExpr(expr.elseExpr);
 				}
 			}
 			for (let i = 0; i < endLocCount; i++) {
 				this.codeBlock.setLoc(endLocs[i]);
 			}
-			return resultType;
+			return new EvalResultIR(resultType, null);
 		}
 		return EvalError.unknownType(expr.tag).fromExpr(expr);
 	}
