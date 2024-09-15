@@ -73,7 +73,7 @@ const PLW_OPCODES = [
 	"RET",
 	"DUP",
 	"SWAP",
-	"INTERNAL"			
+	"INTERNAL"
 ];	
 
 const PLW_NOARG_OPCODES = [

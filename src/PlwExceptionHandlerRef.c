@@ -5,7 +5,6 @@
 
 struct PlwExceptionHandlerRef {
 	PlwAbstractRef super;
-	PlwInt codeBlockId;
 	PlwInt ip;
 	PlwInt bp;
 };
@@ -20,7 +19,7 @@ const PlwAbstractRefTag PlwExceptionHandlerRefTag = {
 	PlwExceptionHandlerRef_QuickDestroy
 };
 
-PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt codeBlockId, PlwInt ip, PlwInt bp, PlwError *error) {
+PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt ip, PlwInt bp, PlwError *error) {
 	PlwExceptionHandlerRef *ref;
 	PlwRefId refId;
 	ref = PlwAlloc(sizeof(PlwExceptionHandlerRef), error);
@@ -29,7 +28,6 @@ PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt codeBlockId, 
 	}
 	ref->super.tag = &PlwExceptionHandlerRefTag;
 	ref->super.refCount = 1;
-	ref->codeBlockId = codeBlockId;
 	ref->ip = ip;
 	ref->bp = bp;
 	refId = PlwRefManager_AddRef(refMan, ref, error);
@@ -38,10 +36,6 @@ PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt codeBlockId, 
 		return -1;
 	}
 	return refId;
-}
-
-PlwInt PlwExceptionHandlerRef_CodeBlockId(PlwExceptionHandlerRef *ref) {
-	return ref->codeBlockId;
 }
 
 PlwInt PlwExceptionHandlerRef_Ip(PlwExceptionHandlerRef *ref) {

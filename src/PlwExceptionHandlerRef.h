@@ -7,9 +7,7 @@ extern const char * const PlwExceptionHandlerRefTagName;
 struct PlwExceptionHandlerRef;
 typedef struct PlwExceptionHandlerRef PlwExceptionHandlerRef;
 
-PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt codeBlockId, PlwInt ip, PlwInt bp, PlwError *error);
-
-PlwInt PlwExceptionHandlerRef_CodeBlockId(PlwExceptionHandlerRef *ref);
+PlwRefId PlwExceptionHandlerRef_Make(PlwRefManager *refMan, PlwInt ip, PlwInt bp, PlwError *error);
 
 PlwInt PlwExceptionHandlerRef_Ip(PlwExceptionHandlerRef *ref);
 

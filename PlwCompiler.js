@@ -2072,6 +2072,7 @@ class Compiler {
 						this.scope.addParameter(
 							parameterList.parameters[i].parameterName,
 							parameterList.parameters[i].parameterType);
+						
 					}
 					this.scope.endAddParameter();
 				}

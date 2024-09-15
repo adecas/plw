@@ -47,29 +47,15 @@ while (parser.peekToken() !== TOK_EOF) {
 	}
 }
 
-let codeBlockId = compilerContext.codeBlocks.length;
-let codeBlocks = [...compilerContext.codeBlocks, ...rootCodeBlocks];
-let codeBlockCount = codeBlocks.length;
-let compiled = "" + codeBlockCount + " " + codeBlockId + "\n";
-for (let i = 0; i < codeBlockCount; i++) {
-	let cb = codeBlocks[i];
-	compiled += cb.blockName.length + " " + cb.blockName + "\n" + cb.strConstSize + "\n";
-	for (let j = 0; j < cb.strConstSize; j++) {
-		compiled += cb.strConsts[j].length + " " + cb.strConsts[j] + "\n";
-	}
-	compiled += cb.floatConstSize + "\n";
-	for (let j = 0; j < cb.floatConstSize; j++) {
-		compiled += cb.floatConsts[j] + "\n";
-	}		
-	compiled += cb.codeSize + "\n";
-	for (let j = 0; j < cb.codeSize; j++) {
-		compiled += cb.codes[j] + " ";
-		if (j % 50 == 49) {
-			compiled += "\n";
-		}
-	}
-	compiled += "\n";
+let mergedCodeBlock = new MergedCodeBlock();
+for (let i = 0; i < compilerContext.codeBlocks.length; i++) {
+	mergedCodeBlock.addCodeBlock(compilerContext.codeBlocks[i]);
 }
+mergedCodeBlock.beginEntryPoint();
+for (let i = 0; i < rootCodeBlocks.length; i++) {
+	mergedCodeBlock.addCodeBlock(rootCodeBlocks[i]);
+}
+mergedCodeBlock.endMerge();
 
-fs.writeFileSync(outFileName, compiled);
+fs.writeFileSync(outFileName, mergedCodeBlock.compiledFormat());
 

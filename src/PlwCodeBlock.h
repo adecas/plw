@@ -4,15 +4,17 @@
 #include "PlwCommon.h"
 
 typedef struct PlwCodeBlock {
-	char *name;
 	PlwInt codeCount;
 	PlwInt *codes;
 	PlwInt strConstCount;
 	char **strConsts;
 	PlwInt floatConstCount;
 	PlwFloat *floatConsts;
+	PlwInt entryPoint;
 } PlwCodeBlock;
 
-void PlwCodeBlock_Init(PlwCodeBlock *cb, char *name);
+PlwCodeBlock *PlwCodeBlock_Create(PlwError *error);
+
+void PlwCodeBlock_Destroy(PlwCodeBlock *codeBlock);
 		
 #endif

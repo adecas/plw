@@ -40,11 +40,7 @@ static void PlwLangOp_CreateString(PlwStackMachine *sm, PlwError *error) {
 		return;
 	}
 	strId = sm->stack[sm->sp - 1];
-	if (strId < 0 || strId >= sm->codeBlocks[sm->codeBlockId].strConstCount) {
-		PlwStackMachineError_StrConstAccessOutOfBound(error, sm->codeBlockId, strId);
-		return;
-	}
-	str = PlwStrDup(sm->codeBlocks[sm->codeBlockId].strConsts[strId], error);
+	str = PlwStrDup(sm->codeBlock->strConsts[strId], error);
 	if (PlwIsError(error)) {
 		return;
 	}
@@ -684,7 +680,7 @@ static void PlwLangOp_CreateExceptionHandler(PlwStackMachine *sm, PlwError *erro
 		return;
 	}
 	offset = sm->stack[sm->sp - 1];
-	refId = PlwExceptionHandlerRef_Make(sm->refMan, sm->codeBlockId, offset, sm->bp, error);
+	refId = PlwExceptionHandlerRef_Make(sm->refMan, offset, sm->bp, error);
 	if (PlwIsError(error)) {
 		return;
 	}
@@ -712,7 +708,7 @@ static void PlwLangOp_RaiseException(PlwStackMachine *sm, PlwError *error) {
 			}
 			if (AsPlwAbstractRef(ref)->tag->name == PlwExceptionHandlerRefTagName) {
 				sm->bp = PlwExceptionHandlerRef_Bp(ref);
-				PlwStackMachine_SetCodeBlockIdAndIp(sm, PlwExceptionHandlerRef_CodeBlockId(ref), PlwExceptionHandlerRef_Ip(ref), error);
+				PlwStackMachine_SetIp(sm, PlwExceptionHandlerRef_Ip(ref), error);
 				if (PlwIsError(error)) {
 					return;
 				}
@@ -801,7 +797,6 @@ static void PlwLangOp_GetGeneratorNextItem(PlwStackMachine *sm, PlwError *error)
 	PlwInt blobSize;
 	PlwInt *ptr;
 	PlwBoolean *mapPtr;
-	PlwInt codeBlockId;
 	PlwInt ip;
 	PlwInt i;
 	if (sm->sp < 1) {
@@ -824,7 +819,7 @@ static void PlwLangOp_GetGeneratorNextItem(PlwStackMachine *sm, PlwError *error)
 	if (PlwIsError(error)) {
 		return;
 	}	
-	sm->stack[sm->sp] = sm->codeBlockId;
+	sm->stack[sm->sp] = 0; /* sm->codeBlockId; */
 	sm->stackMap[sm->sp] = PlwFalse;
 	sm->sp++;
 	sm->stack[sm->sp] = sm->ip;
@@ -840,17 +835,8 @@ static void PlwLangOp_GetGeneratorNextItem(PlwStackMachine *sm, PlwError *error)
 		mapPtr[i + 2] = PlwFalse;
 		sm->sp++;
 	}
-	codeBlockId = ptr[0];
 	ip = ptr[1];
-	if (codeBlockId < 0 || codeBlockId >= sm->codeBlockCount) {
-		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, ip);
-		return;
-	}
-	if (ip < 0 || ip > sm->codeBlocks[codeBlockId].codeCount) {
-		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, ip);
-		return;
-	}
-	PlwStackMachine_SetCodeBlockIdAndIp(sm, codeBlockId, ip, error);
+	PlwStackMachine_SetIp(sm, ip, error);
 }
 
 /* has_generator_ended(refId Generator)
@@ -859,7 +845,6 @@ static void PlwLangOp_HasGeneratorEnded(PlwStackMachine *sm, PlwError *error) {
 	PlwRefId refId;
 	PlwBlobRef *ref;
 	PlwInt *ptr;
-	PlwInt codeBlockId;
 	PlwInt ended;
 	if (sm->sp < 1) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
@@ -875,12 +860,8 @@ static void PlwLangOp_HasGeneratorEnded(PlwStackMachine *sm, PlwError *error) {
 		return;
 	}
 	ptr = PlwBlobRef_Ptr(ref);
-	codeBlockId = ptr[0];
-	if (codeBlockId < 0 || codeBlockId >= sm->codeBlockCount) {
-		PlwStackMachineError_CodeAccessOutOfBound(error, codeBlockId, 0);
-		return;
-	}
-	ended = ptr[1] >= sm->codeBlocks[codeBlockId].codeCount ? 1 : 0;
+	/* TODO: fix generator */
+	ended = ptr[1] >= 0; /* sm->codeBlocks[codeBlockId].codeCount ? 1 : 0; */
 	PlwRefManager_DecRefCount(sm->refMan, sm->stack[sm->sp - 1], error);
 	if (PlwIsError(error)) {
 		return;
@@ -912,7 +893,6 @@ static void PlwLangOp_YieldGeneratorItem(PlwStackMachine *sm, PlwError *error) {
 	PlwInt i;
 	PlwInt previousBp;
 	PlwInt previousIp;
-	PlwInt previousCodeBlockId;
 	if (sm->sp < 1) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
@@ -940,14 +920,13 @@ static void PlwLangOp_YieldGeneratorItem(PlwStackMachine *sm, PlwError *error) {
 	}
 	previousBp = sm->stack[sm->bp - 1];
 	previousIp = sm->stack[sm->bp - 2];
-	previousCodeBlockId = sm->stack[sm->bp - 3];
 	for (i = 0; i < itemSize; i++) {
 		sm->stack[sm->bp - 4 + i] = sm->stack[sm->sp - itemSize - 1 + i];
 		sm->stackMap[sm->bp - 4 + i] = sm->stackMap[sm->sp - itemSize - 1 + i];
 	}
 	sm->sp = sm->bp - 4 + itemSize;
 	sm->bp = previousBp;
-	PlwStackMachine_SetCodeBlockIdAndIp(sm, previousCodeBlockId, previousIp, error);
+	PlwStackMachine_SetIp(sm, previousIp, error);
 	if (PlwIsError(error)) {
 		return;
 	}

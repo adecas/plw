@@ -97,137 +97,100 @@ char *PlwReadNextString(FILE *file, PlwError *error) {
 	return s;
 }
 
-void PlwReadCodeBlock(FILE *file, PlwCodeBlock *codeBlock, PlwError *error) {
-	char *name = NULL;
-	PlwInt strConstSize = 0;
-	char **strConsts = NULL;
-	PlwInt floatConstSize = 0;
-	PlwFloat *floatConsts = NULL;
-	PlwInt codeSize = 0;
-	PlwInt *codes = NULL;
+PlwCodeBlock *PlwReadCodeBlock(FILE *file, PlwError *error) {
 	PlwInt i;
+	PlwCodeBlock *cb = PlwCodeBlock_Create(error);
 	 
-	name = PlwReadNextString(file, error);
-	if (PlwIsError(error)) goto error;
-
-	strConstSize = PlwReadNextInt(file, error);
-	if (PlwIsError(error)) goto error;
-	
-	strConsts = PlwAlloc(strConstSize * sizeof(char *), error);
-	if (PlwIsError(error)) goto error;
-	memset(strConsts, 0, strConstSize * sizeof(char *));
-	
-	for (i = 0; i < strConstSize; i++) {
-		strConsts[i] = PlwReadNextString(file, error);
-		if (PlwIsError(error)) goto error;
+	cb->strConstCount = PlwReadNextInt(file, error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
 	}
 	
-	floatConstSize = PlwReadNextInt(file, error);
-	if (PlwIsError(error)) goto error;
+	cb->strConsts = PlwAlloc(cb->strConstCount * sizeof(char *), error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
+	}
+	memset(cb->strConsts, 0, cb->strConstCount * sizeof(char *));
 	
-	floatConsts = PlwAlloc(floatConstSize * sizeof(PlwFloat), error);	
-	if (PlwIsError(error)) goto error;
+	for (i = 0; i < cb->strConstCount; i++) {
+		cb->strConsts[i] = PlwReadNextString(file, error);
+		if (PlwIsError(error)) {
+			PlwCodeBlock_Destroy(cb);
+			return NULL;
+		}
+	}
 	
-	for (i = 0; i < floatConstSize; i++) {
-		floatConsts[i] = PlwReadNextFloat(file, error);
-		if (PlwIsError(error)) goto error;
+	cb->floatConstCount = PlwReadNextInt(file, error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
+	}
+	
+	cb->floatConsts = PlwAlloc(cb->floatConstCount * sizeof(PlwFloat), error);	
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
+	}
+	
+	for (i = 0; i < cb->floatConstCount; i++) {
+		cb->floatConsts[i] = PlwReadNextFloat(file, error);
+		if (PlwIsError(error)) {
+			PlwCodeBlock_Destroy(cb);
+			return NULL;
+		}
+	}
+	
+	cb->entryPoint = PlwReadNextInt(file, error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
 	}
 		
-	codeSize = PlwReadNextInt(file, error);
-	if (PlwIsError(error)) goto error;
-	
-	codes = PlwAlloc(codeSize * sizeof(PlwInt), error);
-	if (PlwIsError(error)) goto error;
-
-	for (i = 0; i < codeSize; i++) {
-		codes[i] = PlwReadNextInt(file, error);
-		if (PlwIsError(error)) goto error;
+	cb->codeCount = PlwReadNextInt(file, error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
 	}
 	
-	codeBlock->name = name;
-	codeBlock->strConstCount = strConstSize;
-	codeBlock->strConsts = strConsts;
-	codeBlock->floatConstCount = floatConstSize;
-	codeBlock->floatConsts = floatConsts;
-	codeBlock->codeCount = codeSize;
-	codeBlock->codes = codes;
-	return;
+	cb->codes = PlwAlloc(cb->codeCount * sizeof(PlwInt), error);
+	if (PlwIsError(error)) {
+		PlwCodeBlock_Destroy(cb);
+		return NULL;
+	}
 
-error:
-	if(name != NULL) PlwFree(name);
-	if (strConsts != NULL) {
-		for (i = 0; i < strConstSize; i++) {
-			if (strConsts[i] != NULL) PlwFree(strConsts[i]);
+	for (i = 0; i < cb->codeCount; i++) {
+		cb->codes[i] = PlwReadNextInt(file, error);
+		if (PlwIsError(error)) {
+			PlwCodeBlock_Destroy(cb);
+			return NULL;
 		}
-		PlwFree(strConsts);
 	}
-	PlwFree(floatConsts);
-	PlwFree(codes);	
+	
+	return cb;
 }
 
-void PlwFreeCodeBlocks(PlwCodeBlock *codeBlocks, PlwInt codeBlockCount) {
-	PlwInt i, j;
-	for (i = 0; i < codeBlockCount; i++) {
-		PlwFree(codeBlocks[i].name);
-		PlwFree(codeBlocks[i].codes);
-		for (j = 0; j < codeBlocks[i].strConstCount; j++) {
-			PlwFree(codeBlocks[i].strConsts[j]);
-		}
-		PlwFree(codeBlocks[i].strConsts);
-		PlwFree(codeBlocks[i].floatConsts);
-	}
-	PlwFree(codeBlocks);
-}	
-
-void PlwReadCodeBlocksFromFile(
+PlwCodeBlock *PlwReadCodeBlockFromFile(
 	const char *fileName,
-	PlwCodeBlock **outCodeBlocks,
-	PlwInt *outCodeBlockCount,
-	PlwInt *outCodeBlockId,
 	PlwError *error
 ) {
 	FILE *file;
-	PlwInt i;
-	PlwInt codeBlockCount;
-	PlwCodeBlock *codeBlocks;
-	PlwInt codeBlockId;
+	PlwCodeBlock *cb;
 	
 	file = fopen(fileName, "r");
 	if (file == NULL) {
 		PlwSetError(error, "FileNotFound", "File not found");
-		return;
+		return NULL;
 	}
 	
-	codeBlockCount = PlwReadNextInt(file, error);
+	cb = PlwReadCodeBlock(file, error);
 	if (PlwIsError(error)) {
 		fclose(file);
-		return;
+		return NULL;
 	}
-	codeBlockId = PlwReadNextInt(file, error);
-	if (PlwIsError(error)) {
-		fclose(file);
-		return;
-	}
-	codeBlocks = PlwAlloc(codeBlockCount * sizeof(PlwCodeBlock), error);
-	if (PlwIsError(error)) {
-		fclose(file);
-		return;
-	}
-	for (i = 0; i < codeBlockCount; i++) {
-		PlwReadCodeBlock(file, codeBlocks + i, error);
-		if (PlwIsError(error)) {
-			PlwFreeCodeBlocks(codeBlocks, i);
-			fclose(file);
-			return;
-		}
-#ifdef PLW_DEBUG_SM
-		printf("cs %ld: %s\n", i, codeBlocks[i].name);
-#endif
-	}
-	fclose(file);
-	*outCodeBlocks = codeBlocks;
-	*outCodeBlockCount = codeBlockCount;
-	*outCodeBlockId = codeBlockId;
+
+	return cb;
 }
 
 void PlwPrintError(PlwError *error) {
@@ -236,11 +199,8 @@ void PlwPrintError(PlwError *error) {
 
 int main(int argc, char **argv) {
 	PlwError error;
-	PlwCodeBlock *codeBlocks;
-	PlwInt codeBlockCount;
-	PlwInt codeBlockId;
+	PlwCodeBlock *cb;
 	PlwStackMachine *sm;
-	PlwInt i;
 	char *fileName;
 	
 	if (argc == 2) {
@@ -254,7 +214,7 @@ int main(int argc, char **argv) {
 	
 	PlwError_Init(&error);
 	
-	PlwReadCodeBlocksFromFile(fileName, &codeBlocks, &codeBlockCount, &codeBlockId, &error);
+	cb = PlwReadCodeBlockFromFile(fileName, &error);
 	if (PlwIsError(&error)) {
 		PlwPrintError(&error);
 		return -1;
@@ -263,25 +223,20 @@ int main(int argc, char **argv) {
 	sm = PlwStackMachine_Create(&error);
 	if (PlwIsError(&error)) {
 		PlwPrintError(&error);
-		PlwFreeCodeBlocks(codeBlocks, codeBlockCount);
+		PlwCodeBlock_Destroy(cb);
 		return -1;
 	}
 	
 	PlwStackMachine_SetExtops(sm, PlwLangOpcodeCount, PlwLangOps);
 	PlwStackMachine_SetNatives(sm, PlwNativeFunctionCount, PlwNativeFunctions);
-	PlwStackMachine_SetCodeBlocks(sm, codeBlockCount, codeBlocks);
-	
-	for (i = codeBlockId; i < codeBlockCount; i++) {
-		PlwStackMachine_Execute(sm, i, &error);
-		if (PlwIsError(&error)) {
-			PlwPrintError(&error);
-			PlwStackMachine_Destroy(sm);
-			PlwFreeCodeBlocks(codeBlocks, codeBlockCount);
-			return -1;
-		}
-	}	
+	PlwStackMachine_SetCodeBlock(sm, cb);
+	PlwStackMachine_RunLoop(sm, &error);
+	if (PlwIsError(&error)) {
+		PlwPrintError(&error);
+		PlwStackMachine_Destroy(sm);
+		return -1;
+	}
 	
 	PlwStackMachine_Destroy(sm);
-	PlwFreeCodeBlocks(codeBlocks, codeBlockCount);
 	return 0;
 }
