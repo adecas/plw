@@ -2086,7 +2086,7 @@ class Compiler {
 						this.codeBlock.codePush(0);
 					}
 					this.codeBlock.codePush(returnType.slotCount());
-					this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
+					this.codeBlock.codeExt(PLW_LOPCODE_END_GENERATOR);
 				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);

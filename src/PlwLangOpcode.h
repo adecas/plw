@@ -21,6 +21,7 @@
 #define PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				  15
 #define PLW_LOPCODE_HAS_GENERATOR_ENDED					  16
 #define PLW_LOPCODE_YIELD_GENERATOR_ITEM				  17
+#define PLW_LOPCODE_END_GENERATOR				          18
 
 extern const char *PlwLangOpcodes[];
 

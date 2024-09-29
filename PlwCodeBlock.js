@@ -332,7 +332,7 @@ class MergedCodeBlock {
 	}
 	
 	endMerge() {
-		this.fixCallsOffset();
+		return this.fixCallsOffset();
 	}
 	
 	fixCallsOffset() {
@@ -342,8 +342,14 @@ class MergedCodeBlock {
 			let arg = this.codes[codePos]; codePos++;
 			if (opcode === PLW_OPCODE_CALL) {
 				this.codes[codePos - 1] = this.items[arg].codeOffset;
+			} else if (opcode === PLW_OPCODE_EXT && arg === PLW_LOPCODE_CREATE_GENERATOR) {
+				if (codePos < 4 || this.codes[codePos - 4] !== PLW_OPCODE_PUSH) {
+					return "Invalid Create Generator args";
+				}
+				this.codes[codePos - 3] = this.items[this.codes[codePos - 3]].codeOffset;
 			}
 		}
+		return null;
 	}
 	
 	dump(println) {

@@ -24,7 +24,8 @@ const char *PlwLangOpcodes[] = {
 	"CREATE_GENERATOR",
 	"GET_GENERATOR_NEXT_ITEM",
 	"HAS_GENERATOR_ENDED",
-	"YIELD_GENERATOR_ITEM"
+	"YIELD_GENERATOR_ITEM",
+	"END_GENERATOR"
 };
 
 const PlwInt PlwLangOpcodeCount = sizeof(PlwLangOpcodes) / sizeof(char *);
@@ -730,24 +731,24 @@ static void PlwLangOp_RaiseException(PlwStackMachine *sm, PlwError *error) {
 	PlwStackMachineError_Exception(error, errorCode);
 }
 
-/* create_generator(param ...integer, paramCount integer, codeBlockId integer)
+/* create_generator(param ...integer, paramCount integer, ip integer)
  * layout of the created blob is:
- *     0:   codeBlockId
+ *     0:   hasEnded
  *     1:   ip
  *     2:   param1
  *     1+n: paramN
  */
 static void PlwLangOp_CreateGenerator(PlwStackMachine *sm, PlwError *error) {
-	PlwInt codeBlockId;
+	PlwInt ip;
 	PlwInt paramCount;
 	PlwInt *ptr;
 	PlwBoolean *mapPtr;
 	PlwRefId refId;
-	if (sm->sp < 1) {
+	if (sm->sp < 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
 		return;
 	}
-	codeBlockId = sm->stack[sm->sp - 1];
+	ip = sm->stack[sm->sp - 1];
 	paramCount = sm->stack[sm->sp - 2];
 	if (paramCount < 0 || sm->sp < paramCount + 2) {
 		PlwStackMachineError_StackAccessOutOfBound(error);
@@ -762,8 +763,8 @@ static void PlwLangOp_CreateGenerator(PlwStackMachine *sm, PlwError *error) {
 		PlwFree(ptr);
 		return;
 	}
-	ptr[0] = codeBlockId;
-	ptr[1] = 0;
+	ptr[0] = 0;
+	ptr[1] = ip;
 	mapPtr[0] = PlwFalse;
 	mapPtr[1] = PlwFalse;
 	memcpy(ptr + 2, sm->stack + sm->sp - paramCount - 2, paramCount * sizeof(PlwInt));
@@ -860,8 +861,7 @@ static void PlwLangOp_HasGeneratorEnded(PlwStackMachine *sm, PlwError *error) {
 		return;
 	}
 	ptr = PlwBlobRef_Ptr(ref);
-	/* TODO: fix generator */
-	ended = ptr[1] >= 0; /* sm->codeBlocks[codeBlockId].codeCount ? 1 : 0; */
+	ended = ptr[0];
 	PlwRefManager_DecRefCount(sm->refMan, sm->stack[sm->sp - 1], error);
 	if (PlwIsError(error)) {
 		return;
@@ -874,7 +874,7 @@ static void PlwLangOp_HasGeneratorEnded(PlwStackMachine *sm, PlwError *error) {
  * 
  * in a generator, the stack is like this:
  *      refId			 refId of the generator
- *		oldCodeBlockId
+ *		hasEnded
  *      oldIp
  *      oldBp
  *   bp param1			 this and below copied from the generator blob
@@ -913,6 +913,7 @@ static void PlwLangOp_YieldGeneratorItem(PlwStackMachine *sm, PlwError *error) {
 	}
 	ptr = PlwBlobRef_Ptr(ref);
 	mapPtr = PlwBlobRef_MapPtr(ref);
+	ptr[0] = 0;
 	ptr[1] = sm->ip;
 	for (i = 0; i < sm->sp - sm->bp - itemSize - 1; i++) {
 		ptr[i + 2] = sm->stack[sm->bp + i];
@@ -936,6 +937,60 @@ static void PlwLangOp_YieldGeneratorItem(PlwStackMachine *sm, PlwError *error) {
 	}	
 }
 
+static void PlwLangOp_EndGenerator(PlwStackMachine *sm, PlwError *error) {
+	PlwInt itemSize;
+	PlwRefId refId;
+	PlwBlobRef *ref;
+	PlwInt *ptr;
+	PlwBoolean *mapPtr;
+	PlwInt i;
+	PlwInt previousBp;
+	PlwInt previousIp;
+	if (sm->sp < 1) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	itemSize = sm->stack[sm->sp - 1];
+	if (sm->bp < 4 || itemSize < 0 || sm->sp < sm->bp + itemSize + 1) {
+		PlwStackMachineError_StackAccessOutOfBound(error);
+		return;
+	}
+	refId = sm->stack[sm->bp - 4];
+	ref = PlwRefManager_GetRefOfType(sm->refMan, refId, PlwBlobRefTagName, error);
+	if (PlwIsError(error)) {
+		return;
+	}	
+	PlwBlobRef_Resize(ref, 2 + (sm->sp - sm->bp) - itemSize - 1, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	ptr = PlwBlobRef_Ptr(ref);
+	mapPtr = PlwBlobRef_MapPtr(ref);
+	ptr[0] = 1;
+	ptr[1] = sm->ip;
+	for (i = 0; i < sm->sp - sm->bp - itemSize - 1; i++) {
+		ptr[i + 2] = sm->stack[sm->bp + i];
+		mapPtr[i + 2] = sm->stackMap[sm->bp + i];
+	}
+	previousBp = sm->stack[sm->bp - 1];
+	previousIp = sm->stack[sm->bp - 2];
+	for (i = 0; i < itemSize; i++) {
+		sm->stack[sm->bp - 4 + i] = sm->stack[sm->sp - itemSize - 1 + i];
+		sm->stackMap[sm->bp - 4 + i] = sm->stackMap[sm->sp - itemSize - 1 + i];
+	}
+	sm->sp = sm->bp - 4 + itemSize;
+	sm->bp = previousBp;
+	PlwStackMachine_SetIp(sm, previousIp, error);
+	if (PlwIsError(error)) {
+		return;
+	}
+	PlwRefManager_DecRefCount(sm->refMan, refId, error);		
+	if (PlwIsError(error)) {
+		return;
+	}	
+}
+
+
 const PlwNativeFunction PlwLangOps[] = {
 	PlwLangOp_CreateString,
 	PlwLangOp_ConcatString,
@@ -954,5 +1009,6 @@ const PlwNativeFunction PlwLangOps[] = {
 	PlwLangOp_CreateGenerator,
 	PlwLangOp_GetGeneratorNextItem,
 	PlwLangOp_HasGeneratorEnded,
-	PlwLangOp_YieldGeneratorItem
+	PlwLangOp_YieldGeneratorItem,
+	PlwLangOp_EndGenerator
 };

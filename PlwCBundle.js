@@ -2487,6 +2487,7 @@ const PLW_LOPCODE_CREATE_GENERATOR						= 14;
 const PLW_LOPCODE_GET_GENERATOR_NEXT_ITEM				= 15;
 const PLW_LOPCODE_HAS_GENERATOR_ENDED					= 16;
 const PLW_LOPCODE_YIELD_GENERATOR_ITEM					= 17;
+const PLW_LOPCODE_END_GENERATOR					        = 18;
 
 const PLW_LOPCODES = [
 	"CREATE_STRING",
@@ -2506,7 +2507,8 @@ const PLW_LOPCODES = [
 	"CREATE_GENERATOR",
 	"GET_GENERATOR_NEXT_ITEM",
 	"HAS_GENERATOR_ENDED",
-	"YIELD_GENERATOR_ITEM"
+	"YIELD_GENERATOR_ITEM",
+	"END_GENERATOR",
 ];
 
 "use strict";
@@ -2843,7 +2845,7 @@ class MergedCodeBlock {
 	}
 	
 	endMerge() {
-		this.fixCallsOffset();
+		return this.fixCallsOffset();
 	}
 	
 	fixCallsOffset() {
@@ -2853,8 +2855,14 @@ class MergedCodeBlock {
 			let arg = this.codes[codePos]; codePos++;
 			if (opcode === PLW_OPCODE_CALL) {
 				this.codes[codePos - 1] = this.items[arg].codeOffset;
+			} else if (opcode === PLW_OPCODE_EXT && arg === PLW_LOPCODE_CREATE_GENERATOR) {
+				if (codePos < 4 || this.codes[codePos - 4] !== PLW_OPCODE_PUSH) {
+					return "Invalid Create Generator args";
+				}
+				this.codes[codePos - 3] = this.items[this.codes[codePos - 3]].codeOffset;
 			}
 		}
+		return null;
 	}
 	
 	dump(println) {
@@ -5002,7 +5010,7 @@ class Compiler {
 						this.codeBlock.codePush(0);
 					}
 					this.codeBlock.codePush(returnType.slotCount());
-					this.codeBlock.codeExt(PLW_LOPCODE_YIELD_GENERATOR_ITEM);
+					this.codeBlock.codeExt(PLW_LOPCODE_END_GENERATOR);
 				} else if (ret !== EVAL_RESULT_RETURN) {
 					this.context.removeFunction(evalFunc.functionKey());
 					return EvalError.noFunctionReturn(evalFunc.functionKey()).fromExpr(expr.statement);
@@ -7595,6 +7603,8 @@ PLW_LOPS[PLW_LOPCODE_YIELD_GENERATOR_ITEM] = function(sm) {
 	}
 	return null;
 }
+
+PLW_LOPS[PLW_LOPCODE_END_GENERATOR] = PLW_LOPS[PLW_LOPCODE_YIELD_GENERATOR_ITEM];
 
 "use strict";
 
