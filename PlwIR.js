@@ -5,13 +5,12 @@
 const PLW_IR_TYPE_I32                   = 0;
 const PLW_IR_TYPE_I64                   = 1;
 const PLW_IR_TYPE_F64                   = 2;
-const PLW_IR_TYPE_PTR                   = 3;
+const PLW_IR_TYPE_REF                   = 3;
 
 const PLW_IR_TYPES = [
 	"i32",
 	"i64",
-	"f64",
-	"ptr"
+	"f64"
 ];
 
 const PLW_IR_OP_I64_EQ					= 0;					
@@ -24,7 +23,27 @@ const PLW_IR_OP_I64_ADD					= 6;
 const PLW_IR_OP_I64_SUB					= 7;
 const PLW_IR_OP_I64_MUL					= 8;
 const PLW_IR_OP_I64_DIV					= 9;
-const PLW_IR_OP_I32_EQ					= 10;					
+const PLW_IR_OP_I32_EQ					= 10;
+const PLW_IR_OP_I32_NE					= 11;
+const PLW_IR_OP_I32_LT                  = 12;
+const PLW_IR_OP_I32_LTE	                = 13;
+const PLW_IR_OP_I32_GT                  = 14;
+const PLW_IR_OP_I32_GTE	                = 15;
+const PLW_IR_OP_I32_ADD					= 16;
+const PLW_IR_OP_I32_SUB					= 17;
+const PLW_IR_OP_I32_MUL					= 18;
+const PLW_IR_OP_I32_DIV					= 19;
+
+class PlwIRRefType {
+
+	constructor(itemTypes, size) {
+		this.itemTypes = itemTypes;
+		this.size = size;
+		this.memSize = this.itemTypes.length * 8 * size;
+		this.decRcFuncId = -1;
+	}
+
+}			
 
 class PlwIRExpr {
 
@@ -189,6 +208,16 @@ class PlwIRCall extends PlwIRExpr {
 
 }
 
+class PlwIRCallInternal extends PlwIRExpr {
+
+	constructor(functionId, exprs) {
+		super("ir-call-internal");
+		this.functionId = functionId;
+		this.exprs = exprs;
+	}
+
+}
+
 class PlwIRCallExtern extends PlwIRExpr {
 
 	constructor(functionName, exprs) {
@@ -229,9 +258,19 @@ class PlwIRAlloc extends PlwIRExpr {
 
 class PlwIRCreateRef extends PlwIRExpr {
 
-	constructor(expr) {
+	constructor(refTypeId) {
 		super("ir-create-ref");
-		this.expr = expr;
+		this.refTypeId = refTypeId;
+	}
+
+}
+
+class PlwIRCreateDSRef extends PlwIRExpr {
+
+	constructor(refTypeId, sizeExpr) {
+		super("ir-create-dsref");
+		this.refTypeId = refTypeId;
+		this.sizeExpr = sizeExpr;
 	}
 
 }
@@ -247,9 +286,9 @@ class PlwIRIncRefCount extends PlwIRExpr {
 
 class PlwIRDecRefCount extends PlwIRExpr {
 
-	constructor(expr) {
+	constructor(localId) {
 		super("ir-dec-ref-count");
-		this.expr = expr;
+		this.localId = localId;
 	}
 
 }
@@ -274,20 +313,22 @@ class PlwIRFree extends PlwIRExpr {
 
 class PlwIRLoadI64 extends PlwIRExpr {
 
-	constructor(ptrExpr, offsetExpr) {
+	constructor(localId, fieldId, indexExpr) {
 		super("ir-load-i64");
-		this.ptrExpr = ptrExpr;
-		this.offsetExpr = offsetExpr;
+		this.localId = localId;
+		this.fieldId = fieldId;
+		this.indexExpr = indexExpr;
 	}
 
 }
 
 class PlwIRStoreI64 extends PlwIRExpr {
 
-	constructor(ptrExpr, offsetExpr, valueExpr) {
+	constructor(localId, fieldId, indexExpr, valueExpr) {
 		super("ir-store-i64");
-		this.ptrExpr = ptrExpr;
-		this.offsetExpr = offsetExpr;
+		this.localId = localId;
+		this.fieldId = fieldId;
+		this.indexExpr = indexExpr;
 		this.valueExpr = valueExpr;
 	}
 
@@ -295,20 +336,23 @@ class PlwIRStoreI64 extends PlwIRExpr {
 
 class PlwIRLoadI32 extends PlwIRExpr {
 
-	constructor(ptrExpr, offsetExpr) {
+	constructor(localId, fieldId, indexExpr, valueExpr) {
 		super("ir-load-i32");
-		this.ptrExpr = ptrExpr;
-		this.offsetExpr = offsetExpr;
+		this.localId = localId;
+		this.fieldId = fieldId;
+		this.indexExpr = indexExpr;
+		this.valueExpr = valueExpr;
 	}
 
 }
 
 class PlwIRStoreI32 extends PlwIRExpr {
 
-	constructor(ptrExpr, offsetExpr, valueExpr) {
+	constructor(localId, fieldId, indexExpr, valueExpr) {
 		super("ir-store-i32");
-		this.ptrExpr = ptrExpr;
-		this.offsetExpr = offsetExpr;
+		this.localId = localId;
+		this.fieldId = fieldId;
+		this.indexExpr = indexExpr;
 		this.valueExpr = valueExpr;
 	}
 
@@ -349,6 +393,10 @@ class PlwIR {
 		return new PlwIRCall(functionId, exprs);
 	}
 	
+	static callInternal(functionId, exprs) {
+		return new PlwIRCallInternal(functionId, exprs);
+	}
+	
 	static block(exprs) {
 		return exprs.length == 1 ? exprs[0] : new PlwIRBlock(exprs);
 	}
@@ -365,8 +413,12 @@ class PlwIR {
 		return new PlwIRMemcopy(destPtr, destOffset, srcPtr, srcOffset, size);
 	}
 	
-	static createRef(size) {
-		return new PlwIRCreateRef(size);
+	static createRef(typeId) {
+		return new PlwIRCreateRef(typeId);
+	}
+	
+	static createDSRef(typeId, sizeExpr) {
+		return new PlwIRCreateDSRef(typeId, sizeExpr);
 	}
 	
 	static incRefCount(expr) {
@@ -401,12 +453,12 @@ class PlwIR {
 		return isGlobal ? PlwIR.global(variableIds) : PlwIR.local(variableIds);
 	}
 	
-	static storeI64(ptrExpr, offsetExpr, valueExpr) {
-		return new PlwIRStoreI64(ptrExpr, offsetExpr, valueExpr);
+	static storeI64(localId, fieldId, indexExpr, valueExpr) {
+		return new PlwIRStoreI64(localId, fieldId, indexExpr, valueExpr);
 	}
 	
-	static loadI64(ptrExpr, offsetExpr) {
-		return new PlwIRLoadI64(ptrExpr, offsetExpr);
+	static loadI64(localId, fieldId, indexExpr) {
+		return new PlwIRLoadI64(localId, fieldId, indexExpr);
 	}
 	
 	static storeI32(ptrExpr, offsetExpr, valueExpr) {
@@ -442,12 +494,39 @@ class PlwIRFunction {
 
 class PlwIRModule {
 
-	constructor(moduleName, globals, functions) {
+	constructor(moduleName) {
 		this.moduleName = moduleName;
-		this.globals = globals;
-		this.functions = functions;
+		this.refTypes = [];
+		this.globals = [];
+		this.functions = [];
+	}
+
+	addRefType(refType) {
+		this.refTypes.push(refType);
+		
+		return this.refTypes.length - 1 + PLW_IR_TYPE_REF;
 	}
 	
+	refType(refTypeId) {
+		if (!this.isRefType(refTypeId)) {
+			throw new Error("not a ref type " + refTypeId);
+		}
+		return this.refTypes[refTypeId - PLW_IR_TYPE_REF];
+	}
+	
+	isRefType(refTypeId) {
+		return refTypeId >= PLW_IR_TYPE_REF && refTypeId - PLW_IR_TYPE_REF < this.refTypes.length;
+	}
+	
+	addGlobal(glob) {
+		this.globals.push(glob);
+		return this.globals.length - 1;
+	}
+	
+	addFunction(func) {
+		this.functions.push(func);
+		return this.functions.length - 1;
+	}
 }
 
 const PLW_WASM_OP = [
@@ -472,14 +551,14 @@ const PLW_RT_FUNC_DEC_REF_COUNT = 4;
 const PLW_RT_FUNC_DESTROY_REF = 5;
 
 const PLW_RT_FUNCS = [
-	new PlwIRFunction("MEM_alloc", "plwruntime", 1, [PLW_IR_TYPE_PTR], [PLW_IR_TYPE_I32], null),
-	new PlwIRFunction("MEM_free", "plwruntime", 1, [], [PLW_IR_TYPE_PTR], null),
-	new PlwIRFunction("REF_create", "plwruntime", 1, [PLW_IR_TYPE_PTR], [PLW_IR_TYPE_I32], null),
+	new PlwIRFunction("MEM_alloc", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
+	new PlwIRFunction("MEM_free", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null),
+	new PlwIRFunction("REF_create", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_incRc", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_decRc", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_destroy", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null), 
-	new PlwIRFunction("print(text)", "plwnative", 1, [], [PLW_IR_TYPE_PTR], null),
-	new PlwIRFunction("text(integer)", "plwnative", 1, [PLW_IR_TYPE_PTR], [PLW_IR_TYPE_I64], null)
+	// new PlwIRFunction("print(text)", "plwnative", 1, [], [PLW_IR_TYPE_I32], null),
+	// new PlwIRFunction("text(integer)", "plwnative", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I64], null)
 ];
 
 class PlwIRWasmCompiler {
@@ -533,11 +612,12 @@ class PlwIRWasmCompiler {
 		case PLW_IR_TYPE_F64:
 			return 124;
 		case PLW_IR_TYPE_I32:
-		case PLW_IR_TYPE_PTR:
 			return 127;
 		}
-		console.log("Unknown type " + irType);
-		return -1;
+		if (this.irModule.isRefType(irType)) {
+			return 127;
+		}
+		throw new Error("Unknown type " + irType);
 	}
 		
 	addFunctionType(func) {
@@ -574,6 +654,20 @@ class PlwIRWasmCompiler {
 				funcIndex++;
 			}
 		}
+		for (let i = 0; i < this.irModule.refTypes.length; i++) {
+			let refType = this.irModule.refTypes[i];
+			let refOffsets = [];
+			for (let j = 0; j < refType.itemTypes.length; j++) {
+				if (this.irModule.isRefType(refType.itemTypes[j])) {
+					refOffsets.push(j);
+				}
+			}
+			if (refOffsets.length > 0) {
+				if (refType.size > 0) {
+					// Generate a destructor
+				}
+			}
+		}
 		for (let i = 0; i < this.irModule.functions.length; i++) {
 			this.compileFunction(this.funcIndexMap[i], this.irModule.functions[i]);
 		}
@@ -591,16 +685,16 @@ class PlwIRWasmCompiler {
 		let bytes = [this.typeByte(globalType), 1];
 		switch (globalType) {
 		case PLW_IR_TYPE_I32:
-			bytes = bytes.concat(this.compileCode(PlwIR.i32(0)));
+			bytes = bytes.concat(this.compileCode(null, PlwIR.i32(0)));
 			break;
 		case PLW_IR_TYPE_I64:
-			bytes = bytes.concat(this.compileCode(PlwIR.i64(0)));
+			bytes = bytes.concat(this.compileCode(null, PlwIR.i64(0)));
 			break;
 		case PLW_IR_TYPE_F64:
-			bytes = bytes.concat(this.compileCode(PlwIR.f64(0)));
+			bytes = bytes.concat(this.compileCode(null, PlwIR.f64(0)));
 			break;
 		case PLW_IR_TYPE_PTR:
-			bytes = bytes.concat(this.compileCode(PlwIR.i32(0)));
+			bytes = bytes.concat(this.compileCode(null, PlwIR.i32(0)));
 			break;
 		}
 		this.globalSection[this.globalSection.length] = bytes.concat([11]);
@@ -620,7 +714,7 @@ class PlwIRWasmCompiler {
 			for (let i = 0; i < localCount; i++) {
 				codes = codes.concat([1], this.typeByte(func.locals[func.paramCount + i]));
 			}
-			codes = codes.concat(this.compileCode(func.expr), [11]);
+			codes = codes.concat(this.compileCode(func, func.expr), [11]);
 			this.codeSection[this.codeSection.length] = this.uintBytes(codes.length).concat(codes);
 			if (func.functionName !== null) {
 				this.exportSection[this.exportSection.length] = this.strBytes(func.functionName).concat([0], this.uintBytes(funcIndex));
@@ -628,11 +722,11 @@ class PlwIRWasmCompiler {
 		}
 	}
 	
-	compileCode(expr) {
+	compileCode(func, expr) {
 		if (expr.tag === "ir-return") {
 			let bytes = [];
 			for (let i = 0; i < expr.exprs.length; i++) {
-				bytes = bytes.concat(this.compileCode(expr.exprs[i]));
+				bytes = bytes.concat(this.compileCode(func, expr.exprs[i]));
 			}
 			return bytes.concat([15]);
 		}
@@ -645,35 +739,37 @@ class PlwIRWasmCompiler {
 		if (expr.tag === "ir-block") {
 			let bytes = [];
 			for (let i = 0; i < expr.exprs.length; i++) {
-				bytes = bytes.concat(this.compileCode(expr.exprs[i]));
+				bytes = bytes.concat(this.compileCode(func, expr.exprs[i]));
 			}
 			return bytes;
 		}
-		if (expr.tag === "ir-call" || expr.tag === "ir-call-extern") {
+		if (expr.tag === "ir-call" || expr.tag === "ir-call-extern" || expr.tag === "ir-call-internal") {
 			let bytes = [];
 			for (let i = 0; i < expr.exprs.length; i++) {
-				bytes = bytes.concat(this.compileCode(expr.exprs[i]));
+				bytes = bytes.concat(this.compileCode(func, expr.exprs[i]));
 			}
 			let funcId = 0;
 			if (expr.tag === "ir-call") {
 				funcId = this.funcIndexMap[expr.functionId];
+			} else if (expr.tag === "ir-call-internal") {
+				funcId = expr.functionId;
 			} else {
 				funcId = PlwIRWasmCompiler.findExternFuncIndex(expr.functionName);
 				if (funcId === -1) {
-					console.log("external function " + expr.functionName + " not found");
+					throw new Error("external function " + expr.functionName + " not found");
 				}
 			}
 			return bytes.concat([16], this.uintBytes(funcId));			
 		}
 		if (expr.tag === "ir-setlocal") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			for (let i = 0; i < expr.localIds.length; i++) {
 				bytes = bytes.concat([33], this.uintBytes(expr.localIds[expr.localIds.length - 1 - i]));
 			}
 			return bytes;
 		}
 		if (expr.tag === "ir-setglobal") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			for (let i = 0; i < expr.globalIds.length; i++) {
 				bytes = bytes.concat([36], this.uintBytes(expr.globalIds[expr.globalIds.length - 1 - i]));
 			}
@@ -686,18 +782,18 @@ class PlwIRWasmCompiler {
 			return [66].concat(this.intBytes(expr.intValue));
 		}
 		if (expr.tag === "ir-binop") {
-			let bytes = this.compileCode(expr.left).concat(this.compileCode(expr.right));
+			let bytes = this.compileCode(func, expr.left).concat(this.compileCode(func, expr.right));
 			return bytes.concat([PLW_WASM_OP[expr.op]]);
 		}
 		if (expr.tag === "ir-if") {
-			let bytes = this.compileCode(expr.condExpr);
+			let bytes = this.compileCode(func, expr.condExpr);
 			bytes = bytes.concat([4, 64]);
 			this.nestedLevel++;
 			if (expr.trueExpr !== null) {
-				bytes = bytes.concat(this.compileCode(expr.trueExpr));
+				bytes = bytes.concat(this.compileCode(func, expr.trueExpr));
 			}
 			if (expr.falseExpr !== null) {
-				bytes = bytes.concat([5], this.compileCode(expr.falseExpr));
+				bytes = bytes.concat([5], this.compileCode(func, expr.falseExpr));
 			}
 			this.nestedLevel--;
 			return bytes.concat(11);
@@ -705,7 +801,7 @@ class PlwIRWasmCompiler {
 		if (expr.tag === "ir-loop") {
 			this.pushBlockLevel();
 			this.nestedLevel += 2;
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			this.nestedLevel -= 2;
 			this.popBlockLevel();
 			bytes = [2, 64, 3, 64].concat(bytes, [12, 0, 11, 11]);
@@ -715,77 +811,145 @@ class PlwIRWasmCompiler {
 			return [12].concat(this.uintBytes(this.nestedLevel - this.topBlockLevel() - 1));
 		}
 		if (expr.tag === "ir-alloc") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_ALLOC));						
 		}
 		if (expr.tag === "ir-create-ref") {
-			let bytes = this.compileCode(expr.expr);
-			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_CREATE_REF));						
+			let refType = this.irModule.refType(expr.refTypeId);
+			if (refType.size === 0) {
+				throw new Error("invalid refTypeId " + irRefTypeId + " for ir-create-ref, a valid size is needed");
+			}
+			return [65].concat(this.intBytes(refType.memSize), [16], this.uintBytes(PLW_RT_FUNC_CREATE_REF));						
+		}
+		if (expr.tag === "ir-create-dsref") {
+			let refType = this.irModule.refType(expr.refTypeId);
+			if (refType.size !== 0) {
+				throw new Error("invalid refTypeId " + irRefTypeId + " for ir-create-dsref, must not have a size");
+			}
+			return this.compileCode(func,
+				PlwIR.callInternal(PLW_RT_FUNC_CREATE_REF, [
+					PlwIR.binOp(PLW_IR_OP_I32_ADD,
+						PlwIR.i32(4),
+						PlwIR.binOp(PLW_IR_OP_I32_MUL, refType.memSize, expr.sizeExpr)
+					)
+				]));
 		}
 		if (expr.tag === "ir-dec-ref-count") {
-			let bytes = this.compileCode(expr.expr);
-			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_DEC_REF_COUNT));						
+			let refType = this.irModule.refType(func.locals[expr.localId]);
+			return this.compileCode(func,
+				PlwIR.iff(
+					PlwIR.binOp(
+						PLW_IR_OP_I32_EQ,
+						PlwIR.i32(0),
+						PlwIR.callInternal(PLW_RT_FUNC_DEC_REF_COUNT, [PlwIR.local(expr.localId)])),
+					PlwIR.callInternal(PLW_RT_FUNC_DESTROY_REF, [PlwIR.local(expr.localId)]),
+					null)
+			);
 		}
 		if (expr.tag === "ir-inc-ref-count") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_INC_REF_COUNT));						
 		}		
 		if (expr.tag === "ir-destroy-ref") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_DESTROY_REF));						
 		}		
 		if (expr.tag === "ir-free") {
-			let bytes = this.compileCode(expr.expr);
+			let bytes = this.compileCode(func, expr.expr);
 			return bytes.concat([16], this.uintBytes(PLW_RT_FUNC_FREE));						
 		}
 		if (expr.tag === "ir-load-i64") {
+			let refTypeId = func.locals[expr.localId];
+			let refType = this.irModule.refType(refTypeId);
+			if (expr.fieldId < 0 || expr.fieldId > refType.itemTypes.length) {
+				throw new Error("Invalid fieldId " + expr.fieldId + " for type " + refTypeId);
+			}
+			if (expr.indexExpr.tag === "ir-i32") {
+				if (refType.size > 0) {
+					if (expr.indexExpr.intValue < 0 || expr.indexExpr.intValue >= refType.size) {
+						throw new Error("Invalid index " + expr.indexExpr.intValue + " for type " + refTypeId);
+					}
+				} else {
+					// TODO generate bound check code
+				}
+				return [
+					...this.compileCode(func, PlwIR.local(expr.localId)),
+					41, 3, this.uintBytes(expr.indexExpr.intValue * refType.memSize + expr.fieldId * 8)
+				];
+			}
+			// TODO generate bound check code
 			return [
-				...this.compileCode(expr.ptrExpr),
-				...this.compileCode(expr.offsetExpr),
+				...this.compileCode(func, PlwIR.local(expr.localId)),
+				...this.compileCode(func,
+					PlwIR.binOp(PLW_IR_OP_I32_ADD,
+						PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.memSize)),
+						PlwIR.i32(expr.fieldId * 8))),							
 				106,
 				41, 3, 0
 			];
 		}
 		if (expr.tag === "ir-memcopy") {
 			return [
-				...this.compileCode(expr.destPtr),
-				...this.compileCode(expr.destOffset),
+				...this.compileCode(func, expr.destPtr),
+				...this.compileCode(func, expr.destOffset),
 				106,
-				...this.compileCode(expr.srcPtr),
-				...this.compileCode(expr.srcOffset),
+				...this.compileCode(func, expr.srcPtr),
+				...this.compileCode(func, expr.srcOffset),
 				106,
-				...this.compileCode(expr.size),
+				...this.compileCode(func, expr.size),
 				0xFC, 10, 0, 0
 			];
 		}
 		if (expr.tag === "ir-store-i64") {
+			let refTypeId = func.locals[expr.localId];
+			let refType = this.irModule.refType(refTypeId);
+			if (expr.fieldId < 0 || expr.fieldId > refType.itemTypes.length) {
+				throw new Error("Invalid fieldId " + expr.fieldId + " for type " + refTypeId);
+			}
+			if (expr.indexExpr.tag === "ir-i32") {
+				if (refType.size > 0) {
+					if (expr.indexExpr.intValue < 0 || expr.indexExpr.intValue >= refType.size) {
+						throw new Error("Invalid index " + expr.indexExpr.intValue + " for type " + refTypeId);
+					}
+				} else {
+					// TODO generate bound check code
+				}
+				return [
+					...this.compileCode(func, PlwIR.local(expr.localId)),
+					...this.compileCode(func, expr.valueExpr),
+					55, 3, this.uintBytes(expr.indexExpr.intValue * refType.memSize + expr.fieldId * 8)
+				];
+			}
+			// TODO generate bound check code
 			return [
-				...this.compileCode(expr.ptrExpr),
-				...this.compileCode(expr.offsetExpr),
+				...this.compileCode(func, PlwIR.local(expr.localId)),
+				...this.compileCode(func,
+					PlwIR.binOp(PLW_IR_OP_I32_ADD,
+						PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.memSize)),
+						PlwIR.i32(expr.fieldId * 8))),							
 				106,
-				...this.compileCode(expr.valueExpr),
+				...this.compileCode(func, expr.valueExpr),
 				55, 3, 0
 			];
 		}
 		if (expr.tag === "ir-store-i32") {
 			return [
-				...this.compileCode(expr.ptrExpr),
-				...this.compileCode(expr.offsetExpr),
+				...this.compileCode(func, PlwIR.local(expr.localId)),
+				...this.compileCode(func, expr.offsetExpr),
 				106,
-				...this.compileCode(expr.valueExpr),
+				...this.compileCode(func, expr.valueExpr),
 				54, 2, 0
 			];
 		}
 		if (expr.tag === "ir-load-i32") {
 			return [
-				...this.compileCode(expr.ptrExpr),
-				...this.compileCode(expr.offsetExpr),
+				...this.compileCode(func, PlwIR.local(expr.localId)),
+				...this.compileCode(func, expr.offsetExpr),
 				106,
 				40, 3, 0
 			];
 		}		
-		console.log("Unknown tag " + expr.tag);
-		return [];
+		throw new Error("Unknown tag " + expr.tag);
 	}
 	
 	uintBytes(uint) {
