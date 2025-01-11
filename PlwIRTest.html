@@ -174,15 +174,13 @@ const IRF_AddPoints = testIRModule.addFunction(new PlwIRFunction("add_points", n
 	[IRT_Point],
 	[IRT_Point, IRT_Point, IRT_Point],
 	PlwIR.block([
-		PlwIR.setLocal([2], PlwIR.createRef(IRT_Point)),
-		PlwIR.storeI64(2, 0, PlwIR.i32(0),
+		PlwIR.setLocal([2], PlwIR.createRef(IRT_Point, [
 			PlwIR.binOp(PLW_IR_OP_I64_ADD,
 				PlwIR.loadI64(0, 0, PlwIR.i32(0)),
-				PlwIR.loadI64(1, 0, PlwIR.i32(0)))),
-		PlwIR.storeI64(2, 1, PlwIR.i32(0),
-			PlwIR.binOp(PLW_IR_OP_I64_ADD,
+				PlwIR.loadI64(1, 0, PlwIR.i32(0))),
+		PlwIR.binOp(PLW_IR_OP_I64_ADD,
 				PlwIR.loadI64(0, 1, PlwIR.i32(0)),
-				PlwIR.loadI64(1, 1, PlwIR.i32(0)))),		
+				PlwIR.loadI64(1, 1, PlwIR.i32(0)))])),		
 		PlwIR.ret([PlwIR.local(2)])
 	])
 ));
@@ -191,12 +189,8 @@ const IRF_TestAddPoints = testIRModule.addFunction(new PlwIRFunction("test_add_p
 	[],
 	[IRT_Point, IRT_Point, IRT_Point],
 	PlwIR.block([
-		PlwIR.setLocal([0], PlwIR.createRef(IRT_Point)),
-		PlwIR.setLocal([1], PlwIR.createRef(IRT_Point)),
-		PlwIR.storeI64(0, 0, PlwIR.i32(0), PlwIR.i64(42000000)),
-		PlwIR.storeI64(0, 1, PlwIR.i32(0), PlwIR.i64(51000000)),
-		PlwIR.storeI64(1, 0, PlwIR.i32(0), PlwIR.i64(12000000)),
-		PlwIR.storeI64(1, 1, PlwIR.i32(0), PlwIR.i64(34000000)),
+		PlwIR.setLocal([0], PlwIR.createRef(IRT_Point, [PlwIR.i64(42000000), PlwIR.i64(51000000)])),
+		PlwIR.setLocal([1], PlwIR.createRef(IRT_Point, [PlwIR.i64(12000000), PlwIR.i64(34000000)])),
 		PlwIR.setLocal([2], PlwIR.callf(IRF_AddPoints, [PlwIR.local(0), PlwIR.local(1)])),
 		PlwIR.callf(IRF_PrintI64, [PlwIR.loadI64(2, 0, PlwIR.i32(0))]),
 		PlwIR.callf(IRF_PrintI64, [PlwIR.loadI64(2, 1, PlwIR.i32(0))]),
@@ -211,13 +205,14 @@ const IRF_Greet = testIRModule.addFunction(new PlwIRFunction("greet", null, 1,
 	[IRT_Str, IRT_Str, IRT_Str],
 	PlwIR.block([
 		PlwIR.callf(IRF_PrintText, [PlwIR.local(0)]),
-		PlwIR.setLocal([1], PlwIR.createArrayRef(IRT_Str, PlwIR.i32(6))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(0), PlwIR.i32('H'.charCodeAt(0))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(1), PlwIR.i32('e'.charCodeAt(0))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(2), PlwIR.i32('l'.charCodeAt(0))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(3), PlwIR.i32('l'.charCodeAt(0))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(4), PlwIR.i32('o'.charCodeAt(0))),
-		PlwIR.storeI32(1, 0, PlwIR.i32(5), PlwIR.i32(' '.charCodeAt(0))),
+		PlwIR.setLocal([1], PlwIR.createArrayRef(IRT_Str, 6, [
+			PlwIR.i32('H'.charCodeAt(0)),
+			PlwIR.i32('e'.charCodeAt(0)),
+			PlwIR.i32('l'.charCodeAt(0)),
+			PlwIR.i32('l'.charCodeAt(0)),
+			PlwIR.i32('o'.charCodeAt(0)),
+			PlwIR.i32(' '.charCodeAt(0))
+		])),
 		PlwIR.callf(IRF_PrintText, [PlwIR.local(1)]),
 		PlwIR.setLocal([2], PlwIR.concatArray(PlwIR.local(1), PlwIR.local(0), IRT_Str)),
 		PlwIR.callf(IRF_PrintText, [PlwIR.local(2)]),
@@ -225,14 +220,17 @@ const IRF_Greet = testIRModule.addFunction(new PlwIRFunction("greet", null, 1,
 	])
 ));
 
+const IRF_NopStr = testIRModule.addFunction(new PlwIRFunction("nopstr", null, 1, [], [IRT_Str], PlwIR.ret([])));
+
 const IRF_TestGreet = testIRModule.addFunction(new PlwIRFunction("test_greet", null, 0, [], [IRT_Str, IRT_Str],
 	PlwIR.block([
-		PlwIR.setLocal([0], PlwIR.createArrayRef(IRT_Str, PlwIR.i32(5))),
-		PlwIR.storeI32(0, 0, PlwIR.i32(0), PlwIR.i32('W'.charCodeAt(0))),
-		PlwIR.storeI32(0, 0, PlwIR.i32(1), PlwIR.i32('o'.charCodeAt(0))),
-		PlwIR.storeI32(0, 0, PlwIR.i32(2), PlwIR.i32('r'.charCodeAt(0))),
-		PlwIR.storeI32(0, 0, PlwIR.i32(3), PlwIR.i32('l'.charCodeAt(0))),
-		PlwIR.storeI32(0, 0, PlwIR.i32(4), PlwIR.i32('d'.charCodeAt(0))),
+		PlwIR.setLocal([0], PlwIR.createArrayRef(IRT_Str, 5, [
+			PlwIR.i32('W'.charCodeAt(0)),
+			PlwIR.i32('o'.charCodeAt(0)),
+			PlwIR.i32('r'.charCodeAt(0)),
+			PlwIR.i32('l'.charCodeAt(0)),
+			PlwIR.i32('d'.charCodeAt(0))
+		])),
 		PlwIR.callf(IRF_Greet, [PlwIR.local(0)]),
 		PlwIR.ret([])
 	])
