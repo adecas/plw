@@ -185,10 +185,11 @@
 	(i32.store (local.get $ptr) (i32.const 1))
 	(i32.add (local.get $ptr) (i32.const 4)))
 	
-(func $REF_incRc (param $ptr i32)
+(func $REF_incRc (param $ptr i32) (result i32)
 	(local $countPtr i32)
 	(local.set $countPtr (i32.sub (local.get $ptr) (i32.const 4)))
-	(i32.store (local.get $countPtr) (i32.add (i32.load (local.get $countPtr)) (i32.const 1))))
+	(i32.store (local.get $countPtr) (i32.add (i32.load (local.get $countPtr)) (i32.const 1)))
+	(local.get $ptr))
 
 (func $REF_decRc (param $ptr i32) (result i32)
 	(local $countPtr i32)
@@ -198,6 +199,11 @@
 	(i32.store (local.get $countPtr) (local.get $count))
 	(local.get $count))
 	
+(func $REF_dupPtrValPtr (param $ptr i32) (param $val i32) (result i32) (result i32) (result i32)
+	(local.get $ptr)
+	(local.get $val)
+	(local.get $ptr))
+		
 (func $REF_destroy (param $ptr i32)
 	(call $MEM_free (i32.sub (local.get $ptr) (i32.const 4))))
 	
@@ -247,7 +253,7 @@
 	
 (func $REF_destroyArray (param $ptr i32)
 	(call $MEM_free (i32.sub (local.get $ptr) (i32.const 8))))
-	
+		
 (export "memory" (memory $memory))
 (export "MEM_firstFreeBlock" (global $MEM_firstFreeBlock))
 (export "MEM_lastBlock" (global $MEM_lastBlock))
@@ -257,6 +263,7 @@
 (export "REF_create" (func $REF_create))
 (export "REF_incRc" (func $REF_incRc))
 (export "REF_decRc" (func $REF_decRc))
+(export "REF_dupPtrValPtr" (func $REF_dupPtrValPtr)) 
 (export "REF_destroy" (func $REF_destroy))
 (export "REF_createArray" (func $REF_createArray))
 (export "REF_arraySize" (func $REF_arraySize))

@@ -302,6 +302,7 @@ class PlwIRLoadI32 extends PlwIRExpr {
 		this.localId = localId;
 		this.fieldId = fieldId;
 		this.indexExpr = indexExpr;
+		this.incRc = false;
 		this.toDecAfter = false;
 	}
 
@@ -315,6 +316,7 @@ class PlwIRStoreI32 extends PlwIRExpr {
 		this.fieldId = fieldId;
 		this.indexExpr = indexExpr;
 		this.valueExpr = valueExpr;
+		this.decRc = false;
 		this.toDecAfter = false;
 	}
 
@@ -419,6 +421,14 @@ class PlwIR {
 		return new PlwIRConcatArray(left, right, typeId);
 	}
 	
+	static loop(expr) {
+		return new PlwIRLoop(expr);
+	}
+	
+	static exitLoop() {
+		return new PlwIRExitLoop();
+	}
+	
 }
 
 class PlwIRFunction {
@@ -481,12 +491,13 @@ class PlwIRModule {
 
 class PlwIRRefCountAnalizer {
 	
-	constructor(func) {
+	constructor(irModule, func) {
+		this.irModule = irModule;
 		this.func = func;
 	}
 	
-	static analize(func) {
-		let analizer = new PlwIRRefCountAnalizer(func)
+	static analize(irModule, func) {
+		let analizer = new PlwIRRefCountAnalizer(irModule, func)
 		let toDec = analizer.evalExpr(func.expr, analizer.decAll());
 		for (let i = 0; i < func.paramCount; i++) {
 			if (toDec[i] === true) {
@@ -580,14 +591,36 @@ class PlwIRRefCountAnalizer {
 			}
 			return toDecBefore;
 		}
-		if (expr.tag === "ir-store-i64" || expr.tag === "ir-store-i32") {
+		if (expr.tag === "ir-store-i32") {
+			if (toDec[expr.localId] === true) {
+				expr.toDecAfter = true;
+				toDec[expr.localId] = false;
+			}
+			let refType = this.irModule.refType(this.func.locals[expr.localId]);
+			if (PlwIRUtil.isRef(refType.itemTypes[expr.fieldId])) {
+				expr.decRc = true;
+			}
+			return this.evalExpr(expr.valueExpr, toDec);
+		}
+		if (expr.tag === "ir-store-i64") {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] = false;
 			}
 			return this.evalExpr(expr.valueExpr, toDec);
 		}
-		if (expr.tag === "ir-load-i64" || expr.tag === "ir-load-i32") {
+		if (expr.tag === "ir-load-i32") {
+			if (toDec[expr.localId] === true) {
+				expr.toDecAfter = true;
+				toDec[expr.localId] =false;
+			}
+			let refType = this.irModule.refType(this.func.locals[expr.localId]);
+			if (PlwIRUtil.isRef(refType.itemTypes[expr.fieldId])) {
+				expr.incRc = true;
+			}
+			return toDec;
+		}
+		if (expr.tag === "ir-load-i64") {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] =false;
@@ -629,20 +662,22 @@ const PLW_WASM_OP = [
 	0x6D		// PLW_IR_OP_I32_DIV
 ];
 
-const PLW_RT_FUNC_REF_CREATE		= 0;
-const PLW_RT_FUNC_REF_INC_RC		= 1;
-const PLW_RT_FUNC_REF_DEC_RC		= 2;
-const PLW_RT_FUNC_REF_DESTROY		= 3;
-const PLW_RT_FUNC_REF_CREATE_ARRAY	= 4;
-const PLW_RT_FUNC_REF_ARRAY_SIZE	= 5;
-const PLW_RT_FUNC_REF_CONCAT_ARRAY	= 6;
-const PLW_RT_FUNC_REF_CONCAT_BASIC_ARRAY	= 7;
-const PLW_RT_FUNC_REF_DESTROY_ARRAY	= 8;
+const PLW_RT_FUNC_REF_CREATE				= 0;
+const PLW_RT_FUNC_REF_INC_RC				= 1;
+const PLW_RT_FUNC_REF_DEC_RC				= 2;
+const PLW_RT_FUNC_REF_DUP_PTR_VAL_PTR		= 3;
+const PLW_RT_FUNC_REF_DESTROY				= 4;
+const PLW_RT_FUNC_REF_CREATE_ARRAY			= 5;
+const PLW_RT_FUNC_REF_ARRAY_SIZE			= 6;
+const PLW_RT_FUNC_REF_CONCAT_ARRAY			= 7;
+const PLW_RT_FUNC_REF_CONCAT_BASIC_ARRAY	= 8;
+const PLW_RT_FUNC_REF_DESTROY_ARRAY			= 9;
 
 const PLW_RT_FUNCS = [
 	new PlwIRFunction("REF_create", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
-	new PlwIRFunction("REF_incRc", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null),
+	new PlwIRFunction("REF_incRc", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_decRc", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
+	new PlwIRFunction("REF_dupPtrValPtr", "plwruntime", 2, [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_destroy", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null), 
 	new PlwIRFunction("REF_createArray", "plwruntime", 2, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_arraySize", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
@@ -755,6 +790,12 @@ class PlwIRWasmTypeFuncGenerator {
 					block.push(PlwIR.storeI32(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
 				} else if (refType.itemTypes[j] === PLW_IR_TYPE_I64) {
 					block.push(PlwIR.storeI64(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
+				} else if (refType.itemTypes[j] === PLW_IR_TYPE_F64) {
+					block.push(PlwIR.storeF64(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
+				} else if (PlwIRUtil.isRef(refType.itemTypes[j])) {
+					block.push(PlwIR.storeI32(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
+				} else {
+					throw new Error("TODO: managed other types");
 				}
 				localIndex++;
 			}
@@ -782,6 +823,10 @@ class PlwIRWasmTypeFuncGenerator {
 					block.push(PlwIR.storeI32(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
 				} else if (refType.itemTypes[j] === PLW_IR_TYPE_I64) {
 					block.push(PlwIR.storeI64(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
+				} else if (refType.itemTypes[j] === PLW_IR_TYPE_F64) {
+					block.push(PlwIR.storeF64(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
+				} else if (PlwIRUtil.isRef(refType.itemTypes[j])) {
+					block.push(PlwIR.storeI32(resultLocalId, j, PlwIR.i32(i), PlwIR.local(localIndex)));
 				} else {
 					throw new Error("TODO: managed other types");
 				}
@@ -799,9 +844,9 @@ class PlwIRWasmTypeFuncGenerator {
 				for (let i = 0; i < refType.itemTypes.length; i++) {
 					if (PlwIRUtil.isRef(refType.itemTypes[i])) {
 						let innerType = this.irModule.refType(refType.itemTypes[i]);
-						block.push(PlwIR.callf(
+						destroyBlock.push(PlwIR.callf(
 							innerType.decRcFunctionId,
-							[PlwIR.loadi32(0, i, Plw.i32(idx))]));
+							[PlwIR.loadI32(0, i, PlwIR.i32(idx))]));
 					}
 				}
 			}
@@ -828,44 +873,32 @@ class PlwIRWasmTypeFuncGenerator {
 					PlwIR.callInternal(PLW_RT_FUNC_REF_DESTROY_ARRAY, [PlwIR.local(0)]),
 					null)).noautorc());
 		} else {
-			let destroyBlock = [];
+			let decRcItemBlock = [];
 			for (let i = 0; i < refType.itemTypes.length; i++) {
 				if (PlwIRUtil.isRef(refType.itemTypes[i])) {
 					let innerType = this.irModule.refType(refType.itemTypes[i]);
-					block.push(PlwIR.callf(
-						innerType.decRcFunctionId,
-						[PlwIR.loadI32(0, i, Plw.local(1))]));
+					decRcItemBlock.push(PlwIR.callf(innerType.decRcFunctionId, [PlwIR.loadI32(0, i, PlwIR.local(1))]));
 				}
 			}
-			if (destroyBlock.length > 0) {
-				destroyBlock = [
-					PlwIR.setLocal(1, PlwIR.i32(0)),
-					PlwIR.setLocal(2, PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(0)])),
-					PlwIR.loop(PlwIR.Block([
-						PlwIR.iff(PlwIR.binOp(PLW_IR_OP_I32_GTE, PlwIR.local(1), PlwIR.local(2)), PlwIR.exitLoop(), null),
-						].concat(destroyBlock).concat([
-							PlwIR.setLocal(1, PlwIR.binOp(PLW_IR_OP_I32_ADD, PlwIR.local(1), PlwIR.i32(1)))
-						])))];
-							
-			}
-			destroyBlock.push(PlwIR.callInternal(
-				PLW_RT_FUNC_REF_DESTROY,
-				[PlwIR.local(0)]));
-			block = [
-				PlwIR.iff(
-					PlwIR.binOp(
-						PLW_IR_OP_I32_EQ,
-						PlwIR.i32(0),
-						PlwIR.callInternal(PLW_RT_FUNC_REF_DEC_RC, [PlwIR.local(localId)])),
-					PlwIR.callInternal(destroyFuncId, [PlwIR.local(localId)]),
-					destroyBlock,
-					null)
-			];
+			let destroyBlock = [
+				PlwIR.setLocal([1], PlwIR.i32(0)),
+				PlwIR.setLocal([2], PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(0)])),
+				PlwIR.loop(PlwIR.block([
+					PlwIR.iff(
+						PlwIR.binOp(PLW_IR_OP_I32_GTE, PlwIR.local(1), PlwIR.local(2)),
+						PlwIR.exitLoop(),
+						null)]
+					.concat(decRcItemBlock)
+					.concat([PlwIR.setLocal([1], PlwIR.binOp(PLW_IR_OP_I32_ADD, PlwIR.local(1), PlwIR.i32(1)))]))),
+				PlwIR.callInternal(PLW_RT_FUNC_REF_DESTROY_ARRAY, [PlwIR.local(0)])];
 			refType.decRcFunctionId = this.irModule.addFunction(new PlwIRFunction("_gen_dec_rc_ref_" + refTypeId, null,
-				1, [], [refTypeId, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(block))).noautorc();;
+				1, [], [refTypeId, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32],
+				PlwIR.iff(
+					PlwIR.binOp(PLW_IR_OP_I32_EQ, PlwIR.i32(0), PlwIR.callInternal(PLW_RT_FUNC_REF_DEC_RC, [PlwIR.local(0)])),
+					PlwIR.block(destroyBlock),
+					null)).noautorc());
 		}
 	}
-
 }
 
 class PlwIRWasmCompiler {
@@ -1024,7 +1057,9 @@ class PlwIRWasmCompiler {
 				codes = codes.concat([1], this.typeByte(func.locals[func.paramCount + i]));
 			}
 			if (func.autorc === true) {
-				PlwIRRefCountAnalizer.analize(func);
+				PlwIRRefCountAnalizer.analize(this.irModule, func);
+			} else {
+				console.log(JSON.stringify(func, null, 2));
 			}
 			for (let i = 0; i < func.toDecBefore.length; i++) {
 				codes = codes.concat(this.decRefCountBytes(func, func.toDecBefore[i]));
@@ -1036,15 +1071,41 @@ class PlwIRWasmCompiler {
 			}
 		}
 	}
+	
+	targetFuncId(funcId) {
+		return this.funcIndexMap[funcId];
+	}
+	
+	localBytes(localId) {
+		return [32].concat(this.uintBytes(localId));
+	}
+	
+	loadI32Bytes(offset) {
+		return [40, 2].concat(this.uintBytes(offset));
+	}
+	
+	loadI64Bytes(offset) {
+		return [41, 3].concat(this.uintBytes(offset));
+	}
+	
+	callBytes(funcId) {
+		return [16].concat(this.uintBytes(funcId));
+	}
 
 	decRefCountBytes(func, localId) {	
 		let refType = this.irModule.refType(func.locals[localId]);
 		return this.compileCode(func, PlwIR.callf(refType.decRcFunctionId, [PlwIR.local(localId)]));
 	}
 	
-	incRefCountBytes(func, localId) {
-		return this.compileCode(func,
-			PlwIR.callInternal(PLW_RT_FUNC_REF_INC_RC, [PlwIR.local(localId)]));
+	decRefCountOffetBytes(func, localId, offset, itemTypeId) {
+		let itemType = this.irModule.refType(itemTypeId);
+		return this.localBytes(localId)
+			.concat(this.loadI32Bytes(offset))
+			.concat(this.callBytes(this.targetFuncId(itemType.decRcFunctionId)));
+	}
+	
+	incRefCountBytes() {
+		return this.callBytes(PLW_RT_FUNC_REF_INC_RC);
 	}
 	
 	compileCode(func, expr) {
@@ -1056,9 +1117,9 @@ class PlwIRWasmCompiler {
 			return bytes.concat([15]);
 		}
 		if (expr.tag === "ir-local") {
-			let bytes = [32].concat(this.uintBytes(expr.localId));
+			let bytes = this.localBytes(expr.localId);
 			if (PlwIRUtil.isRef(func.locals[expr.localId]) && expr.incRc === true) {
-				bytes = bytes.concat(this.incRefCountBytes(func, expr.localId));
+				bytes = bytes.concat(this.incRefCountBytes());
 			}
 			return bytes;
 		}
@@ -1077,13 +1138,7 @@ class PlwIRWasmCompiler {
 			for (let i = 0; i < expr.exprs.length; i++) {
 				bytes = bytes.concat(this.compileCode(func, expr.exprs[i]));
 			}
-			let funcId = 0;
-			if (expr.tag === "ir-call") {
-				funcId = this.funcIndexMap[expr.functionId];
-			} else {
-				funcId = expr.functionId;
-			}
-			return bytes.concat([16], this.uintBytes(funcId));
+			return bytes.concat(this.callBytes(expr.tag === "ir-call" ? this.targetFuncId(expr.functionId) : expr.functionId));
 		}
 		if (expr.tag === "ir-setlocal") {
 			let bytes = this.compileCode(func, expr.expr);
@@ -1176,8 +1231,6 @@ class PlwIRWasmCompiler {
 						expr.left, expr.right, PlwIR.i32(refType.itemSize)]));
 		}		
 		if (expr.tag === "ir-load-i64" || expr.tag === "ir-load-i32") {
-			let byteOp = expr.tag === "ir-load-i64" ? 41 : 40;
-			let byteAlign = expr.tag === "ir-load-i64" ? 3 : 2;
 			let refTypeId = func.locals[expr.localId];
 			let refType = this.irModule.refType(refTypeId);
 			if (expr.fieldId < 0 || expr.fieldId > refType.itemTypes.length) {
@@ -1191,24 +1244,26 @@ class PlwIRWasmCompiler {
 				} else {
 					// TODO generate bound check code
 				}
-				let bytes = [
-					...this.compileCode(func, PlwIR.local(expr.localId)),
-					byteOp, byteAlign,
-					this.uintBytes(expr.indexExpr.intValue * refType.itemSize + refType.itemOffsets[expr.fieldId])];
+				let bytes = this.compileCode(func, PlwIR.local(expr.localId))
+					.concat(expr.tag === "ir-load-i32" ?
+						this.loadI32Bytes(expr.indexExpr.intValue * refType.itemSize + refType.itemOffsets[expr.fieldId]) :
+						this.loadI64Bytes(expr.indexExpr.intValue * refType.itemSize + refType.itemOffsets[expr.fieldId]));
+				if (expr.tag === "ir-load-i32" && expr.incRc === true) {
+					bytes = bytes.concat(this.incRefCountBytes());
+				}
 				if (expr.toDecAfter === true) {
 					bytes = bytes.concat(this.decRefCountBytes(func, expr.localId));
 				}
 				return bytes;
 			}
 			// TODO generate bound check code
-			bytes = [
-				...this.compileCode(func,
-					PlwIR.binOp(PLW_IR_OP_I32_ADD,
-						PlwIR.local(expr.localId),
-						PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.itemSize)))),
-				byteOp, byteAlign,
-				this.uintBytes(refType.itemOffsets[expr.fieldId])			
-			];
+			let bytes = this.compileCode(func,
+				PlwIR.binOp(PLW_IR_OP_I32_ADD,
+					PlwIR.local(expr.localId),
+					PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.itemSize))))
+				.concat(expr.tag === "ir-load-i32" ?
+					this.loadI32Bytes(refType.itemOffsets[expr.fieldId]) :
+					this.loadI64Bytes(refType.itemOffsets[expr.fieldId]));
 			if (expr.toDecAfter === true) {
 				bytes = bytes.concat(this.decRefCountBytes(func, expr.localId));
 			}
@@ -1230,28 +1285,31 @@ class PlwIRWasmCompiler {
 				} else {
 					// TODO generate bound check code
 				}
-				let bytes = [
-					...this.compileCode(func, PlwIR.local(expr.localId)),
-					...this.compileCode(func, expr.valueExpr),
-					byteOp, byteAlign,
-					this.uintBytes(expr.indexExpr.intValue * refType.itemSize + refType.itemOffsets[expr.fieldId])
-				];
+				let bytes = this.compileCode(func, PlwIR.local(expr.localId)).concat(this.compileCode(func, expr.valueExpr));
+				let offset = expr.indexExpr.intValue * refType.itemSize + refType.itemOffsets[expr.fieldId];
+				if (expr.decRc === true) {
+					bytes = bytes.concat(this.decRefCountOffetBytes(func, expr.localId, offset, refType.itemTypes[expr.fieldId]));
+				}					
+				bytes = bytes.concat([byteOp, byteAlign]).concat(this.uintBytes(offset));
 				if (expr.toDecAfter === true) {
 					bytes = bytes.concat(this.decRefCountBytes(func, expr.localId));
 				}
 				return bytes;
 			}
 			// TODO generate bound check code
-			let bytes = [
-				...this.compileCode(func,
+			let bytes = this.compileCode(func,
 					PlwIR.binOp(PLW_IR_OP_I32_ADD,
 						PlwIR.local(expr.localId),
-						PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.memSize))),
-						PlwIR.i32(expr.fieldId * byteSize)),							
-				...this.compileCode(func, expr.valueExpr),
-				byteOp, byteAlign,
-				this.uintBytes(refType.itemOffsets[expr.fieldId])
-			];
+						PlwIR.binOp(PLW_IR_OP_I32_MUL, expr.indexExpr, PlwIR.i32(refType.memSize))))
+				.concat(this.compileCode(func, expr.valueExpr));
+			if (expr.decRc === true) {
+				let itemType = this.irModule.refType(refType.itemTypes[expr.fieldIs]);
+				bytes = bytes
+					.concat(this.callBytes(PLW_RT_FUNC_REF_DUP_PTR_VAL_PTR))
+					.concat(this.loadI32Bytes(refType.itemOffsets[expr.fieldId]))
+					.concat(this.callBytes(this.targetFuncId(itemType.decRcFunctionId)));
+			}	
+			bytes = bytes.concat([byteOp, byteAlign]).concat(this.uintBytes(refType.itemOffsets[expr.fieldId]));
 			if (expr.toDecAfter === true) {
 				bytes = bytes.concat(this.decRefCountBytes(func, expr.localId));
 			}
