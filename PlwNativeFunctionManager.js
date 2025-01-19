@@ -67,7 +67,8 @@ class NativeFunctionManager {
 				}
 				sm.sp -= 2;
 				return null;
-			})
+			}),
+			compiler.context.irModule.addFunction(new PlwIRFunction("print(text)", "plwnative", 1, [], EVAL_TYPE_TEXT.irTypes, null))
 		));
 
 		compiler.context.addFunction(EvalResultFunction.fromNative(
@@ -101,7 +102,8 @@ class NativeFunctionManager {
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
-			})
+			}),
+			compiler.context.irModule.addFunction(new PlwIRFunction("text(integer)", "plwnative", EVAL_TYPE_INTEGER.irTypes.length, EVAL_TYPE_TEXT.irTypes, EVAL_TYPE_INTEGER.irTypes, null))
 		));
 		
 		compiler.context.addFunction(EvalResultFunction.fromNative(
@@ -146,7 +148,8 @@ class NativeFunctionManager {
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
-			})
+			}),
+			compiler.context.irModule.addFunction(new PlwIRFunction("text(boolean)", "plwnative", EVAL_TYPE_BOOLEAN.irTypes.length, EVAL_TYPE_TEXT.irTypes, EVAL_TYPE_BOOLEAN.irTypes, null))
 		));
 							
 		compiler.context.addFunction(EvalResultFunction.fromNative(

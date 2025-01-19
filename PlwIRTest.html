@@ -274,6 +274,34 @@ const IRF_TestGreet = testIRModule.addFunction(new PlwIRFunction("test_greet", n
 	])
 ));
 
+const IRG_PiInt = testIRModule.addGlobal(PLW_IR_TYPE_I64);
+const IRG_PiTxt = testIRModule.addGlobal(IRT_Str);
+
+const IRF_TestGlobals = testIRModule.addFunction(new PlwIRFunction("test_globals", null, 0, [], [],
+	PlwIR.block([
+		PlwIR.setGlobal([IRG_PiInt], PlwIR.i64(3)),
+		PlwIR.setGlobal([IRG_PiTxt], PlwIR.createArrayRef(IRT_Str, 4, [
+			PlwIR.i32('3'.charCodeAt(0)),
+			PlwIR.i32('.'.charCodeAt(0)),
+			PlwIR.i32('1'.charCodeAt(0)),
+			PlwIR.i32('4'.charCodeAt(0))
+		])),
+		PlwIR.callf(IRF_PrintI64, [PlwIR.global(IRG_PiInt)]),
+		PlwIR.callf(IRF_PrintText, [PlwIR.global(IRG_PiTxt)]),
+		PlwIR.setGlobal([IRG_PiTxt], PlwIR.createArrayRef(IRT_Str, 7, [
+			PlwIR.i32('3'.charCodeAt(0)),
+			PlwIR.i32('.'.charCodeAt(0)),
+			PlwIR.i32('1'.charCodeAt(0)),
+			PlwIR.i32('4'.charCodeAt(0)),
+			PlwIR.i32('1'.charCodeAt(0)),
+			PlwIR.i32('5'.charCodeAt(0)),
+			PlwIR.i32('9'.charCodeAt(0))
+		])),
+		PlwIR.callf(IRF_PrintText, [PlwIR.global(IRG_PiTxt)]),
+	])
+));
+
+
 
 /*
 
@@ -343,7 +371,7 @@ const IRF_Main = testIRModule.addFunction(new PlwIRFunction("main", null, 0, [],
 		PlwIR.callf(IRF_TestAddPoints, []),
 		PlwIR.callf(IRF_TestPointList, []),
 		PlwIR.callf(IRF_TestGreet, []),
-		PlwIR.ret([])
+		PlwIR.callf(IRF_TestGlobals, [])
 	])
 ));
 

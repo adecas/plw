@@ -97,8 +97,8 @@ const EVAL_TYPE_INFER = new EvalTypeBuiltIn("_infer", false, null);
 const EVAL_TYPE_ANY = new EvalTypeBuiltIn("any", false, null);
 const EVAL_TYPE_INTEGER = new EvalTypeBuiltIn("integer", false, [PLW_IR_TYPE_I64]);
 const EVAL_TYPE_REAL = new EvalTypeBuiltIn("real", false, [PLW_IR_TYPE_F64]);
-const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", [PLW_IR_TYPE_I64]);
-const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true, [PLW_IR_TYPE_PTR]);
+const EVAL_TYPE_BOOLEAN = new EvalTypeBuiltIn("boolean", false, [PLW_IR_TYPE_I32]);
+const EVAL_TYPE_TEXT = new EvalTypeBuiltIn("text", true, null);
 
 class EvalTypeRecordField {
 	constructor(fieldName, fieldType) {
@@ -368,11 +368,13 @@ class EvalResultFunction extends EvalResult {
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
 		this.internalIndex = -1;
+		this.irIndex = -1;
 	}
 	
-	static fromNative(functionName, parameterList, returnType, nativeIndex) {
+	static fromNative(functionName, parameterList, returnType, nativeIndex, irIndex = -1) {
 		let nativeFunc = new EvalResultFunction(functionName, parameterList, returnType, false);
 		nativeFunc.nativeIndex = nativeIndex;
+		nativeFunc.irIndex = irIndex;
 		// console.log("Native function " + nativeIndex + ": " + nativeFunc.functionKey());
 		return nativeFunc;
 	}
@@ -404,11 +406,13 @@ class EvalResultProcedure extends EvalResult {
 		this.parameterList = parameterList;
 		this.codeBlockIndex = -1;
 		this.nativeIndex = -1;
+		this.irIndex = -1;
 	}
 	
-	static fromNative(procedureName, parameterList, nativeIndex) {
+	static fromNative(procedureName, parameterList, nativeIndex, irIndex = -1) {
 		let nativeProc = new EvalResultProcedure(procedureName, parameterList);
 		nativeProc.nativeIndex = nativeIndex;
+		nativeProc.irIndex = irIndex;
 		// console.log("Native procedure " + nativeIndex + ": " + nativeProc.procedureKey());
 		return nativeProc;
 	}
@@ -603,14 +607,14 @@ class EvalError extends EvalResult {
 class CompilerContext {
 	
 	constructor() {
-		this.globalScope = CompilerScope.makeGlobal();
+		this.irModule = new PlwIRModule("test");
+		this.globalScope = CompilerScope.makeGlobal(this.irModule);
 		this.types = {};
 		this.functions = {};
 		this.procedures = {};
 		this.macroFunctions = {};
 		this.macroProcedures = {};
 		this.codeBlocks = [];
-		this.irFuncs = [];
 		this.globalTypeIdSeq = 0;
 		this.addType(EVAL_TYPE_INFER);
 		this.addType(EVAL_TYPE_ANY);
@@ -662,6 +666,9 @@ class CompilerContext {
 		if (uniqueType === null) {
 			evalType.globalId = this.nextGlobalTypeId();
 			this.types[evalType.typeKey()] = evalType;
+			if (evalType === EVAL_TYPE_TEXT) {
+				evalType.irTypes = [this.irModule.addRefType(new PlwIRRefType([PLW_IR_TYPE_I32], 0))];
+			}
 			return evalType;
 		}
 		return uniqueType;
@@ -812,8 +819,10 @@ class CompilerVariable {
 
 class CompilerScope {
 
-	static makeGlobal() {
-		return new CompilerScope(null, false, false, false, null);
+	static makeGlobal(irModule) {
+		let scope = new CompilerScope(null, false, false, false, null);
+		scope.irModule = irModule;
+		return scope;
 	}
 	
 	static makeBlock(parent) {
@@ -833,6 +842,7 @@ class CompilerScope {
 	}
 	
 	constructor(parent, isFrame, isGenerator, isLoop, returnType) {
+		this.irModule = null;
 		this.parent = parent;
 		this.isFrame = isFrame;
 		this.isGenerator = isGenerator;
@@ -851,11 +861,23 @@ class CompilerScope {
 	}
 	
 	addIrVarTypes(irTypes) {
-		let firstIndex = this.irVarTypes.length;
-		for (let i = 0; i < irTypes.length; i++) {
-			this.irVarTypes[firstIndex + i] = irTypes[i];
+		if (this.parent === null) {
+			let firstIndex = -1;
+			for (let i = 0; i < irTypes.length; i++) {
+				if (i === 0) {
+					firstIndex = this.irModule.addGlobal(irTypes[i]);
+				} else {
+					this.irModule.addGlobal(irType[i]);
+				}
+			}
+			return firstIndex;
+		} else {
+			let firstIndex = this.irVarTypes.length;
+			for (let i = 0; i < irTypes.length; i++) {
+				this.irVarTypes[firstIndex + i] = irTypes[i];
+			}
+			return firstIndex;
 		}
-		return firstIndex;
 	}
 	
 	findFrame() {
@@ -978,24 +1000,7 @@ class Compiler {
 		}
 		return a;
 	}
-	
-	irPopScope() {
-		let ir = [];
-		for (let i = 0; i < this.scope.variableCount; i++) {
-			let variable = this.scope.variables[i];
-			if (variable.varType.isRef === true && variable.isMoved === false) {
-				ir.push(
-					PlwIR.iff(
-						PlwIR.binOp(PLW_IR_OP_I32_EQ,
-							PlwIR.decRefCount(PlwIR.variable(variable.isGlobal, variable.irIndex)),
-							PlwIR.i32(0)),
-						PlwIR.destroyRef(PlwIR.variable(variable.isGlobal, variable.irIndex)),
-						null));
-			}
-		}
-		return PlwIR.block(ir);
-	}
-	
+		
 	popScope() {
 		let msg = "";
 		for (let i = 0; i < this.scope.variableCount; i++) {
@@ -1147,11 +1152,9 @@ class Compiler {
 		for (let i = 0; i < argCount; i++) {
 			argSlotCount += argTypes[i].slotCount();
 		}
-		let ir = null;
 		if (func.nativeIndex !== -1) {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCallNative(func.nativeIndex);
-			ir = PlwIR.callExtern(funcKey, irExprs);
 		} else if (func.internalIndex !== -1) {
 			this.codeBlock.codeExt(func.internalIndex);
 		} else if (func.isGenerator === true) {
@@ -1161,9 +1164,8 @@ class Compiler {
 		} else {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCall(func.codeBlockIndex);
-			ir = PlwIR.callExtern(func.functionName, irExprs);
 		}
-		return new EvalResultIR(func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType, ir);
+		return new EvalResultIR(func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType, PlwIR.callf(func.irIndex, irExprs));
 	}
 			
 	generateFunctionFromMacro(functionName, argTypes, macroFunc) {
@@ -1431,10 +1433,16 @@ class Compiler {
 					return EvalError.wrongType(valueResult.resultType, variable.varType.typeKey()).fromExpr(expr.right);					
 				}
 				// assign the value
+				let ir = null;
 				if (variable.isGlobal) {
 					for (let i = valueResult.resultType.slotCount() - 1; i >= 0; i--) { 
 						this.codeBlock.codePopGlobal(variable.offset + i);
 					}
+					let globalIds = []; 
+					for (let i = 0; i < valueResult.resultType.irTypes.length; i++) {
+						globalIds[i] = variable.irIndex + i;
+					}
+					ir = PlwIR.setGlobal(globalIds, valueResult.ir);
 				} else {
 					for (let i = valueResult.resultType.slotCount() - 1; i >= 0; i--) { 
 						this.codeBlock.codePopLocal(variable.offset + i);
@@ -1443,7 +1451,7 @@ class Compiler {
 				if (variable.stat !== null) {
 					variable.stat.addReset();
 				}
-				return new EvalResultIR(EVAL_RESULT_OK, valueResult.ir);
+				return new EvalResultIR(EVAL_RESULT_OK, ir);
 			}
 			if (expr.left.tag === "ast-value-tuple") {
 				let tupleExpr = expr.left;
@@ -1585,7 +1593,6 @@ class Compiler {
 					this.codeBlock.codePopVoid(this.scope.variableOffset);
 				}
 			}
-			irStmts.push(this.irPopScope());
 			this.popScope();
 			if (expr.exception === null) {
 				return new EvalResultIR(ret, PlwIR.block(irStmts));
@@ -2260,7 +2267,7 @@ class Compiler {
 			} else {
 				this.codeBlock.codeCall(proc.codeBlockIndex);
 			}
-			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.callExtern(proc.procedureKey(), irArgs));
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.callf(proc.irIndex, irArgs));
 		}
 		if (expr.tag === "ast-directive") {
 			if (expr.text === "suspend") {
@@ -2370,7 +2377,7 @@ class Compiler {
 		}
 		if (expr.tag === "ast-value-boolean") {
 			this.codeBlock.codePush(expr.boolValue ? 1 : 0);
-			return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
+			return new EvalResultIR(EVAL_TYPE_BOOLEAN, PlwIR.i32(expr.boolValue ? 1 : 0));
 		}
 		if (expr.tag === "ast-null") {
 			return new EvalResultIR(EVAL_TYPE_NULL, null);
@@ -2392,26 +2399,11 @@ class Compiler {
 			let strId = this.codeBlock.addStrConst(expr.textValue);
 			this.codeBlock.codePush(strId);
 			this.codeBlock.codeExt(PLW_LOPCODE_CREATE_STRING);
-			// IR
-			let tmpVar = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
-			let ir = [
-				PlwIR.setVariable(tmpVar.isGlobal, [tmpVar.irIndex], PlwIR.createRef(PlwIR.i32((expr.textValue.length + 1) * 8))),
-				PlwIR.storeI32(
-					PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex),
-					PlwIR.i32(0),
-					PlwIR.i32(expr.textValue.length)
-				)
-			];
+			let ir = PlwIR.createArrayRef(EVAL_TYPE_TEXT.irTypes[0], expr.textValue.length, []);
 			for (let i = 0; i < expr.textValue.length; i++) {
-				ir.push(PlwIR.storeI32(
-					PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex),
-					PlwIR.i32((i + 1) * 4),
-					PlwIR.i32(expr.textValue.charCodeAt(i))
-				));
+				ir.exprs.push(PlwIR.i32(expr.textValue.charCodeAt(i)));
 			}
-			ir.push(PlwIR.variable(tmpVar.isGlobal, tmpVar.irIndex));
-			tmpVar.isMoved = true;
-			return new EvalResultIR(EVAL_TYPE_TEXT, PlwIR.block(ir));
+			return new EvalResultIR(EVAL_TYPE_TEXT, ir);
 		}
 		if (expr.tag === "ast-value-tuple") {
 			let itemTypes = [];
@@ -2493,16 +2485,7 @@ class Compiler {
 		}
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
-			let ir = [];
-			let tmpVars = [];
-			for (let i = 0; i < expr.itemCount; i++) {
-				tmpVars[i] = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
-				tmpVars[i].isMoved = true;
-			}
-			let tmpSizeVars = [];
-			for (let i = 0; i < expr.itemCount; i++) {
-				tmpSizeVars[i] = this.scope.addVariable(null, EVAL_TYPE_INTEGER, false);
-			}
+			let ir = null;
 			for (let i = 0; i < expr.itemCount; i++) {
 				let itemResult = this.eval(expr.items[i]);
 				if (itemResult.isError()) {
@@ -2518,29 +2501,12 @@ class Compiler {
 				} else if (firstItemType !== itemResult.resultType) {
 					return EvalError.wrongType(itemResult.resultType, firstItemType.typeKey()).fromExpr(expr.items[i]);
 				}
-				ir.push(PlwIR.setVariable(tmpVars[i].isGlobal, tmpVars[i].irIndex, ir));
-				ir.push(PlwIR.setVariable(
-					tmpSizeVars[i].isGlobal, tmpSizeVars[i].irIndex,
-					PlwIR.loadI32(PlwIR.variable(tmpVars[i].isGlobal, tmpVars[i].irIndex))));
+				if (i  === 0) {
+					ir = itemResult.ir;
+				} else {
+					ir = PlwIR.concatArray(ir, itemResult.ir, firstItemType.irTypes[0]);
+				}
 			}
-			let irTotalSize = PlwIR.i32(0);
-			for (let i = 0; i < expr.itemCount; i++) {
-				irTotalSize = PlwIR.binOp(PLW_IR_OP_I32_ADD,
-					irTotalSize, PlwIR.variable(tmpSizeVars[i].isGlobal, tmpSizeVars[i].irIndex));
-			}
-			let tmpResultVar = this.scope.addVariable(null, EVAL_TYPE_TEXT, false);
-			tmpVars[i].isMoved = true;
-			for (let i = 0; i < expr.itemCount; i++) {
-				ir.push(PlwIR.setVariable(tmpResultVar.isGlobal, tmpResultVar.irIndex,
-					PlwIR.createRef(irTotalSize)));
-			}
-			let tmpOffsetVar = this.scope.addVariable(null, EVAL_TYPE_INTEGER, false);
-			ir.push(PlwIR.setVariable(tmpOffsetVar.isGlobal, tmpOffsetVar.irIndex, PlwIR.i32(4)));
-			for (let i = 0; i < expr.itemCount; i++) {
-				ir.push(PlwIR.memcopy(PlwIR., tmpResultVar.irIndex,
-					PlwIR.createRef(irTotalSize)));
-			}
-
 			this.codeBlock.codePush(expr.itemCount);
 			if (firstItemType.structuralType() === EVAL_TYPE_TEXT) {
 				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);
@@ -2570,7 +2536,13 @@ class Compiler {
 				this.codeBlock.setLoc(skipLoc);
 				this.codeBlock.codePush(expr.operator === TOK_AND ? 0 : 1);
 				this.codeBlock.setLoc(endLoc);
-				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
+				let ir = null;
+				if (expr.operator === TOK_AND) {
+					ir = PlwIR.iff(leftResult.ir, rightResult.ir, PlwIR.i32(0), [PLW_IR_TYPE_I32]);
+				} else {
+					ir = PlwIR.iff(leftResult.ir, PlwIR.i32(1), rightResult.ir, [PLW_IR_TYPE_I32]);
+				}
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, ir);
 			}
 			if (expr.operator === TOK_TIMES) {
 				let leftResult = this.eval(expr.left);
@@ -2604,7 +2576,7 @@ class Compiler {
 					return EvalError.wrongType(rightResult.resultType, "integer").fromExpr(expr.right);
 				}
 				this.codeBlock.codeRem();
-				return new EvalResultIR(EVAL_TYPE_INTEGER, null);
+				return new EvalResultIR(EVAL_TYPE_INTEGER, PlwIR.binOp(PLW_IR_OP_I64_REM, leftResult.ir, rightResult.ir));
 			}
 			if (
 				expr.operator === TOK_ADD || expr.operator === TOK_SUB ||
@@ -2719,6 +2691,7 @@ class Compiler {
 				if (expr.operator === TOK_NE) {
 					this.codeBlock.codeNot();
 				}
+				// todo ir eq
 				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
 			}
 			return EvalError.unknownBinaryOperator(expr.operator).fromExpr(expr);
@@ -2766,9 +2739,6 @@ class Compiler {
 			let ir = [];
 			for (let i = 0; i < v.varType.irTypes.length; i++) {
 				ir[i] = PlwIR.variable(v.isGlobal, v.irIndex + i);
-				if (v.varType.isRef === true) {
-					ir[i] = PlwIR.incRefCount(ir[i]);
-				}
 			}
 			return new EvalResultIR(v.varType, PlwIR.block(ir));
 		}

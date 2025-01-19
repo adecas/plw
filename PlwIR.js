@@ -17,16 +17,18 @@ const PLW_IR_OP_I64_ADD					= 6;
 const PLW_IR_OP_I64_SUB					= 7;
 const PLW_IR_OP_I64_MUL					= 8;
 const PLW_IR_OP_I64_DIV					= 9;
-const PLW_IR_OP_I32_EQ					= 10;
-const PLW_IR_OP_I32_NE					= 11;
-const PLW_IR_OP_I32_LT                  = 12;
-const PLW_IR_OP_I32_LTE	                = 13;
-const PLW_IR_OP_I32_GT                  = 14;
-const PLW_IR_OP_I32_GTE	                = 15;
-const PLW_IR_OP_I32_ADD					= 16;
-const PLW_IR_OP_I32_SUB					= 17;
-const PLW_IR_OP_I32_MUL					= 18;
-const PLW_IR_OP_I32_DIV					= 19;
+const PLW_IR_OP_I64_REM					= 10;
+const PLW_IR_OP_I32_EQ					= 11;
+const PLW_IR_OP_I32_NE					= 12;
+const PLW_IR_OP_I32_LT                  = 13;
+const PLW_IR_OP_I32_LTE	                = 14;
+const PLW_IR_OP_I32_GT                  = 15;
+const PLW_IR_OP_I32_GTE	                = 16;
+const PLW_IR_OP_I32_ADD					= 17;
+const PLW_IR_OP_I32_SUB					= 18;
+const PLW_IR_OP_I32_MUL					= 19;
+const PLW_IR_OP_I32_DIV					= 20;
+const PLW_IR_OP_I32_REM					= 21;
 
 class PlwIRUtil {
 
@@ -163,6 +165,7 @@ class PlwIRGlobal extends PlwIRExpr {
 	constructor(globalId) {
 		super("ir-global");
 		this.globalId = globalId;
+		this.incRc = false;
 	}
 
 }
@@ -173,17 +176,19 @@ class PlwIRSetGlobal extends PlwIRExpr {
 		super("ir-setglobal");
 		this.globalIds = globalIds;
 		this.expr = expr;
+		this.decRc = false;
 	}
 
 }
 
 class PlwIRIf extends PlwIRExpr {
 
-	constructor(condExpr, trueExpr, falseExpr) {
+	constructor(condExpr, trueExpr, falseExpr, typeIds = null) {
 		super("ir-if");
 		this.condExpr = condExpr;
 		this.trueExpr = trueExpr;
 		this.falseExpr = falseExpr;
+		this.typeIds = typeIds;
 		this.toDecBeforeTrue = [];
 		this.toDecBeforeFalse = [];
 	}
@@ -413,8 +418,8 @@ class PlwIR {
 		return new PlwIRLoadI32(localId, fieldId, indexExpr);
 	}
 	
-	static iff(condExpr, trueExpr, falseExpr) {
-		return new PlwIRIf(condExpr, trueExpr, falseExpr);
+	static iff(condExpr, trueExpr, falseExpr, typeIds = null) {
+		return new PlwIRIf(condExpr, trueExpr, falseExpr, typeIds);
 	}
 	
 	static concatArray(left, right, typeId) {
@@ -541,6 +546,12 @@ class PlwIRRefCountAnalizer {
 			}
 			return toDec;
 		}
+		if (expr.tag === "ir-global") {
+			if (PlwIRUtil.isRef(this.irModule.globals[expr.globalId])) {
+				expr.incRc = true;
+			}
+			return toDec;
+		}
 		if (expr.tag === "ir-block") {
 			for (let i = expr.exprs.length - 1; i >= 0; i--) {
 				toDec = this.evalExpr(expr.exprs[i], toDec);
@@ -567,6 +578,10 @@ class PlwIRRefCountAnalizer {
 				}
 				toDec[expr.localIds[i]] = true;
 			}
+			return this.evalExpr(expr.expr, toDec);
+		}
+		if (expr.tag === "ir-setglobal") {
+			expr.decRc = true;
 			return this.evalExpr(expr.expr, toDec);
 		}
 		if (expr.tag === "ir-if") {
@@ -650,6 +665,7 @@ const PLW_WASM_OP = [
 	125, 		// PLW_IR_OP_I64_SUB
 	126,		// PLW_IR_OP_I64_MUL
 	127,		// PLW_IR_OP_I64_DIV
+	0x81,       // PLW_IR_OP_I64_REM
 	0x46,		// PLW_IR_OP_I32_EQ
 	0x47,		// PLW_IR_OP_I32_NE
 	0x48,		// PLW_IR_OP_I32_LT
@@ -659,7 +675,8 @@ const PLW_WASM_OP = [
 	0x6A,		// PLW_IR_OP_I32_ADD
 	0x6B,		// PLW_IR_OP_I32_SUB
 	0x6C,		// PLW_IR_OP_I32_MUL
-	0x6D		// PLW_IR_OP_I32_DIV
+	0x6D,		// PLW_IR_OP_I32_DIV
+	0x6F		// PLW_IR_OP_I32_REM
 ];
 
 const PLW_RT_FUNC_REF_CREATE				= 0;
@@ -683,7 +700,7 @@ const PLW_RT_FUNCS = [
 	new PlwIRFunction("REF_arraySize", "plwruntime", 1, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_concatArray", "plwruntime", 3, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], null),
 	new PlwIRFunction("REF_concatBasicArray", "plwruntime", 3, [PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], null),
-	new PlwIRFunction("REF_destroyArray", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null)
+	new PlwIRFunction("REF_destroyArray", "plwruntime", 1, [], [PLW_IR_TYPE_I32], null),
 ];
 
 
@@ -744,6 +761,10 @@ class PlwIRWasmTypeFuncGenerator {
 			return;
 		}
 		if (expr.tag === "ir-setlocal") {
+			this.evalExpr(expr.expr);
+			return 
+		}
+		if (expr.tag === "ir-setglobal") {
 			this.evalExpr(expr.expr);
 			return 
 		}
@@ -1080,6 +1101,10 @@ class PlwIRWasmCompiler {
 		return [32].concat(this.uintBytes(localId));
 	}
 	
+	globalBytes(globalId) {
+		return [35].concat(this.uintBytes(globalId));	
+	}
+	
 	loadI32Bytes(offset) {
 		return [40, 2].concat(this.uintBytes(offset));
 	}
@@ -1094,7 +1119,12 @@ class PlwIRWasmCompiler {
 
 	decRefCountBytes(func, localId) {	
 		let refType = this.irModule.refType(func.locals[localId]);
-		return this.compileCode(func, PlwIR.callf(refType.decRcFunctionId, [PlwIR.local(localId)]));
+		return this.localBytes(localId).concat(this.callBytes(this.targetFuncId(refType.decRcFunctionId)));
+	}
+	
+	decRefCountGlobalBytes(func, globalId) {
+		let refType = this.irModule.refType(this.irModule.globals[globalId]);
+		return this.globalBytes(globalId).concat(this.callBytes(this.targetFuncId(refType.decRcFunctionId)));
 	}
 	
 	decRefCountOffetBytes(func, localId, offset, itemTypeId) {
@@ -1124,7 +1154,16 @@ class PlwIRWasmCompiler {
 			return bytes;
 		}
 		if (expr.tag === "ir-global") {
-			return [35].concat(this.uintBytes(expr.globalId));
+			let bytes = this.globalBytes(expr.globalId);
+			if (PlwIRUtil.isRef(this.irModule.globals[expr.globalId])) {
+				bytes = bytes
+					.concat(this.globalBytes(expr.globalId))
+					.concat([0x45, 0x04, 0x40, 0x00, 0x0B]);	// eqz if unreachable endif
+				if (expr.incRc === true) {
+					bytes = bytes.concat(this.incRefCountBytes());
+				}
+			}
+			return bytes;
 		}
 		if (expr.tag === "ir-block") {
 			let bytes = [];
@@ -1152,6 +1191,17 @@ class PlwIRWasmCompiler {
 		}
 		if (expr.tag === "ir-setglobal") {
 			let bytes = this.compileCode(func, expr.expr);
+			if (expr.decRc === true) {
+				for (let i = 0; i < expr.globalIds.length; i++) {
+					if (PlwIRUtil.isRef(this.irModule.globals[expr.globalIds[i]])) {
+						bytes = bytes
+							.concat(this.globalBytes(expr.globalIds[i]))
+							.concat([0x04, 0x40]) // if
+							.concat(this.decRefCountGlobalBytes(func, expr.globalIds[i]))
+							.concat([0x0B]); // endif
+					}
+				}
+			}
 			for (let i = 0; i < expr.globalIds.length; i++) {
 				bytes = bytes.concat([36], this.uintBytes(expr.globalIds[expr.globalIds.length - 1 - i]));
 			}
@@ -1169,7 +1219,14 @@ class PlwIRWasmCompiler {
 		}
 		if (expr.tag === "ir-if") {
 			let bytes = this.compileCode(func, expr.condExpr);
-			bytes = bytes.concat([4, 64]);
+			bytes.push(0x04);
+			if (expr.typeIds === null) {
+				bytes.push(0x40);
+			} else if (expr.typeIds.length === 1) {
+				bytes.push(this.typeByte(expr.typeIds[0]));
+			} else {
+				throw new Error("TODO manager if expression evaluating to several types");
+			}
 			this.nestedLevel++;
 			for (let i = 0; i < expr.toDecBeforeTrue.length; i++) {
 				bytes = bytes.concat(this.decRefCountBytes(func, expr.toDecBeforeTrue[i]));
@@ -1178,7 +1235,7 @@ class PlwIRWasmCompiler {
 				bytes = bytes.concat(this.compileCode(func, expr.trueExpr));
 			}
 			if (expr.falseExpr !== null || expr.toDecBeforeFalse.length > 0) {
-				bytes = bytes.concat([5]);
+				bytes.push(0x05);
 				for (let i = 0; i < expr.toDecBeforeFalse.length; i++) {
 					bytes = bytes.concat(this.decRefCountBytes(func, expr.toDecBeforeFalse[i]));
 				}
@@ -1187,7 +1244,8 @@ class PlwIRWasmCompiler {
 				}
 			}
 			this.nestedLevel--;
-			return bytes.concat(11);
+			bytes.push(0x0B);
+			return bytes;
 		}
 		if (expr.tag === "ir-loop") {
 			this.pushBlockLevel();
