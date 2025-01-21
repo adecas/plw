@@ -80,6 +80,21 @@ class PlwIRRefType {
 		}
 		return false;
 	}
+	
+	isSameAs(refType) {
+		if (this.size !== refType.size) {
+			return false;
+		}
+		if (this.itemTypes.length !== refType.itemTypes.length) {
+			return false;
+		}
+		for (let i = 0; i < this.itemTypes.length; i++) {
+			if (this.itemTypes[i] !== refType.itemTypes[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 }			
 
@@ -481,7 +496,11 @@ class PlwIRModule {
 	}
 
 	addRefType(refType) {
-		// TODO reuse similar reftype
+		for (let i = 0; i < this.refTypes.length; i++) {
+			if (refType.isSameAs(this.refTypes[i])) {
+				return i + PLW_IR_TYPE_REF;
+			}
+		}
 		this.refTypes.push(refType);
 		let refId = this.refTypes.length - 1 + PLW_IR_TYPE_REF;
 		return refId;
@@ -518,14 +537,14 @@ class PlwIRRefCountAnalizer {
 	
 	static analize(irModule, func) {
 		let analizer = new PlwIRRefCountAnalizer(irModule, func)
-		let toDec = analizer.evalExpr(func.expr, analizer.decAll());
+		let toDec = analizer.evalExpr(func.expr, analizer.decAll(), null);
 		for (let i = 0; i < func.paramCount; i++) {
 			if (toDec[i] === true) {
 				func.toDecBefore.push(i);
 			}
 		}
 		console.log(JSON.stringify(func, null, 2));
-	}
+	}	
 	
 	decAll() {
 		let toDec = new Array(this.func.locals.length);
@@ -543,14 +562,17 @@ class PlwIRRefCountAnalizer {
 		return cp;
 	}
 	
-	evalExpr(expr, toDec) {
+	evalExpr(expr, toDec, exitLoopToDec) {
 		console.log(expr.tag, JSON.stringify(toDec));
 		if (expr.tag === "ir-return") {
 			let toDec = this.decAll();
 			for (let i = expr.exprs.length - 1; i >= 0; i--) {
-				toDec = this.evalExpr(expr.exprs[i], toDec);
+				toDec = this.evalExpr(expr.exprs[i], toDec, exitLoopToDec);
 			}
 			return toDec;
+		}
+		if (expr.tag === "ir-exit-loop") {
+			return this.copyToDec(exitLoopToDec);
 		}
 		if (expr.tag === "ir-local") {
 			if (toDec[expr.localId] === true) {
@@ -558,95 +580,122 @@ class PlwIRRefCountAnalizer {
 				expr.incRc = false;
 			} else if (PlwIRUtil.isRef(this.func.locals[expr.localId])) {
 				expr.incRc = true;
+			} else {
+				expr.incRc = false;
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-global") {
 			if (PlwIRUtil.isRef(this.irModule.globals[expr.globalId])) {
 				expr.incRc = true;
+			} else {
+				expr.incRc = false;
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-block") {
 			for (let i = expr.exprs.length - 1; i >= 0; i--) {
-				toDec = this.evalExpr(expr.exprs[i], toDec);
+				toDec = this.evalExpr(expr.exprs[i], toDec, exitLoopToDec);
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-call") {
 			for (let i = expr.exprs.length - 1; i >= 0; i--) {
-				toDec = this.evalExpr(expr.exprs[i], toDec);
+				toDec = this.evalExpr(expr.exprs[i], toDec, exitLoopToDec);
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-create-array-ref" || expr.tag === "ir-create-ref") {
 			toDec[expr.localId] = true;
 			for (let i = expr.exprs.length - 1; i >= 0; i--) {
-				toDec = this.evalExpr(expr.exprs[i], toDec);
+				toDec = this.evalExpr(expr.exprs[i], toDec, exitLoopToDec);
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-setlocal") {
+			expr.toDecAfter = [];
 			for (let i = 0; i < expr.localIds.length; i++) {
 				if (toDec[expr.localIds[i]] === true) {
 					expr.toDecAfter.push(expr.localIds[i]);					
 				}
-				toDec[expr.localIds[i]] = true;
+				if (PlwIRUtil.isRef(this.func.locals[expr.localIds[i]])) {
+					toDec[expr.localIds[i]] = true;
+				}
 			}
-			return this.evalExpr(expr.expr, toDec);
+			return this.evalExpr(expr.expr, toDec, exitLoopToDec);
 		}
 		if (expr.tag === "ir-setglobal") {
 			expr.decRc = true;
-			return this.evalExpr(expr.expr, toDec);
+			return this.evalExpr(expr.expr, toDec, exitLoopToDec);
 		}
 		if (expr.tag === "ir-if") {
-			let toDecTrue = expr.trueExpr === null ?  this.copyToDec(toDec) : this.evalExpr(expr.trueExpr, this.copyToDec(toDec));
-			let toDecFalse = expr.falseExpr === null ?  this.copyToDec(toDec) : this.evalExpr(expr.falseExpr, this.copyToDec(toDec));
+			expr.toDecBeforeFalse = [];
+			expr.toDecBeforeTrue = [];
+			let toDecTrue = expr.trueExpr === null ?  this.copyToDec(toDec) : this.evalExpr(expr.trueExpr, this.copyToDec(toDec), exitLoopToDec);
+			let toDecFalse = expr.falseExpr === null ?  this.copyToDec(toDec) : this.evalExpr(expr.falseExpr, this.copyToDec(toDec), exitLoopToDec);
 			for (let i = 0; i < toDec.length; i++) {
 				if (toDecTrue[i] === false && toDecFalse[i] === true) {
-					expr.toDecBeforFalse.push(i);
+					// TODO do something if the variable is not yet initialized
+					expr.toDecBeforeFalse.push(i);
 				} else if (toDecTrue[i] === true && toDecFalse[i] === false) {
-					expr.toDecBeforeTrue[i].push(i);
+					// TODO do something if the variable is not yet initialized
+					expr.toDecBeforeTrue.push(i);
 					toDecTrue[i] = false;
 				}
 			}
-			return this.evalExpr(expr.condExpr, toDecTrue);
+			return this.evalExpr(expr.condExpr, toDecTrue, exitLoopToDec);
 		}
 		if (expr.tag === "ir-loop") {
-			let toDecBefore = this.evalExpr(expr.expr, this.copyToDec(toDec));
+			expr.toDecAfter = [];
+			let toDecBefore = this.evalExpr(expr.expr, this.copyToDec(toDec), this.copyToDec(toDec));
 			for (let i = 0; i < toDec.length; i++) {
 				if (toDec[i] === true && toDecBefore[i] === false) {
 					expr.toDecAfter.push(i);
+					toDec[i] = false;
+				} else if (toDec[i] === false && toDecBefore[i] === true) {
+					// maybe add a toDecBeforeExpr
+					// TODO do something if the variable is not yet initialized
+					throw new Error("Don't know what to do in loop auto refcount");
 				}
 			}
-			return toDecBefore;
+			return this.evalExpr(expr.expr, toDec, this.copyToDec(toDec));
 		}
 		if (expr.tag === "ir-store-i32") {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] = false;
+			} else {
+				expr.toDecAfter = false;
 			}
 			let refType = this.irModule.refType(this.func.locals[expr.localId]);
 			if (PlwIRUtil.isRef(refType.itemTypes[expr.fieldId])) {
 				expr.decRc = true;
+			} else {
+				expr.decRc = false;
 			}
-			return this.evalExpr(expr.valueExpr, toDec);
+			return this.evalExpr(expr.valueExpr, toDec, exitLoopToDec);
 		}
 		if (expr.tag === "ir-store-i64") {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] = false;
+			} else {
+				expr.toDecAfter = false;
 			}
-			return this.evalExpr(expr.valueExpr, toDec);
+			return this.evalExpr(expr.valueExpr, toDec, exitLoopToDec);
 		}
 		if (expr.tag === "ir-load-i32") {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] =false;
+			} else {
+				expr.toDecAfter = false;
 			}
 			let refType = this.irModule.refType(this.func.locals[expr.localId]);
 			if (PlwIRUtil.isRef(refType.itemTypes[expr.fieldId])) {
 				expr.incRc = true;
+			} else {
+				expr.incRc = false;
 			}
 			return toDec;
 		}
@@ -654,17 +703,19 @@ class PlwIRRefCountAnalizer {
 			if (toDec[expr.localId] === true) {
 				expr.toDecAfter = true;
 				toDec[expr.localId] =false;
+			} else {
+				expr.toDecAfter = false;
 			}
 			return toDec;
 		}
 		if (expr.tag === "ir-binop") {
-			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec));
+			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec, exitLoopToDec));
 		}
 		if (expr.tag === "ir-concat-array") {
-			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec));
+			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec, exitLoopToDec));
 		}
 		if (expr.tag === "ir-ref-eq") {
-			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec));
+			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec, exitLoopToDec));
 		}
 		return toDec;
 	}	
@@ -883,69 +934,69 @@ class PlwIRWasmTypeFuncGenerator {
 			for (let idx = 0; idx < refType.size; idx++) {
 				for (let i = 0; i < refType.itemTypes.length; i++) {
 					let itemTypeId = refType.itemTypes[i];
-					if (PlwIRUtil.isRef(refType.itemTypes[i])) {
+					if (PlwIRUtil.isRef(itemTypeId)) {
 						let innerType = this.irModule.refType(itemTypeId);
 						ir.push(PlwIR.iff(
 							PlwIR.binOp(PLW_IR_OP_I32_EQ,
 								PlwIR.i32(0),
-								PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.i32(idx))])),
-							PlwIR.ret([PlwIR.i32(0)])));
-					} else {
-						let op = -1;
-						if (typeId === PLW_IR_TYPE_I32) {
-							op = PLW_IR_OP_I32_EQ;
-						} else if (typeId === PLW_IR_TYPE_I64) {
-							op = PLW_IR_OP_I64_EQ;
-						} else {
-							throw new Error("TOTO compare type " + typeId);
-						}
-						ir.push(PlwIR.iff(
-							PlwIR.binOp(op,
-								PlwIR.i32(0),
-								PlwIR.callf(innerType.eqFunctionId, [
-									PlwIR.loadI32(0, i, PlwIR.i32(idx)),
-									PlwIR.loadI32(1, i, PlwIR.i32(idx))])),
+								PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.i32(idx)), PlwIR.loadI32(1, i, PlwIR.i32(idx))])),
 							PlwIR.ret([PlwIR.i32(0)]), null));
+					} else {
+						if (itemTypeId === PLW_IR_TYPE_I32) {
+							ir.push(PlwIR.iff(
+								PlwIR.binOp(PLW_IR_OP_I32_NE,
+									PlwIR.loadI32(0, i, PlwIR.i32(idx)),
+									PlwIR.loadI32(1, i, PlwIR.i32(idx))),
+								PlwIR.ret([PlwIR.i32(0)]), null));
+						} else if (itemTypeId === PLW_IR_TYPE_I64) {
+							ir.push(PlwIR.iff(
+								PlwIR.binOp(PLW_IR_OP_I64_NE,
+									PlwIR.loadI64(0, i, PlwIR.i32(idx)),
+									PlwIR.loadI64(1, i, PlwIR.i32(idx))),
+								PlwIR.ret([PlwIR.i32(0)]), null));
+						} else {
+							throw new Error("TODO compare type " + itemTypeId);
+						}
 					}
 				}
 			}
 			ir.push(PlwIR.ret([PlwIR.i32(1)]));
 			refType.eqFunctionId = this.irModule.addFunction(
 				new PlwIRFunction("_gen_eq_" + refTypeId, null, 2,
-					[PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
+					[PLW_IR_TYPE_I32], [refTypeId, refTypeId], PlwIR.block(ir)));
 		} else {
 			let compareBlock = [];
 			for (let i = 0; i < refType.itemTypes.length; i++) {
 				let itemTypeId = refType.itemTypes[i];
-				if (PlwIRUtil.isRef(refType.itemTypes[i])) {
+				if (PlwIRUtil.isRef(itemTypeId)) {
 					let innerType = this.irModule.refType(itemTypeId);
-					ir.push(PlwIR.iff(
+					compareBlock.push(PlwIR.iff(
 						PlwIR.binOp(PLW_IR_OP_I32_EQ,
 							PlwIR.i32(0),
-							PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.local(3))])),
-						PlwIR.ret([PlwIR.i32(0)])));
-				} else {
-					let op = -1;
-					if (typeId === PLW_IR_TYPE_I32) {
-						op = PLW_IR_OP_I32_EQ;
-					} else if (typeId === PLW_IR_TYPE_I64) {
-						op = PLW_IR_OP_I64_EQ;
-					} else {
-						throw new Error("TOTO compare type " + typeId);
-					}
-					ir.push(PlwIR.iff(
-						PlwIR.binOp(op,
-							PlwIR.i32(0),
-							PlwIR.callf(innerType.eqFunctionId, [
-								PlwIR.loadI32(0, i, PlwIR.local(3)),
-								PlwIR.loadI32(1, i, PlwIR.local(3))])),
+							PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.local(3)), PlwIR.loadI32(1, i, PlwIR.local(3))])),
 						PlwIR.ret([PlwIR.i32(0)]), null));
+				} else {
+					if (itemTypeId === PLW_IR_TYPE_I32) {
+						compareBlock.push(PlwIR.iff(
+							PlwIR.binOp(PLW_IR_OP_I32_NE,
+								PlwIR.loadI32(0, i, PlwIR.local(3)),
+								PlwIR.loadI32(1, i, PlwIR.local(3))),
+							PlwIR.ret([PlwIR.i32(0)]), null));
+					} else if (itemTypeId === PLW_IR_TYPE_I64) {
+						compareBlock.push(PlwIR.iff(
+							PlwIR.binOp(PLW_IR_OP_I64_NE,
+								PlwIR.loadI64(0, i, PlwIR.local(3)),
+								PlwIR.loadI64(1, i, PlwIR.local(3))),
+							PlwIR.ret([PlwIR.i32(0)]), null));
+					} else {
+						throw new Error("TODO compare type " + itemTypeId);
+					}
 				}
 			}
 			let ir = [
 				PlwIR.setLocal([2], PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(0)])),
 				PlwIR.iff(
-					PlwIR.binOp(PLW_IR_I32_NE, 
+					PlwIR.binOp(PLW_IR_OP_I32_NE, 
 						PlwIR.local(2),
 						PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(1)])),
 					PlwIR.ret([PlwIR.i32(0)]), null),
@@ -958,11 +1009,12 @@ class PlwIRWasmTypeFuncGenerator {
 					.concat(compareBlock)
 					.concat([
 						PlwIR.setLocal([3], PlwIR.binOp(PLW_IR_OP_I32_ADD, PlwIR.local(3), PlwIR.i32(1)))
-				])))
+				]))),
+				PlwIR.ret([PlwIR.i32(1)])
 			];
 			refType.eqFunctionId = this.irModule.addFunction(
 				new PlwIRFunction("_gen_eq_" + refTypeId, null, 2,
-					[PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
+					[PLW_IR_TYPE_I32], [refTypeId, refTypeId, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
 		}
 		
 	}
