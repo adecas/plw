@@ -275,6 +275,17 @@ class PlwIRConcatArray extends PlwIRExpr {
 
 }
 
+class PlwIRRefEq extends PlwIRExpr {
+
+	constructor(left, right, typeId) {
+		super("ir-ref-eq");
+		this.left = left;
+		this.right = right;
+		this.typeId = typeId;
+	}
+
+}
+
 class PlwIRLoadI64 extends PlwIRExpr {
 
 	constructor(localId, fieldId, indexExpr) {
@@ -432,6 +443,10 @@ class PlwIR {
 	
 	static exitLoop() {
 		return new PlwIRExitLoop();
+	}
+
+	static refEq(left, right, typeId) {
+		return new PlwIRRefEq(left, right, typeId);
 	}
 	
 }
@@ -648,6 +663,9 @@ class PlwIRRefCountAnalizer {
 		if (expr.tag === "ir-concat-array") {
 			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec));
 		}
+		if (expr.tag === "ir-ref-eq") {
+			return this.evalExpr(expr.left, this.evalExpr(expr.right, toDec));
+		}
 		return toDec;
 	}	
 	
@@ -726,6 +744,7 @@ class PlwIRWasmTypeFuncGenerator {
 			if (refType.size > 0) {
 				this.generateCreateRef(i + PLW_IR_TYPE_REF, refType);
 			}
+			this.generateRefEq(i + PLW_IR_TYPE_REF, refType);
 		}
 	}
 	
@@ -781,7 +800,7 @@ class PlwIRWasmTypeFuncGenerator {
 			this.evalExpr(expr.valueExpr);
 			return 
 		}
-		if (expr.tag === "ir-binop" || expr.tag === "ir-concat-array") {
+		if (expr.tag === "ir-binop" || expr.tag === "ir-concat-array" || expr.tag === "ir-ref-eq") {
 			this.evalExpr(expr.left);
 			this.evalExpr(expr.right);
 			return;
@@ -856,6 +875,96 @@ class PlwIRWasmTypeFuncGenerator {
 		}
 		block.push(PlwIR.ret([PlwIR.local(resultLocalId)]));
 		refType.createRefFunctionId = this.irModule.addFunction(new PlwIRFunction("_gen_create_ref_" + refTypeId, null, locals.length - 1, [refTypeId], locals, PlwIR.block(block)).noautorc());
+	}
+
+	generateRefEq(refTypeId, refType) {
+		if (refType.size > 0) {
+			let ir = [];
+			for (let idx = 0; idx < refType.size; idx++) {
+				for (let i = 0; i < refType.itemTypes.length; i++) {
+					let itemTypeId = refType.itemTypes[i];
+					if (PlwIRUtil.isRef(refType.itemTypes[i])) {
+						let innerType = this.irModule.refType(itemTypeId);
+						ir.push(PlwIR.iff(
+							PlwIR.binOp(PLW_IR_OP_I32_EQ,
+								PlwIR.i32(0),
+								PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.i32(idx))])),
+							PlwIR.ret([PlwIR.i32(0)])));
+					} else {
+						let op = -1;
+						if (typeId === PLW_IR_TYPE_I32) {
+							op = PLW_IR_OP_I32_EQ;
+						} else if (typeId === PLW_IR_TYPE_I64) {
+							op = PLW_IR_OP_I64_EQ;
+						} else {
+							throw new Error("TOTO compare type " + typeId);
+						}
+						ir.push(PlwIR.iff(
+							PlwIR.binOp(op,
+								PlwIR.i32(0),
+								PlwIR.callf(innerType.eqFunctionId, [
+									PlwIR.loadI32(0, i, PlwIR.i32(idx)),
+									PlwIR.loadI32(1, i, PlwIR.i32(idx))])),
+							PlwIR.ret([PlwIR.i32(0)]), null));
+					}
+				}
+			}
+			ir.push(PlwIR.ret([PlwIR.i32(1)]));
+			refType.eqFunctionId = this.irModule.addFunction(
+				new PlwIRFunction("_gen_eq_" + refTypeId, null, 2,
+					[PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
+		} else {
+			let compareBlock = [];
+			for (let i = 0; i < refType.itemTypes.length; i++) {
+				let itemTypeId = refType.itemTypes[i];
+				if (PlwIRUtil.isRef(refType.itemTypes[i])) {
+					let innerType = this.irModule.refType(itemTypeId);
+					ir.push(PlwIR.iff(
+						PlwIR.binOp(PLW_IR_OP_I32_EQ,
+							PlwIR.i32(0),
+							PlwIR.callf(innerType.eqFunctionId, [PlwIR.loadI32(0, i, PlwIR.local(3))])),
+						PlwIR.ret([PlwIR.i32(0)])));
+				} else {
+					let op = -1;
+					if (typeId === PLW_IR_TYPE_I32) {
+						op = PLW_IR_OP_I32_EQ;
+					} else if (typeId === PLW_IR_TYPE_I64) {
+						op = PLW_IR_OP_I64_EQ;
+					} else {
+						throw new Error("TOTO compare type " + typeId);
+					}
+					ir.push(PlwIR.iff(
+						PlwIR.binOp(op,
+							PlwIR.i32(0),
+							PlwIR.callf(innerType.eqFunctionId, [
+								PlwIR.loadI32(0, i, PlwIR.local(3)),
+								PlwIR.loadI32(1, i, PlwIR.local(3))])),
+						PlwIR.ret([PlwIR.i32(0)]), null));
+				}
+			}
+			let ir = [
+				PlwIR.setLocal([2], PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(0)])),
+				PlwIR.iff(
+					PlwIR.binOp(PLW_IR_I32_NE, 
+						PlwIR.local(2),
+						PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(1)])),
+					PlwIR.ret([PlwIR.i32(0)]), null),
+				PlwIR.setLocal([3], PlwIR.i32(0)),
+				PlwIR.loop(PlwIR.block([
+					PlwIR.iff(
+						PlwIR.binOp(PLW_IR_OP_I32_GTE, PlwIR.local(3), PlwIR.local(2)),
+						PlwIR.exitLoop(),
+						null)]
+					.concat(compareBlock)
+					.concat([
+						PlwIR.setLocal([3], PlwIR.binOp(PLW_IR_OP_I32_ADD, PlwIR.local(3), PlwIR.i32(1)))
+				])))
+			];
+			refType.eqFunctionId = this.irModule.addFunction(
+				new PlwIRFunction("_gen_eq_" + refTypeId, null, 2,
+					[PLW_IR_TYPE_I32], [PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
+		}
+		
 	}
 	
 	generateDecRc(refTypeId, refType) {
