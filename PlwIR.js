@@ -154,6 +154,15 @@ class PlwIRBinOp extends PlwIRExpr {
 
 }
 
+class PlwIRRefId extends PlwIRExpr {
+
+	constructor(localId) {
+		super("ir-ref-id");
+		this.localId = localId;
+	}
+
+}
+
 class PlwIRLocal extends PlwIRExpr {
 
 	constructor(localId) {
@@ -406,6 +415,10 @@ class PlwIR {
 	
 	static createArrayRef(refTypeId, size, exprs) {
 		return new PlwIRCreateArrayRef(refTypeId, size, exprs);
+	}
+	
+	static refId(localId) {
+		return new PlwIRRefId(localId);
 	}
 		
 	static local(localId) {
@@ -929,8 +942,8 @@ class PlwIRWasmTypeFuncGenerator {
 	}
 
 	generateRefEq(refTypeId, refType) {
+		let ir = [PlwIR.iff(PlwIR.binOp(PLW_IR_OP_I32_EQ, PlwIR.refId(0), PlwIR.refId(1)), PlwIR.ret([PlwIR.i32(1)]), null)];
 		if (refType.size > 0) {
-			let ir = [];
 			for (let idx = 0; idx < refType.size; idx++) {
 				for (let i = 0; i < refType.itemTypes.length; i++) {
 					let itemTypeId = refType.itemTypes[i];
@@ -993,7 +1006,7 @@ class PlwIRWasmTypeFuncGenerator {
 					}
 				}
 			}
-			let ir = [
+			ir = ir.concat([
 				PlwIR.setLocal([2], PlwIR.callInternal(PLW_RT_FUNC_REF_ARRAY_SIZE, [PlwIR.local(0)])),
 				PlwIR.iff(
 					PlwIR.binOp(PLW_IR_OP_I32_NE, 
@@ -1011,12 +1024,11 @@ class PlwIRWasmTypeFuncGenerator {
 						PlwIR.setLocal([3], PlwIR.binOp(PLW_IR_OP_I32_ADD, PlwIR.local(3), PlwIR.i32(1)))
 				]))),
 				PlwIR.ret([PlwIR.i32(1)])
-			];
+			]);
 			refType.eqFunctionId = this.irModule.addFunction(
 				new PlwIRFunction("_gen_eq_" + refTypeId, null, 2,
 					[PLW_IR_TYPE_I32], [refTypeId, refTypeId, PLW_IR_TYPE_I32, PLW_IR_TYPE_I32], PlwIR.block(ir)));
-		}
-		
+		}		
 	}
 	
 	generateDecRc(refTypeId, refType) {
@@ -1307,6 +1319,9 @@ class PlwIRWasmCompiler {
 			}
 			return bytes.concat([15]);
 		}
+		if (expr.tag === "ir-ref-id") {
+			return this.localBytes(expr.localId);;
+		}
 		if (expr.tag === "ir-local") {
 			let bytes = this.localBytes(expr.localId);
 			if (PlwIRUtil.isRef(func.locals[expr.localId]) && expr.incRc === true) {
@@ -1448,7 +1463,11 @@ class PlwIRWasmCompiler {
 			return this.compileCode(func,
 				PlwIR.callInternal(PLW_RT_FUNC_REF_CONCAT_BASIC_ARRAY, [
 						expr.left, expr.right, PlwIR.i32(refType.itemSize)]));
-		}		
+		}
+		if (expr.tag === "ir-ref-eq") {
+			let refType = this.irModule.refType(expr.typeId);
+			return this.compileCode(func, PlwIR.callf(refType.eqFunctionId, [expr.left, expr.right]));
+		}
 		if (expr.tag === "ir-load-i64" || expr.tag === "ir-load-i32") {
 			let refTypeId = func.locals[expr.localId];
 			let refType = this.irModule.refType(refTypeId);

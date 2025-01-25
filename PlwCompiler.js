@@ -1165,6 +1165,9 @@ class Compiler {
 			this.codeBlock.codePush(argSlotCount);
 			this.codeBlock.codeCall(func.codeBlockIndex);
 		}
+		if (func.irIndex === -1) {
+			return EvalError.todo("Function " + funcKey + " has an invalid irIndex");
+		}
 		return new EvalResultIR(func.isGenerator ? this.addType(new EvalTypeSequence(func.returnType)) : func.returnType, PlwIR.callf(func.irIndex, irExprs));
 	}
 			
@@ -2691,8 +2694,27 @@ class Compiler {
 				if (expr.operator === TOK_NE) {
 					this.codeBlock.codeNot();
 				}
-				// todo ir eq
-				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
+				let ir = null;
+				if (leftResult.resultType.irTypes.length == 1) {
+					let irTypeId = leftResult.resultType.irTypes[0];
+					if (irTypeId === PLW_IR_TYPE_I32) {
+						ir = PlwIR.binOp(expr.operator === TOK_EQ ? PLW_IR_OP_I32_EQ : PLW_IR_OP_I32_NE, leftResult.ir, rightResult.ir);
+					} else if (irTypeId === PLW_IR_TYPE_I64) {
+						ir = PlwIR.binOp(expr.operator === TOK_EQ ? PLW_IR_OP_I64_EQ : PLW_IR_OP_I64_NE, leftResult.ir, rightResult.ir);
+					} else if (irTypeId === PLW_IR_TYPE_F64) {
+						ir = PlwIR.binOp(expr.operator === TOK_EQ ? PLW_IR_OP_F64_EQ : PLW_IR_OP_F64_NE, leftResult.ir, rightResult.ir);
+					} else if (PlwIRUtil.isRef(irTypeId)) {
+						ir = PlwIR.refEq(leftResult.ir, rightResult.ir, irTypeId);
+						if (expr.operator === TOK_NE) {
+							return new EvalError.todo("Manage ne for ir type " + irTypeId).fromExpr(expr);
+						}
+					} else {
+						return new EvalError.todo("Manage eq for ir type " + irTypeId).fromExpr(expr);
+					}
+				} else {
+					return new EvalError.todo("Manage eq for irtypes " + leftResult.resultType.irTypes).fromExpr(expr);
+				}
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, ir);
 			}
 			return EvalError.unknownBinaryOperator(expr.operator).fromExpr(expr);
 		}
