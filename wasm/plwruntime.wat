@@ -231,7 +231,7 @@
 	(memory.copy (local.get $result) (local.get $ref1) (local.get $ref1Size))
 	(memory.copy (i32.add (local.get $result) (local.get $ref1Size)) (local.get $ref2) (local.get $ref2Size))
 	(local.get $result))
-	
+		
 (func $REF_concatBasicArray (param $ref1 i32) (param $ref2 i32) (param $itemSize i32) (result i32)
 	(local $ref1Size i32)
 	(local $ref2Size i32)
@@ -249,7 +249,16 @@
 		(then (call $REF_destroyArray (local.get $ref1))))
 	(if (i32.eqz (call $REF_decRc (local.get $ref2)))
 		(then (call $REF_destroyArray (local.get $ref2))))		
-	(local.get $result))	
+	(local.get $result))
+	
+(func $REF_spliceArray (param $ref i32) (param $offset i32) (param $size i32) (param $itemSize i32) (result i32)
+	(local $result i32)
+	(local.set $result (call $REF_createArray (local.get $size) (local.get $itemSize)))
+	(memory.copy
+		(local.get $result)
+		(i32.add (local.get $ref) (i32.mul (local.get $offset) (local.get $itemSize)))
+		(i32.mul (local.get $size) (local.get $itemSize)))
+	(local.get $result))
 	
 (func $REF_destroyArray (param $ptr i32)
 	(call $MEM_free (i32.sub (local.get $ptr) (i32.const 8))))
@@ -269,6 +278,7 @@
 (export "REF_arraySize" (func $REF_arraySize))
 (export "REF_concatArray" (func $REF_concatArray))
 (export "REF_concatBasicArray" (func $REF_concatBasicArray))
+(export "REF_spliceArray" (func $REF_spliceArray))
 (export "REF_destroyArray" (func $REF_destroyArray))
 
 ) ;; end module
