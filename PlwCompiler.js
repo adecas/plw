@@ -26,6 +26,9 @@ class EvalResultIR extends EvalResult {
 		super("res-ir");
 		this.resultType = resultType;
 		this.ir = ir;
+		if (ir === null) {
+			throw new Error("No ir generated");
+		}
 	}
 	
 }
@@ -2392,7 +2395,7 @@ class Compiler {
 		if (expr.tag === "ast-value-real") {
 			let floatId = this.codeBlock.addFloatConst(expr.realValue);
 			this.codeBlock.codePushf(floatId);
-			return new EvalResultIR(EVAL_TYPE_REAL, null);
+			return new EvalResultIR(EVAL_TYPE_REAL, PlwIR.f64(expr.realValue));
 		}
 		if (expr.tag === "ast-value-text") {
 			if (expectedType === EVAL_TYPE_CHAR && expr.textValue.length === 1) {
@@ -2631,20 +2634,28 @@ class Compiler {
 				} else {
 					if (expr.operator === TOK_ADD) {
 						this.codeBlock.codeAddf();
+						irOp = PLW_IR_OP_F64_ADD;
 					} else if (expr.operator === TOK_SUB) {
 						this.codeBlock.codeSubf();
+						irOp = PLW_IR_OP_F64_SUB;
 					} else if (expr.operator === TOK_DIV) {
 						this.codeBlock.codeDivf();
+						irOp = PLW_IR_OP_F64_DIV;
 					} else if (expr.operator === TOK_MUL) {
 						this.codeBlock.codeMulf();
+						irOp = PLW_IR_OP_F64_MUL;
 					} else if (expr.operator === TOK_GT) {
 						this.codeBlock.codeGtf();
+						irOp = PLW_IR_OP_F64_GT;
 					} else if (expr.operator === TOK_LT) {
 						this.codeBlock.codeLtf();
+						irOp = PLW_IR_OP_F64_LT;
 					} else if (expr.operator === TOK_GTE) {
 						this.codeBlock.codeGtef();
+						irOp = PLW_IR_OP_F64_GTE;
 					} else {
 						this.codeBlock.codeLtef();
+						irOp = PLW_IR_OP_F64_LTE;
 					}
 				}
 				if (

@@ -29,6 +29,16 @@ const PLW_IR_OP_I32_SUB					= 18;
 const PLW_IR_OP_I32_MUL					= 19;
 const PLW_IR_OP_I32_DIV					= 20;
 const PLW_IR_OP_I32_REM					= 21;
+const PLW_IR_OP_F64_EQ					= 22;
+const PLW_IR_OP_F64_NE					= 23;
+const PLW_IR_OP_F64_LT                  = 24;
+const PLW_IR_OP_F64_LTE	                = 25;
+const PLW_IR_OP_F64_GT                  = 26;
+const PLW_IR_OP_F64_GTE	                = 27;
+const PLW_IR_OP_F64_ADD					= 28;
+const PLW_IR_OP_F64_SUB					= 29;
+const PLW_IR_OP_F64_MUL					= 30;
+const PLW_IR_OP_F64_DIV					= 31;
 
 class PlwIRUtil {
 
@@ -391,6 +401,10 @@ class PlwIR {
 	
 	static i64(intValue) {
 		return new PlwIRI64(intValue);
+	}
+	
+	static f64(floatValue) {
+		return new PlwIRF64(floatValue);
 	}
 	
 	static callf(functionId, exprs) {
@@ -758,7 +772,17 @@ const PLW_WASM_OP = [
 	0x6B,		// PLW_IR_OP_I32_SUB
 	0x6C,		// PLW_IR_OP_I32_MUL
 	0x6D,		// PLW_IR_OP_I32_DIV
-	0x6F		// PLW_IR_OP_I32_REM
+	0x6F,		// PLW_IR_OP_I32_REM
+	0x61,		// PLW_IR_OP_F64_EQ
+	0x62,		// PLW_IR_OP_F64_NE
+	0x63,		// PLW_IR_OP_F64_LT
+	0x65,		// PLW_IR_OP_F64_LTE
+	0x64,		// PLW_IR_OP_F64_GT
+	0x66,		// PLW_IR_OP_F64_GTE
+	0xA0,		// PLW_IR_OP_F64_ADD
+	0xA1,		// PLW_IR_OP_F64_SUB
+	0xA2,		// PLW_IR_OP_F64_MUL
+	0xA3		// PLW_IR_OP_F64_DIV
 ];
 
 const PLW_RT_FUNC_REF_CREATE				= 0;
@@ -1384,10 +1408,21 @@ class PlwIRWasmCompiler {
 			return bytes;
 		}
 		if (expr.tag === "ir-i32") {
-			return [65].concat(this.intBytes(expr.intValue));
+			return [0x41].concat(this.intBytes(expr.intValue));
 		}
 		if (expr.tag === "ir-i64") {
-			return [66].concat(this.intBytes(expr.intValue));
+			return [0x42].concat(this.intBytes(expr.intValue));
+		}
+		if (expr.tag === "ir-f64") {
+			let buf = new ArrayBuffer(8);
+			let fbuf = new Float64Array(buf);
+			fbuf[0] = expr.floatValue;
+			let bytes = new Uint8Array(buf);
+			let result = [0x44];
+			for (let i = 0; i < bytes.length; i++) {
+				result.push(bytes[i]);
+			}
+			return result;
 		}
 		if (expr.tag === "ir-binop") {
 			let bytes = this.compileCode(func, expr.left).concat(this.compileCode(func, expr.right));

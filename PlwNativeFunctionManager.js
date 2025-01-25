@@ -118,7 +118,8 @@ class NativeFunctionManager {
 				sm.stackMap[sm.sp - 2] = true;
 				sm.sp -= 1;
 				return null;
-			})
+			}),
+			compiler.context.irModule.addFunction(new PlwIRFunction("text(real)", "plwnative", EVAL_TYPE_REAL.irTypes.length, EVAL_TYPE_TEXT.irTypes, EVAL_TYPE_REAL.irTypes, null))
 		));
 		
 		compiler.context.addFunction(EvalResultFunction.fromNative(

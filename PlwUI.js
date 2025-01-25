@@ -272,6 +272,16 @@ function compileLoop() {
 					}
 					return ptr;
 				},
+				"text(real)": function(r) {
+					let txt = "" + r;
+					let ptr = plwruntime.instance.exports.REF_createArray(txt.length, 4);
+					let memPtr = ptr / 4;
+					let mem = new Uint32Array(plwruntime.instance.exports.memory.buffer);
+					for (let i = 0; i < txt.length; i++) {
+						mem[memPtr + i] = txt.charCodeAt(i);
+					}
+					return ptr;
+				},
 				"subtext(text,integer,integer)": function(ptr, offset, size) {
 					let ptrSize = plwruntime.instance.exports.REF_arraySize(ptr);
 					offset = Number(offset);
