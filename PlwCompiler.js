@@ -1715,7 +1715,7 @@ class Compiler {
 			let endLoc = expr.falseStatement === null ? -1 : this.codeBlock.codeJmp(0);
 			this.codeBlock.setLoc(falseLoc);
 			if (expr.falseStatement === null) {
-				return new EvalResultIR(EVAL_RESULT_OK, null);
+				return new EvalResultIR(EVAL_RESULT_OK, PlwIR.iff(condResult.ir, trueResult.ir, null));
 			}
 			let falseResult = this.evalStatement(expr.falseStatement);
 			if (falseResult.isError()) {
@@ -1732,7 +1732,7 @@ class Compiler {
 			) {
 				return new EvalResultIR(EVAL_RESULT_RETURN, null);
 			}
-			return new EvalResultIR(EVAL_RESULT_OK, null);
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.iff(condResult.ir, trueResult.ir, falseResult.ir));
 		}
 		if (expr.tag === "ast-kindof-stmt") {
 			let caseResult = this.eval(expr.caseExpr);
@@ -1836,7 +1836,7 @@ class Compiler {
 				this.codeBlock.setLoc(this.scope.exitLocs[i]);
 			}
 			this.popScope();
-			return new EvalResultIR(EVAL_RESULT_OK, null);
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.loop(PlwIR.iff(conditionResult.ir, stmtResult.ir, PlwIR.exitLoop())));
 		}
 		if (expr.tag === "ast-loop") {
 			this.pushScopeLoop();
@@ -1852,7 +1852,7 @@ class Compiler {
 				this.codeBlock.setLoc(this.scope.exitLocs[i]);
 			}
 			this.popScope();
-			return new EvalResultIR(EVAL_RESULT_OK, null);
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.loop(stmtResult.ir));
 		}
 		if (expr.tag === "ast-for") {
 			if (expr.sequence.tag === "ast-range") {
@@ -2050,7 +2050,7 @@ class Compiler {
 				currentScope.exitLocCount++;
 				this.codeBlock.setLoc(falseLoc);
 			}
-			return new EvalResultIR(EVAL_RESULT_OK, null);
+			return new EvalResultIR(EVAL_RESULT_OK, PlwIR.exitLoop());
 		}
 		if (expr.tag === "ast-raise") {
 			let raiseResult = this.eval(expr.expr);
@@ -2468,26 +2468,34 @@ class Compiler {
 			return new EvalResultIR(recordType, null);
 		}
 		if (expr.tag === "ast-template") {
+			let ir = null;
 			for (let i = 0; i < expr.exprCount; i++) {
 				let exprResult = this.eval(expr.exprs[i]);
 				if (exprResult.isError()) {
 					return exprResult;
 				}
+				let itemIr = exprResult.ir;
 				if (exprResult.resultType !== EVAL_TYPE_TEXT) {
-					let convType = this.generateFunctionCall("text", 1, [exprResult.resultType], EVAL_TYPE_TEXT);
+					let convType = this.generateFunctionCall("text", 1, [exprResult.resultType], EVAL_TYPE_TEXT, [itemIr]);
 					if (convType.isError()) {
 						return convType;
 					}
-					if (convType !== EVAL_TYPE_TEXT) {
-						return EvalError.wrongType(exprType, "text").fromExpr(expr.exprs[i]);
+					if (convType.resultType !== EVAL_TYPE_TEXT) {
+						return EvalError.wrongType(exprResult.resultType, "text").fromExpr(expr.exprs[i]);
 					}
+					itemIr = convType.ir;
+				}
+				if (ir === null) {
+					ir = itemIr;
+				} else {
+					ir = PlwIR.concatArray(ir, itemIr, EVAL_TYPE_TEXT.irTypes[0]);
 				}
 			}
 			if (expr.exprCount > 0) {
 				this.codeBlock.codePush(expr.exprCount);
 				this.codeBlock.codeExt(PLW_LOPCODE_CONCAT_STRING);				
 			}
-			return new EvalResultIR(EVAL_TYPE_TEXT, null);
+			return new EvalResultIR(EVAL_TYPE_TEXT, ir);
 		}
 		if (expr.tag === "ast-concat") {
 			let firstItemType = null;
@@ -2739,7 +2747,7 @@ class Compiler {
 					return EvalError.wrongType(operandResult.resultType, "boolean").fromExpr(expr.operand);
 				}
 				this.codeBlock.codeNot();
-				return new EvalResultIR(EVAL_TYPE_BOOLEAN, null);
+				return new EvalResultIR(EVAL_TYPE_BOOLEAN, PlwIR.binOp(PLW_IR_OP_I32_EQ, PlwIR.i32(0), operandResult.ir));
 			}
 			if (expr.operator === TOK_SUB) {
 				if (operandResult.resultType !== EVAL_TYPE_INTEGER && operandResult.resultType !== EVAL_TYPE_REAL) {
@@ -2750,7 +2758,7 @@ class Compiler {
 				} else {
 					this.codeBlock.codeNegf();
 				}
-				return new EvalResultIR(operandResult.resultType, null);
+				return new EvalResultIR(operandResult.resultType, PlwIR.binOp(PLW_IR_OP_I64_SUB, PlwIR.i32(1), operandResult.ir));
 			}
 			return EvalError.unknownUnaryOperator(expr.operator).fromExpr(expr);
 		}

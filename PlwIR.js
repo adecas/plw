@@ -876,13 +876,17 @@ class PlwIRWasmTypeFuncGenerator {
 			return 
 		}
 		if (expr.tag === "ir-if") {
-			this.evalExpr(expr.trueExpr);
-			this.evalExpr(expr.falseExpr);
+			if (expr.trueExpr !== null) {
+				this.evalExpr(expr.trueExpr);
+			}
+			if (expr.falseExpr !== null) {
+				this.evalExpr(expr.falseExpr);
+			}
 			return;
 		}
 		if (expr.tag === "ir-loop") {
 			this.evalExpr(expr.expr);
-			return toDecBefore;
+			return;
 		}
 		if (expr.tag === "ir-store-i64" || expr.tag === "ir-store-i32") {
 			this.evalExpr(expr.valueExpr);
